@@ -66,8 +66,7 @@ export default defineSchema({
     TaxGroupId: v.optional(v.id('taxonomy')),
     TaxThemeName: v.optional(v.string()),
     TaxSubthemeName: v.optional(v.string()),
-    TaxGroupName: v.optional(v.string()),
-
+    taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     authorId: v.optional(v.id('users')),
     isPublic: v.optional(v.boolean()),
   })
@@ -79,6 +78,7 @@ export default defineSchema({
     .index('by_taxonomy_theme', ['TaxThemeId'])
     .index('by_taxonomy_subtheme', ['TaxSubthemeId'])
     .index('by_taxonomy_group', ['TaxGroupId'])
+    .index('by_taxonomyPathIds', ['taxonomyPathIds'])
     .index('by_group_randomKey', ['groupId', 'randomKey'])
     .searchIndex('search_by_title', { searchField: 'title' })
     .searchIndex('search_by_code', { searchField: 'questionCode' }),
