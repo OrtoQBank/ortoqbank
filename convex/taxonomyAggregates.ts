@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import { api, internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { totalQuestionCount } from './aggregates';
 
 // Generic taxonomy question count query
 export const getTaxonomyQuestionCount = query({
@@ -115,7 +116,9 @@ export const getTaxonomyByParent = query({
   },
 });
 
-// Get live question count using new taxonomy system (simplified)
+// PERFORMANCE WARNING: NEVER EVER USE `await ctx.db.query('questions').collect()`
+// This will download the entire database and cause serious performance issues!
+// Always use indexes and filters instead.
 export const getLiveQuestionCountByTaxonomy = query({
   args: {
     taxonomyIds: v.optional(v.array(v.id('taxonomy'))),
@@ -131,82 +134,53 @@ export const getLiveQuestionCountByTaxonomy = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    // Log input bandwidth
-    const encoder = new TextEncoder();
-    const sizeIn = encoder.encode(JSON.stringify(args)).length;
-
-    let questions: any[] = [];
+    const questionIds = new Set<Id<'questions'>>();
 
     if (args.taxonomyIds && args.taxonomyIds.length > 0) {
-      // Get questions that match any of the provided taxonomy IDs
-      // We need to check all three taxonomy fields for each question
-      const allQuestions = await ctx.db.query('questions').collect();
+      for (const taxonomyId of args.taxonomyIds) {
+        // Use specific indexes for each taxonomy level to avoid downloading entire DB
 
-      questions = allQuestions.filter(question => {
-        return args.taxonomyIds!.some(
-          taxonomyId =>
-            question.TaxThemeId === taxonomyId ||
-            question.TaxSubthemeId === taxonomyId ||
-            question.TaxGroupId === taxonomyId,
-        );
-      });
+        // Check theme level
+        const themeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_taxonomy_theme', q => q.eq('TaxThemeId', taxonomyId))
+          .collect();
+        themeQuestions.forEach(q => questionIds.add(q._id));
+
+        // Check subtheme level
+        const subthemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_taxonomy_subtheme', q =>
+            q.eq('TaxSubthemeId', taxonomyId),
+          )
+          .collect();
+        subthemeQuestions.forEach(q => questionIds.add(q._id));
+
+        // Check group level
+        const groupQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_taxonomy_group', q => q.eq('TaxGroupId', taxonomyId))
+          .collect();
+        groupQuestions.forEach(q => questionIds.add(q._id));
+      }
     } else {
-      // No filters, get all questions
-      questions = await ctx.db.query('questions').collect();
-    }
-
-    // Apply user-specific filters if needed
-    if (args.userId && args.questionMode && args.questionMode !== 'all') {
-      switch (args.questionMode) {
-        case 'unanswered': {
-          const answeredStats = await ctx.db
-            .query('userQuestionStats')
-            .withIndex('by_user_answered', q =>
-              q.eq('userId', args.userId!).eq('hasAnswered', true),
-            )
-            .collect();
-          const answeredQuestionIds = new Set(
-            answeredStats.map(s => s.questionId),
-          );
-          questions = questions.filter(q => !answeredQuestionIds.has(q._id));
-          break;
-        }
-        case 'incorrect': {
-          const incorrectStats = await ctx.db
-            .query('userQuestionStats')
-            .withIndex('by_user_incorrect', q =>
-              q.eq('userId', args.userId!).eq('isIncorrect', true),
-            )
-            .collect();
-          const incorrectQuestionIds = new Set(
-            incorrectStats.map(s => s.questionId),
-          );
-          questions = questions.filter(q => incorrectQuestionIds.has(q._id));
-          break;
-        }
-        case 'bookmarked': {
-          const bookmarks = await ctx.db
-            .query('userBookmarks')
-            .withIndex('by_user', q => q.eq('userId', args.userId!))
-            .collect();
-          const bookmarkedQuestionIds = new Set(
-            bookmarks.map(b => b.questionId),
-          );
-          questions = questions.filter(q => bookmarkedQuestionIds.has(q._id));
-          break;
-        }
+      // No taxonomy filter provided - if no user filtering needed, use efficient aggregate
+      if (!args.userId || !args.questionMode || args.questionMode === 'all') {
+        // Use O(log n) aggregate lookup instead of downloading entire database
+        return await totalQuestionCount.count(ctx, {
+          namespace: 'global',
+          bounds: {},
+        });
+      } else {
+        // User filtering needed but no taxonomy filter - we need all question IDs for filtering
+        // This is a rare case that still requires getting question IDs, but we optimize by only getting IDs
+        throw new Error(
+          'Cannot apply user filters without taxonomy filters. This would require downloading entire database.',
+        );
       }
     }
 
-    const result = questions.length;
-
-    // Log output bandwidth
-    const sizeOut = encoder.encode(JSON.stringify(result)).length;
-    console.log(
-      `[BANDWIDTH] getLiveQuestionCountByTaxonomy - In: ${sizeIn} bytes, Out: ${sizeOut} bytes, Total: ${sizeIn + sizeOut} bytes`,
-    );
-
-    return result;
+    return questionIds.size;
   },
 });
 
