@@ -448,3 +448,107 @@ export const repairAllAggregatesProduction = mutation({
     return;
   },
 });
+
+// Single-step repair functions that can be called individually
+export const stepOneClearTotalQuestionCount = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    console.log('Step 1: Clearing totalQuestionCount aggregate...');
+    await totalQuestionCount.clear(ctx, { namespace: 'global' });
+    console.log('totalQuestionCount aggregate cleared successfully');
+    return;
+  },
+});
+
+export const stepTwoRepairTotalQuestionCountBatch = mutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 100;
+    console.log(
+      `Step 2: Processing batch of ${batchSize} questions for totalQuestionCount...`,
+    );
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor ?? null,
+      numItems: batchSize,
+    });
+
+    let processed = 0;
+    for (const question of result.page) {
+      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+      processed++;
+    }
+
+    console.log(`Processed ${processed} questions. Done: ${result.isDone}`);
+
+    return {
+      processed,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const stepThreeRepairThemeCountBatch = mutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 100;
+    console.log(
+      `Step 3: Processing batch of ${batchSize} questions for questionCountByTheme...`,
+    );
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor ?? null,
+      numItems: batchSize,
+    });
+
+    let processed = 0;
+    for (const question of result.page) {
+      if (question.themeId) {
+        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
+        processed++;
+      }
+    }
+
+    console.log(
+      `Processed ${processed} questions with themes. Done: ${result.isDone}`,
+    );
+
+    return {
+      processed,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+export const stepFourVerifyTotalCount = mutation({
+  args: {},
+  returns: v.number(),
+  handler: async ctx => {
+    console.log('Step 4: Verifying totalQuestionCount...');
+    const count = await totalQuestionCount.count(ctx, {
+      namespace: 'global',
+      bounds: {},
+    });
+    console.log(`Final totalQuestionCount: ${count}`);
+    return count;
+  },
+});
