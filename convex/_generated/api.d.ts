@@ -17,6 +17,7 @@ import type * as customFunctions from "../customFunctions.js";
 import type * as customQuizzes from "../customQuizzes.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
+import type * as instrumentation from "../instrumentation.js";
 import type * as migrations from "../migrations.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
 import type * as questionAnalytics from "../questionAnalytics.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   customQuizzes: typeof customQuizzes;
   groups: typeof groups;
   http: typeof http;
+  instrumentation: typeof instrumentation;
   migrations: typeof migrations;
   presetQuizzes: typeof presetQuizzes;
   questionAnalytics: typeof questionAnalytics;
