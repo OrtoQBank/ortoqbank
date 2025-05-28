@@ -1,6 +1,6 @@
 import { v } from 'convex/values';
 
-import { api } from './_generated/api';
+import { api, internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 
@@ -131,6 +131,10 @@ export const getLiveQuestionCountByTaxonomy = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    // Log input bandwidth
+    const encoder = new TextEncoder();
+    const sizeIn = encoder.encode(JSON.stringify(args)).length;
+
     let questions: any[] = [];
 
     if (args.taxonomyIds && args.taxonomyIds.length > 0) {
@@ -194,7 +198,15 @@ export const getLiveQuestionCountByTaxonomy = query({
       }
     }
 
-    return questions.length;
+    const result = questions.length;
+
+    // Log output bandwidth
+    const sizeOut = encoder.encode(JSON.stringify(result)).length;
+    console.log(
+      `[BANDWIDTH] getLiveQuestionCountByTaxonomy - In: ${sizeIn} bytes, Out: ${sizeOut} bytes, Total: ${sizeIn + sizeOut} bytes`,
+    );
+
+    return result;
   },
 });
 
