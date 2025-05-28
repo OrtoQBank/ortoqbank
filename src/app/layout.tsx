@@ -6,6 +6,7 @@ import { Geist, Geist_Mono } from 'next/font/google';
 import localFont from 'next/font/local';
 import NextTopLoader from 'nextjs-toploader';
 
+import { PostHogProvider } from '@/components/PostHogProvider';
 import { Toaster } from '@/components/ui/toaster';
 
 import ConvexClientProvider from './convex-client-provider';
@@ -40,13 +41,14 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sifonn.variable} antialiased`}
       >
-        <ConvexClientProvider>
-          <NextTopLoader />
-          {children}
-          <Analytics />
-
-          <Toaster />
-        </ConvexClientProvider>
+        <PostHogProvider>
+          <ConvexClientProvider>
+            <NextTopLoader />
+            {children}
+            <Analytics />
+            <Toaster />
+          </ConvexClientProvider>
+        </PostHogProvider>
       </body>
     </html>
   );

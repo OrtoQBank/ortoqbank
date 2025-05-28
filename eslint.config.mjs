@@ -38,6 +38,7 @@ export default [
       'playwright/no-useless-await': 'off',
       'unicorn/no-nested-ternary': 'off',
       'unicorn/no-abusive-eslint-disable': 'off',
+      'unicorn/no-null': 'off',
     },
   },
   {
