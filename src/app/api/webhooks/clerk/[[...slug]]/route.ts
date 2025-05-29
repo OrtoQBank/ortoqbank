@@ -113,7 +113,7 @@ export async function POST(request: Request) {
         // Get all user sessions using Clerk SDK
         console.log(`[Clerk Webhook] Fetching sessions for user ${user_id}`);
 
-        // Get all active and idle sessions for the user
+        // Get all active sessions for the user
         let activeSessions = [];
 
         try {
@@ -130,11 +130,11 @@ export async function POST(request: Request) {
 
           // Filter manually to avoid any type issues
           activeSessions = allSessionsResponse.data.filter(
-            session => session.status === 'active' || session.status === 'idle',
+            session => session.status === 'active',
           );
 
           console.log(
-            `[Clerk Webhook] Found ${activeSessions.length} active/idle sessions out of ${allSessionsResponse.data.length} total`,
+            `[Clerk Webhook] Found ${activeSessions.length} active sessions out of ${allSessionsResponse.data.length} total`,
           );
         } catch (sessionFetchError) {
           console.error(
@@ -156,7 +156,7 @@ export async function POST(request: Request) {
         );
 
         console.log(
-          `[Clerk Webhook] Found ${sessionsToRevoke.length} sessions to revoke out of ${activeSessions.length} active/idle sessions`,
+          `[Clerk Webhook] Found ${sessionsToRevoke.length} sessions to revoke out of ${activeSessions.length} active sessions`,
         );
         console.log(
           `[Clerk Webhook] Sessions to revoke: ${JSON.stringify(sessionsToRevoke.map(s => s.id))}`,
