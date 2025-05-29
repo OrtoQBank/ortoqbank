@@ -26,43 +26,63 @@ export function QuestionDisplay({
         </div>
       </div>
 
-      <div className="space-y-4">
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 font-semibold">Pergunta:</h2>
-          <QuestionContent stringContent={question.questionTextString} />
-        </div>
+      <div className="container mx-auto max-w-3xl rounded-3xl border bg-white p-6">
+        <div className="space-y-6">
+          <div>
+            <h2 className="mb-4 font-semibold">Pergunta:</h2>
+            <QuestionContent stringContent={question.questionTextString} />
+          </div>
 
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 font-semibold">Opções:</h2>
-          <ul className="space-y-2">
-            {question.alternatives?.map(
-              (alternative: string, index: number) => (
-                <li
-                  key={index}
-                  className={
-                    index === question.correctAlternativeIndex
-                      ? 'font-medium text-green-600'
-                      : ''
-                  }
-                >
-                  {index + 1}. {alternative}
-                  {index === question.correctAlternativeIndex && ' (Correta)'}
-                </li>
-              ),
-            )}
-          </ul>
-        </div>
+          <div>
+            <h2 className="my-4 mb-4 border-t pt-2 font-semibold">
+              Alternativas:
+            </h2>
+            <div className="mt-4 space-y-2">
+              {question.alternatives?.map(
+                (alternative: string, index: number) => (
+                  <div
+                    key={index}
+                    className={`w-full rounded-lg border p-4 text-left ${
+                      index === question.correctAlternativeIndex
+                        ? 'border-green-500 bg-green-50'
+                        : 'border-gray-300'
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <div
+                        className={
+                          index === question.correctAlternativeIndex
+                            ? 'font-medium text-green-600'
+                            : ''
+                        }
+                      >
+                        {index + 1}. {alternative}
+                        {index === question.correctAlternativeIndex && ' ✓'}
+                      </div>
+                    </div>
+                  </div>
+                ),
+              )}
+            </div>
+          </div>
 
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 font-semibold">Explicação:</h2>
-          <QuestionContent stringContent={question.explanationTextString} />
-        </div>
+          <div>
+            <h2 className="mb-4 font-semibold">Explicação:</h2>
+            <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+              <div className="prose mt-2 max-w-none">
+                <QuestionContent
+                  stringContent={question.explanationTextString}
+                />
+              </div>
+            </div>
+          </div>
 
-        <div className="rounded-lg border p-4">
-          <h2 className="mb-2 font-semibold">Informações Adicionais:</h2>
-          <p>Tema: {question.theme?.name}</p>
-          {question.subtheme && <p>Subtema: {question.subtheme.name}</p>}
-          <p>Status: {question.isPublic ? 'Publicada' : 'Rascunho'}</p>
+          <div>
+            <h2 className="mb-4 font-semibold">Informações Adicionais:</h2>
+            <p>Tema: {question.theme?.name}</p>
+            {question.subtheme && <p>Subtema: {question.subtheme.name}</p>}
+            <p>Status: {question.isPublic ? 'Publicada' : 'Rascunho'}</p>
+          </div>
         </div>
       </div>
     </div>
