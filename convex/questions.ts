@@ -10,7 +10,7 @@ import {
   mutation,
   query,
 } from './_generated/server';
-import { questionCountByThemeAggregate } from './questionCountByTheme';
+import { questionCountByTheme } from './aggregates';
 import {
   _updateQuestionStatsOnDelete,
   _updateQuestionStatsOnInsert,
@@ -25,7 +25,7 @@ async function _internalInsertQuestion(
 ) {
   const questionId = await ctx.db.insert('questions', data);
   const questionDoc = (await ctx.db.get(questionId))!;
-  await questionCountByThemeAggregate.insert(ctx, questionDoc);
+  await questionCountByTheme.insert(ctx, questionDoc);
   // Also update the other aggregate if needed
   await _updateQuestionStatsOnInsert(ctx, questionDoc);
   return questionId;
@@ -42,11 +42,7 @@ async function _internalUpdateQuestion(
   }
   await ctx.db.patch(id, updates);
   const newQuestionDoc = (await ctx.db.get(id))!;
-  await questionCountByThemeAggregate.replace(
-    ctx,
-    oldQuestionDoc,
-    newQuestionDoc,
-  );
+  await questionCountByTheme.replace(ctx, oldQuestionDoc, newQuestionDoc);
   // Note: Add update logic for _updateQuestionStats if needed here as well
 }
 
@@ -60,7 +56,7 @@ async function _internalDeleteQuestion(
     return false; // Indicate deletion didn't happen
   }
   await ctx.db.delete(id);
-  await questionCountByThemeAggregate.delete(ctx, questionDoc);
+  await questionCountByTheme.delete(ctx, questionDoc);
   // Also update the other aggregate
   await _updateQuestionStatsOnDelete(ctx, questionDoc);
   return true; // Indicate successful deletion
@@ -319,7 +315,7 @@ export const countQuestionsByMode = query({
 export const getQuestionCountForTheme = query({
   args: { themeId: v.id('themes') },
   handler: async (ctx, args) => {
-    const count = await questionCountByThemeAggregate.count(ctx, {
+    const count = await questionCountByTheme.count(ctx, {
       namespace: args.themeId,
       bounds: {},
     });
@@ -379,7 +375,7 @@ export const insertIntoThemeAggregate = internalMutation({
     // We need to cast the doc because internal mutations don't
     // have full type inference across action/mutation boundary easily.
     const questionDoc = args.questionDoc as Doc<'questions'>;
-    await questionCountByThemeAggregate.insert(ctx, questionDoc);
+    await questionCountByTheme.insert(ctx, questionDoc);
   },
 });
 
