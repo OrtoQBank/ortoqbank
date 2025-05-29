@@ -24,7 +24,8 @@
     "test:debug": "vitest --inspect-brk --no-file-parallelism",
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
     "sentry:sourcemaps": "sentry-cli sourcemaps inject --org ortoqbank --project ortoqbank ./.next && sentry-cli sourcemaps upload --org ortoqbank --project ortoqbank ./.next",
-    "migrate:content": "node scripts/migrate-content-to-string.js"
+    "migrate:content": "node scripts/migrate-content-to-string.js",
+    "prepare": "husky"
   },
   "dependencies": {
     "@clerk/localizations": "^3.16.1",
@@ -125,6 +126,7 @@
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-unicorn": "^56.0.1",
     "happy-dom": "^17.4.7",
+    "husky": "^9.1.7",
     "postcss": "^8",
     "prettier": "^3.5.3",
     "prettier-plugin-tailwindcss": "^0.6.11",
