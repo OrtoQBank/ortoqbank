@@ -15,10 +15,8 @@ const clerk = CLERK_SECRET_KEY
 // This is the main webhook handler for Clerk events
 export async function POST(request: Request) {
   const pathname = new URL(request.url).pathname;
-  console.log('>> Clerk webhook received at:', pathname);
 
   if (pathname !== '/api/webhooks/clerk') {
-    console.log('>> Invalid path:', pathname);
     return NextResponse.json({ error: 'Invalid path' }, { status: 400 });
   }
 
