@@ -64,7 +64,7 @@ export function useTestFormState() {
   const isAuthenticated = isLoaded && isSignedIn;
 
   // Query the count of available questions based on current selection
-  const countQuestions = useQuery(
+  const countQuestions = 1; /* useQuery(
     api.questionAnalytics.countSelectedQuestions,
     isAuthenticated
       ? {
@@ -74,18 +74,7 @@ export function useTestFormState() {
           selectedGroups: selectedGroups as Id<'groups'>[],
         }
       : 'skip',
-  );
-
-  // Update available question count when Convex query result changes
-  useEffect(() => {
-    if (isAuthenticated) {
-      setAvailableQuestionCount(countQuestions?.count);
-      setIsCountLoading(countQuestions === undefined);
-    } else {
-      setAvailableQuestionCount(undefined);
-      setIsCountLoading(true);
-    }
-  }, [countQuestions, isAuthenticated]);
+  ); */
 
   // Fetch hierarchical data only when authenticated
   const hierarchicalData = useQuery(
