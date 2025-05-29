@@ -10,9 +10,9 @@ app.use(rateLimiter);
 app.use(migrations);
 app.use(workflow);
 
-app.use(aggregate, { name: 'questionCountByThemeAggregate' });
+app.use(aggregate, { name: 'questionCountByTheme' });
 
-app.use(aggregate, { name: 'questionStats' });
+app.use(aggregate, { name: 'questionCountTotal' });
 
 app.use(aggregate, { name: 'answeredByUser' });
 app.use(aggregate, { name: 'incorrectByUser' });

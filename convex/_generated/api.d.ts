@@ -12,24 +12,17 @@ import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregateRepairWorkflow from "../aggregateRepairWorkflow.js";
 import type * as aggregates from "../aggregates.js";
 import type * as bookmark from "../bookmark.js";
-import type * as count from "../count.js";
-import type * as customFunctions from "../customFunctions.js";
 import type * as customQuizzes from "../customQuizzes.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
-import type * as instrumentation from "../instrumentation.js";
 import type * as migrations from "../migrations.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
-import type * as questionAnalytics from "../questionAnalytics.js";
-import type * as questionCountByTheme from "../questionCountByTheme.js";
-import type * as questionFiltering from "../questionFiltering.js";
 import type * as questionStats from "../questionStats.js";
 import type * as questions from "../questions.js";
 import type * as quiz from "../quiz.js";
 import type * as quizSessions from "../quizSessions.js";
 import type * as subthemes from "../subthemes.js";
-import type * as tags from "../tags.js";
-import type * as taxonomyAggregates from "../taxonomyAggregates.js";
+import type * as taxonomyPathMigration from "../taxonomyPathMigration.js";
 import type * as themes from "../themes.js";
 import type * as triggers from "../triggers.js";
 import type * as userStats from "../userStats.js";
@@ -55,24 +48,17 @@ declare const fullApi: ApiFromModules<{
   aggregateRepairWorkflow: typeof aggregateRepairWorkflow;
   aggregates: typeof aggregates;
   bookmark: typeof bookmark;
-  count: typeof count;
-  customFunctions: typeof customFunctions;
   customQuizzes: typeof customQuizzes;
   groups: typeof groups;
   http: typeof http;
-  instrumentation: typeof instrumentation;
   migrations: typeof migrations;
   presetQuizzes: typeof presetQuizzes;
-  questionAnalytics: typeof questionAnalytics;
-  questionCountByTheme: typeof questionCountByTheme;
-  questionFiltering: typeof questionFiltering;
   questionStats: typeof questionStats;
   questions: typeof questions;
   quiz: typeof quiz;
   quizSessions: typeof quizSessions;
   subthemes: typeof subthemes;
-  tags: typeof tags;
-  taxonomyAggregates: typeof taxonomyAggregates;
+  taxonomyPathMigration: typeof taxonomyPathMigration;
   themes: typeof themes;
   triggers: typeof triggers;
   userStats: typeof userStats;
@@ -536,7 +522,7 @@ export declare const components: {
       >;
     };
   };
-  questionCountByThemeAggregate: {
+  questionCountByTheme: {
     btree: {
       aggregateBetween: FunctionReference<
         "query",
@@ -679,7 +665,7 @@ export declare const components: {
       >;
     };
   };
-  questionStats: {
+  questionCountTotal: {
     btree: {
       aggregateBetween: FunctionReference<
         "query",

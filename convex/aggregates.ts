@@ -44,7 +44,7 @@ export const questionCountByTheme = new TableAggregate<{
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
-}>(components.questionCountByThemeAggregate, {
+}>(components.questionCountByTheme, {
   namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
   sortKey: (d: unknown) => 'question',
 });
@@ -55,7 +55,7 @@ export const totalQuestionCount = new TableAggregate<{
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
-}>(components.questionStats, {
+}>(components.questionCountTotal, {
   namespace: () => 'global',
   sortKey: () => 'question',
 });
