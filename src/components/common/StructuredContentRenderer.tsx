@@ -166,6 +166,33 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
       );
       break;
     }
+    case 'heading': {
+      // Handle headings with different levels
+      const level = node.attrs?.level || 1;
+      const tag = `h${Math.min(Math.max(level, 1), 6)}`;
+
+      element = React.createElement(
+        tag,
+        {
+          key,
+          className: `font-bold ${
+            level === 1
+              ? 'text-2xl mb-4'
+              : level === 2
+                ? 'text-xl mb-3'
+                : level === 3
+                  ? 'text-lg mb-2'
+                  : level === 4
+                    ? 'text-base mb-2'
+                    : level === 5
+                      ? 'text-sm mb-1'
+                      : 'text-xs mb-1'
+          }`,
+        },
+        children,
+      );
+      break;
+    }
     default: {
       console.warn(`Unsupported node type: ${node.type}`);
       element = undefined;
