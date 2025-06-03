@@ -1,11 +1,10 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm } from 'react-hook-form';
 
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Label } from '@/components/ui/label';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { DebugPanel } from './DebugPanel';
@@ -24,8 +23,6 @@ type FormData = {
 };
 
 export function TestFormClient() {
-  const taxonomyData = useQuery(api.taxonomy.getHierarchicalData);
-
   const router = useRouter();
   const createCustomQuiz = useMutation(api.customQuizzes.create);
 
@@ -74,7 +71,7 @@ export function TestFormClient() {
             <FilterRadioGroup />
 
             <div className="space-y-3">
-              <TaxFilter taxonomyData={taxonomyData} />
+              <TaxFilter />
             </div>
 
             <QuestionCountInput />

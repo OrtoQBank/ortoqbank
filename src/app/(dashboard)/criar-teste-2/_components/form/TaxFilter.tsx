@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { useMemo } from 'react';
 import { useFormContext } from 'react-hook-form';
 
@@ -9,7 +10,10 @@ import { CardContent } from '@/components/ui/card';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 
-export default function TaxFilter({ taxonomyData }: { taxonomyData: any }) {
+import { api } from '../../../../../../convex/_generated/api';
+
+export default function TaxFilter() {
+  const taxonomyData = useQuery(api.taxonomy.getHierarchicalData);
   const { watch, setValue } = useFormContext();
 
   // Get current selection from form

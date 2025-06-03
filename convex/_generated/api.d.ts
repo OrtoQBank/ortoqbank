@@ -12,6 +12,7 @@ import type * as aggregateHelpers from "../aggregateHelpers.js";
 import type * as aggregateRepairWorkflow from "../aggregateRepairWorkflow.js";
 import type * as aggregates from "../aggregates.js";
 import type * as bookmark from "../bookmark.js";
+import type * as countFunctions from "../countFunctions.js";
 import type * as customQuizzes from "../customQuizzes.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   aggregateRepairWorkflow: typeof aggregateRepairWorkflow;
   aggregates: typeof aggregates;
   bookmark: typeof bookmark;
+  countFunctions: typeof countFunctions;
   customQuizzes: typeof customQuizzes;
   groups: typeof groups;
   http: typeof http;
