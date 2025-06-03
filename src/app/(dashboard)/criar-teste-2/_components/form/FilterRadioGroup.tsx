@@ -1,18 +1,24 @@
+import { useFormContext } from 'react-hook-form';
+
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-interface FilterRadioGroupProps {
-  value: 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
-  onChange: (value: 'all' | 'unanswered' | 'incorrect' | 'bookmarked') => void;
-}
+export function FilterRadioGroup() {
+  const { watch, setValue } = useFormContext();
+  const value = watch('filter') as
+    | 'all'
+    | 'unanswered'
+    | 'incorrect'
+    | 'bookmarked';
 
-export function FilterRadioGroup({ value, onChange }: FilterRadioGroupProps) {
   return (
     <div className="space-y-3">
       <Label className="text-base font-medium">Filtros de Questões</Label>
       <RadioGroup
         value={value}
-        onValueChange={onChange}
+        onValueChange={value =>
+          setValue('filter', value, { shouldDirty: true })
+        }
         className="grid grid-cols-2 gap-4"
       >
         <div className="flex items-center space-x-2">

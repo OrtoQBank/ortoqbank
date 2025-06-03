@@ -1,15 +1,14 @@
+import { useFormContext } from 'react-hook-form';
+
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
-interface QuestionCountInputProps {
-  register: any; // Simplified to avoid complex typing
-  error?: string;
-}
+export function QuestionCountInput() {
+  const {
+    register,
+    formState: { errors },
+  } = useFormContext();
 
-export function QuestionCountInput({
-  register,
-  error,
-}: QuestionCountInputProps) {
   return (
     <div className="space-y-3">
       <Label htmlFor="totalQuestions" className="text-base font-medium">
@@ -20,10 +19,18 @@ export function QuestionCountInput({
         type="number"
         min={1}
         max={120}
-        {...register}
+        {...register('totalQuestions', {
+          required: 'Este campo é obrigatório',
+          min: { value: 1, message: 'Mínimo 1 questão' },
+          max: { value: 120, message: 'Máximo 120 questões' },
+        })}
         className="w-full"
       />
-      {error && <p className="text-sm text-red-600">{error}</p>}
+      {errors.totalQuestions && (
+        <p className="text-sm text-red-600">
+          {errors.totalQuestions.message as string}
+        </p>
+      )}
     </div>
   );
 }

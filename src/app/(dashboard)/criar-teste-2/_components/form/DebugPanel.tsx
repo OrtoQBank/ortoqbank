@@ -1,3 +1,5 @@
+import { useFormContext } from 'react-hook-form';
+
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 
 type FormData = {
@@ -7,20 +9,18 @@ type FormData = {
   totalQuestions: number;
 };
 
-interface DebugPanelProps {
-  formData: FormData;
-  taxonomySelection: string[];
-  errors: any;
-}
+export function DebugPanel() {
+  const {
+    watch,
+    formState: { errors, isSubmitting, isDirty, isValid },
+  } = useFormContext();
 
-export function DebugPanel({
-  formData,
-  taxonomySelection,
-  errors,
-}: DebugPanelProps) {
+  // Watch all fields at once to prevent infinite re-renders
+  const formData = watch() as FormData;
+
   const apiPayload = {
-    name: `Teste ${formData.mode === 'exam' ? 'Exame' : 'Estudo'} - ${new Date().toLocaleDateString()}`,
-    description: `Teste criado em ${new Date().toLocaleDateString()}`,
+    name: `Teste ${formData.mode === 'exam' ? 'Exame' : 'Estudo'}`,
+    description: `Teste criado em`,
     testMode: formData.mode,
     questionMode: formData.filter,
     numQuestions: formData.totalQuestions,
@@ -39,7 +39,35 @@ export function DebugPanel({
       <CardContent className="space-y-4">
         <div>
           <h4 className="mb-2 text-sm font-medium text-gray-700">
-            Current Form State:
+            Form State:
+          </h4>
+          <div className="grid grid-cols-2 gap-2 text-sm">
+            <div
+              className={`rounded p-2 ${isSubmitting ? 'bg-orange-100 text-orange-800' : 'bg-green-100 text-green-800'}`}
+            >
+              Submitting: {isSubmitting ? 'Yes' : 'No'}
+            </div>
+            <div
+              className={`rounded p-2 ${isDirty ? 'bg-blue-100 text-blue-800' : 'bg-gray-100 text-gray-800'}`}
+            >
+              Dirty: {isDirty ? 'Yes' : 'No'}
+            </div>
+            <div
+              className={`rounded p-2 ${isValid ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}
+            >
+              Valid: {isValid ? 'Yes' : 'No'}
+            </div>
+            <div
+              className={`rounded p-2 ${Object.keys(errors).length > 0 ? 'bg-red-100 text-red-800' : 'bg-green-100 text-green-800'}`}
+            >
+              Errors: {Object.keys(errors).length}
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <h4 className="mb-2 text-sm font-medium text-gray-700">
+            Current Form Data:
           </h4>
           <pre className="overflow-x-auto rounded border bg-white p-3 text-xs">
             {JSON.stringify(formData, null, 2)}
@@ -51,7 +79,7 @@ export function DebugPanel({
             Taxonomy Selection:
           </h4>
           <pre className="overflow-x-auto rounded border bg-white p-3 text-xs">
-            {JSON.stringify(taxonomySelection, null, 2)}
+            {JSON.stringify(formData.taxonomySelection, null, 2)}
           </pre>
         </div>
 

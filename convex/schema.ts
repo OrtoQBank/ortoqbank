@@ -172,4 +172,33 @@ export default defineSchema({
     .index('by_parent', ['parentId'])
     .index('by_type', ['type'])
     .index('by_name', ['name']),
+
+  taxonomyHierarchy: defineTable({
+    themes: v.array(
+      v.object({
+        _id: v.id('taxonomy'),
+        type: v.literal('theme'),
+        parentId: v.optional(v.id('taxonomy')),
+        name: v.string(),
+        children: v.array(
+          v.object({
+            _id: v.id('taxonomy'),
+            type: v.literal('subtheme'),
+            parentId: v.id('taxonomy'),
+            name: v.string(),
+            children: v.array(
+              v.object({
+                _id: v.id('taxonomy'),
+                type: v.literal('group'),
+                parentId: v.id('taxonomy'),
+                name: v.string(),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+    lastUpdated: v.number(),
+    version: v.number(),
+  }).index('by_version', ['version']),
 });
