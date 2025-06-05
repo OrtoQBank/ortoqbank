@@ -25,13 +25,13 @@ export default function QuestionDetailPage() {
 
   // Show loading state
   if (isLoading) {
-    return <div className="p-6">Carregando...</div>;
+    return <div className="p-0 md:p-6">Carregando...</div>;
   }
 
   // Show edit form when in edit mode
   if (isEditing) {
     return (
-      <div className="p-6">
+      <div className="p-0 md:p-6">
         <div className="mb-6 flex justify-between">
           <h1 className="text-2xl font-bold">Editar Questão</h1>
           <Button variant="outline" onClick={cancelEditing}>
@@ -49,7 +49,7 @@ export default function QuestionDetailPage() {
 
   // Show question details when in view mode
   return (
-    <div className="p-6">
+    <div className="p-0 md:p-6">
       <QuestionDisplay
         question={question}
         onEdit={startEditing}
