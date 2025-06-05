@@ -245,7 +245,7 @@ function QuizStepper({
   };
 
   return (
-    <div className="container mx-auto mt-16 max-w-3xl rounded-3xl border bg-white p-6">
+    <div className="container mx-auto mt-6 max-w-3xl rounded-3xl border bg-white p-6 md:mt-16">
       {stepper.switch({
         ...Object.fromEntries(
           quizData.questions.map((_, index) => [
