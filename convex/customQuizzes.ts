@@ -57,65 +57,122 @@ export const create = mutation({
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
       : MAX_QUESTIONS;
 
-    // Process themes one at a time to avoid large scans
-    const allQuestions: Doc<'questions'>[] = [];
+    // Implement hierarchical filtering logic where "last children wins"
+    // We need to process themes, subthemes, and groups in a hierarchical manner
 
-    // Define a helper function to check if a question matches subtheme and group filters
-    const matchesFilters = (question: Doc<'questions'>) => {
-      // Check subtheme filter
-      if (
-        args.selectedSubthemes &&
-        args.selectedSubthemes.length > 0 &&
-        (!question.subthemeId ||
-          !args.selectedSubthemes.includes(question.subthemeId))
-      ) {
-        return false;
+    // First, let's get the hierarchical data to understand parent-child relationships
+    const [allThemes, allSubthemes, allGroups] = await Promise.all([
+      ctx.db.query('themes').collect(),
+      ctx.db.query('subthemes').collect(),
+      ctx.db.query('groups').collect(),
+    ]);
+
+    // Create maps for quick lookup of parent-child relationships
+    const themeToSubthemes = new Map<Id<'themes'>, Id<'subthemes'>[]>();
+    const subthemeToGroups = new Map<Id<'subthemes'>, Id<'groups'>[]>();
+
+    allSubthemes.forEach(subtheme => {
+      if (!themeToSubthemes.has(subtheme.themeId)) {
+        themeToSubthemes.set(subtheme.themeId, []);
       }
+      themeToSubthemes.get(subtheme.themeId)!.push(subtheme._id);
+    });
 
-      // Check group filter
-      if (
-        args.selectedGroups &&
-        args.selectedGroups.length > 0 &&
-        (!question.groupId || !args.selectedGroups.includes(question.groupId))
-      ) {
-        return false;
+    allGroups.forEach(group => {
+      if (!subthemeToGroups.has(group.subthemeId)) {
+        subthemeToGroups.set(group.subthemeId, []);
       }
+      subthemeToGroups.get(group.subthemeId)!.push(group._id);
+    });
 
-      return true;
+    // Determine which specific entities to query based on hierarchical rules
+    const entitiesToQuery = {
+      themes: new Set<Id<'themes'>>(),
+      subthemes: new Set<Id<'subthemes'>>(),
+      groups: new Set<Id<'groups'>>(),
     };
 
-    // If no themes are selected, get all available themes
-    let themesToProcess: Id<'themes'>[] = [];
+    // Process selected themes
+    const selectedThemes = args.selectedThemes || [];
+    const selectedSubthemes = args.selectedSubthemes || [];
+    const selectedGroups = args.selectedGroups || [];
 
-    if (!args.selectedThemes || args.selectedThemes.length === 0) {
-      // Fetch all themes from the database
-      const allThemes = await ctx.db.query('themes').collect();
-      themesToProcess = allThemes.map(theme => theme._id);
+    // If no specific selections, include all themes
+    if (
+      selectedThemes.length === 0 &&
+      selectedSubthemes.length === 0 &&
+      selectedGroups.length === 0
+    ) {
+      allThemes.forEach(theme => entitiesToQuery.themes.add(theme._id));
     } else {
-      themesToProcess = args.selectedThemes;
+      // Apply hierarchical filtering logic
+      for (const themeId of selectedThemes) {
+        // Check if any of this theme's subthemes are also selected
+        const themeSubthemes = themeToSubthemes.get(themeId) || [];
+        const selectedChildSubthemes = themeSubthemes.filter(subthemeId =>
+          selectedSubthemes.includes(subthemeId),
+        );
+
+        if (selectedChildSubthemes.length > 0) {
+          // Child subthemes are selected, so we'll handle them in the subtheme section
+          // Don't add the parent theme
+        } else {
+          // No child subthemes selected, include the whole theme
+          entitiesToQuery.themes.add(themeId);
+        }
+      }
+
+      // Process selected subthemes
+      for (const subthemeId of selectedSubthemes) {
+        // Check if any of this subtheme's groups are also selected
+        const subthemeGroups = subthemeToGroups.get(subthemeId) || [];
+        const selectedChildGroups = subthemeGroups.filter(groupId =>
+          selectedGroups.includes(groupId),
+        );
+
+        if (selectedChildGroups.length > 0) {
+          // Child groups are selected, so we'll handle them in the groups section
+          // Don't add the parent subtheme
+        } else {
+          // No child groups selected, include the whole subtheme
+          entitiesToQuery.subthemes.add(subthemeId);
+        }
+      }
+
+      // Process selected groups (these are always leaf nodes)
+      for (const groupId of selectedGroups) {
+        entitiesToQuery.groups.add(groupId);
+      }
     }
 
-    // Process each theme
-    for (const themeId of themesToProcess) {
-      // Use take() to avoid full table scans if there are too many questions
-      // We'll collect more than MAX_QUESTIONS initially to ensure we have enough after filtering
-      const maxInitialQuestions = MAX_QUESTIONS * 3;
+    // Now collect questions based on the determined entities
+    const allQuestions: Doc<'questions'>[] = [];
 
-      // Filter by theme ID - using regular query since withIndex for 'by_theme' isn't available
+    // Get questions by themes
+    for (const themeId of entitiesToQuery.themes) {
       const themeQuestions = await ctx.db
         .query('questions')
         .filter(q => q.eq(q.field('themeId'), themeId))
-        .take(maxInitialQuestions);
+        .take(MAX_QUESTIONS * 3);
+      allQuestions.push(...themeQuestions);
+    }
 
-      // Apply additional filters to the fetched questions
-      const filteredThemeQuestions = themeQuestions.filter(matchesFilters);
+    // Get questions by subthemes
+    for (const subthemeId of entitiesToQuery.subthemes) {
+      const subthemeQuestions = await ctx.db
+        .query('questions')
+        .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+        .take(MAX_QUESTIONS * 3);
+      allQuestions.push(...subthemeQuestions);
+    }
 
-      allQuestions.push(...filteredThemeQuestions);
-
-      // If we already have enough questions across all themes, stop querying
-      if (allQuestions.length >= MAX_QUESTIONS * 2) {
-        break;
-      }
+    // Get questions by groups
+    for (const groupId of entitiesToQuery.groups) {
+      const groupQuestions = await ctx.db
+        .query('questions')
+        .filter(q => q.eq(q.field('groupId'), groupId))
+        .take(MAX_QUESTIONS * 3);
+      allQuestions.push(...groupQuestions);
     }
 
     // If there are no questions matching the criteria, return an error response
