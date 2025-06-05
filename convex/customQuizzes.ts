@@ -37,6 +37,18 @@ export const create = mutation({
     selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
     selectedGroups: v.optional(v.array(v.id('groups'))),
   },
+  returns: v.union(
+    v.object({
+      success: v.literal(true),
+      quizId: v.id('customQuizzes'),
+      questionCount: v.number(),
+    }),
+    v.object({
+      success: v.literal(false),
+      error: v.string(),
+      message: v.string(),
+    }),
+  ),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
@@ -106,11 +118,19 @@ export const create = mutation({
       }
     }
 
-    // If there are no questions matching the criteria, throw an error
+    // If there are no questions matching the criteria, return an error response
     if (allQuestions.length === 0) {
-      throw new ConvexError(
-        'Nenhuma questão encontrada com os critérios selecionados',
-      );
+      console.log('allQuestions', allQuestions);
+      console.log('selectedThemes', args.selectedThemes);
+      console.log('selectedSubthemes', args.selectedSubthemes);
+      console.log('selectedGroups', args.selectedGroups);
+
+      return {
+        success: false as const,
+        error: 'NO_QUESTIONS_FOUND',
+        message:
+          'Nenhuma questão encontrada com os critérios selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
+      };
     }
 
     // Apply different filters based on question mode
@@ -259,7 +279,11 @@ export const create = mutation({
       isComplete: false,
     });
 
-    return { quizId, questionCount: uniqueQuestionIds.length };
+    return {
+      success: true as const,
+      quizId,
+      questionCount: uniqueQuestionIds.length,
+    };
   },
 });
 
@@ -620,6 +644,10 @@ export const createWithTaxonomy = mutation({
       isComplete: false,
     });
 
-    return { quizId, questionCount: uniqueQuestionIds.length };
+    return {
+      success: true as const,
+      quizId,
+      questionCount: uniqueQuestionIds.length,
+    };
   },
 });

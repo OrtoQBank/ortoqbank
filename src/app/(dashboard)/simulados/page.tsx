@@ -13,7 +13,6 @@ import {
   Clock,
   FileText,
   Gauge,
-  GraduationCap,
   LayoutDashboard,
   Microscope,
   Stethoscope,

@@ -89,15 +89,24 @@ export default defineSchema({
     category: v.union(v.literal('trilha'), v.literal('simulado')),
     questions: v.array(v.id('questions')),
     subcategory: v.optional(v.string()),
+    // Legacy taxonomy fields
     themeId: v.optional(v.id('themes')),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
+    // New taxonomy fields
+    TaxThemeId: v.optional(v.id('taxonomy')),
+    TaxSubthemeId: v.optional(v.id('taxonomy')),
+    TaxGroupId: v.optional(v.id('taxonomy')),
+    taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     isPublic: v.boolean(),
     displayOrder: v.optional(v.number()),
   })
     .index('by_theme', ['themeId'])
     .index('by_subtheme', ['subthemeId'])
     .index('by_group', ['groupId'])
+    .index('by_taxonomy_theme', ['TaxThemeId'])
+    .index('by_taxonomy_subtheme', ['TaxSubthemeId'])
+    .index('by_taxonomy_group', ['TaxGroupId'])
     .searchIndex('search_by_name', { searchField: 'name' }),
 
   customQuizzes: defineTable({
@@ -112,9 +121,15 @@ export default defineSchema({
       v.literal('incorrect'),
       v.literal('bookmarked'),
     ),
+    // Legacy taxonomy fields
     selectedThemes: v.optional(v.array(v.id('themes'))),
     selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
     selectedGroups: v.optional(v.array(v.id('groups'))),
+    // New taxonomy fields
+    selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
+    selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
+    selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
+    taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
   }).searchIndex('search_by_name', { searchField: 'name' }),
 
   quizSessions: defineTable({
@@ -172,4 +187,33 @@ export default defineSchema({
     .index('by_parent', ['parentId'])
     .index('by_type', ['type'])
     .index('by_name', ['name']),
+
+  taxonomyHierarchy: defineTable({
+    themes: v.array(
+      v.object({
+        _id: v.id('taxonomy'),
+        type: v.literal('theme'),
+        parentId: v.optional(v.id('taxonomy')),
+        name: v.string(),
+        children: v.array(
+          v.object({
+            _id: v.id('taxonomy'),
+            type: v.literal('subtheme'),
+            parentId: v.id('taxonomy'),
+            name: v.string(),
+            children: v.array(
+              v.object({
+                _id: v.id('taxonomy'),
+                type: v.literal('group'),
+                parentId: v.id('taxonomy'),
+                name: v.string(),
+              }),
+            ),
+          }),
+        ),
+      }),
+    ),
+    lastUpdated: v.number(),
+    version: v.number(),
+  }).index('by_version', ['version']),
 });

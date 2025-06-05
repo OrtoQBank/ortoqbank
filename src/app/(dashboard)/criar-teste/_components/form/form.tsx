@@ -26,7 +26,7 @@ export default function TestForm() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [formData, setFormData] = useState<TestFormData | undefined>();
   const [submissionState, setSubmissionState] = useState<
-    'idle' | 'loading' | 'success' | 'error'
+    'idle' | 'loading' | 'success' | 'error' | 'no-questions'
   >('idle');
   const [resultMessage, setResultMessage] = useState<{
     title: string;
@@ -96,7 +96,8 @@ export default function TestForm() {
       // Create the custom quiz
       const result = await createCustomQuiz(formattedData);
 
-      if (result.quizId) {
+      // Handle the new response format
+      if (result.success) {
         setSubmissionState('success');
         setResultMessage({
           title: 'Quiz criado com sucesso!',
@@ -108,6 +109,22 @@ export default function TestForm() {
           router.push(`/criar-teste/${result.quizId}`);
           setIsSubmitting(false);
         }, 2000);
+      } else {
+        // Handle error response from the mutation
+        if (result.error === 'NO_QUESTIONS_FOUND') {
+          setSubmissionState('no-questions');
+          setResultMessage({
+            title: 'Nenhuma questão encontrada',
+            description: result.message,
+          });
+        } else {
+          setSubmissionState('error');
+          setResultMessage({
+            title: 'Não foi possível criar o quiz',
+            description: result.message,
+          });
+        }
+        setIsSubmitting(false);
       }
     } catch (error) {
       console.error('Erro ao criar quiz:', error);
@@ -140,9 +157,16 @@ export default function TestForm() {
       />
 
       <FeedbackModal
-        isOpen={isSubmitting || submissionState === 'error'}
+        isOpen={
+          isSubmitting ||
+          submissionState === 'error' ||
+          submissionState === 'no-questions'
+        }
         onClose={() => {
-          if (submissionState === 'error') {
+          if (
+            submissionState === 'error' ||
+            submissionState === 'no-questions'
+          ) {
             setSubmissionState('idle');
             setIsSubmitting(false);
           }
