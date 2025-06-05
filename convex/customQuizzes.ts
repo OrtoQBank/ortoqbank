@@ -76,7 +76,7 @@ export const create = mutation({
       for (const themeId of args.selectedThemes) {
         const themeQuestions = await ctx.db
           .query('questions')
-          .filter(q => q.eq(q.field('themeId'), themeId))
+          .withIndex('by_theme', q => q.eq('themeId', themeId))
           .take(MAX_QUESTIONS * 2);
         addQuestions(themeQuestions);
       }
@@ -87,7 +87,7 @@ export const create = mutation({
       for (const subthemeId of args.selectedSubthemes) {
         const subthemeQuestions = await ctx.db
           .query('questions')
-          .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
           .take(MAX_QUESTIONS * 2);
         addQuestions(subthemeQuestions);
       }
@@ -98,7 +98,7 @@ export const create = mutation({
       for (const groupId of args.selectedGroups) {
         const groupQuestions = await ctx.db
           .query('questions')
-          .filter(q => q.eq(q.field('groupId'), groupId))
+          .withIndex('by_group', q => q.eq('groupId', groupId))
           .take(MAX_QUESTIONS * 2);
         addQuestions(groupQuestions);
       }
@@ -110,11 +110,11 @@ export const create = mutation({
       (!args.selectedSubthemes || args.selectedSubthemes.length === 0) &&
       (!args.selectedGroups || args.selectedGroups.length === 0)
     ) {
-      const allThemes = await ctx.db.query('themes').take(100); // Limit to avoid memory issues
+      const allThemes = await ctx.db.query('themes').take(50); // Limit to avoid memory issues
       for (const theme of allThemes) {
         const themeQuestions = await ctx.db
           .query('questions')
-          .filter(q => q.eq(q.field('themeId'), theme._id))
+          .withIndex('by_theme', q => q.eq('themeId', theme._id))
           .take(MAX_QUESTIONS);
         addQuestions(themeQuestions);
       }
