@@ -57,7 +57,7 @@ export const create = mutation({
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
       : MAX_QUESTIONS;
 
-    // Collect questions efficiently using OR logic instead of AND logic
+    // Collect questions efficiently using hierarchical "children win" logic
     const allQuestions: Doc<'questions'>[] = [];
     const processedQuestionIds = new Set<Id<'questions'>>();
 
@@ -71,31 +71,14 @@ export const create = mutation({
       });
     };
 
-    // Get questions by selected themes (if any)
-    if (args.selectedThemes && args.selectedThemes.length > 0) {
-      for (const themeId of args.selectedThemes) {
-        const themeQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_theme', q => q.eq('themeId', themeId))
-          .take(MAX_QUESTIONS * 2);
-        addQuestions(themeQuestions);
-      }
-    }
+    // Determine which entities to actually query based on hierarchical rules
+    const selectedThemes = args.selectedThemes || [];
+    const selectedSubthemes = args.selectedSubthemes || [];
+    const selectedGroups = args.selectedGroups || [];
 
-    // Get questions by selected subthemes (if any)
-    if (args.selectedSubthemes && args.selectedSubthemes.length > 0) {
-      for (const subthemeId of args.selectedSubthemes) {
-        const subthemeQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
-          .take(MAX_QUESTIONS * 2);
-        addQuestions(subthemeQuestions);
-      }
-    }
-
-    // Get questions by selected groups (if any)
-    if (args.selectedGroups && args.selectedGroups.length > 0) {
-      for (const groupId of args.selectedGroups) {
+    // Process groups first (highest priority - leaf nodes)
+    if (selectedGroups.length > 0) {
+      for (const groupId of selectedGroups) {
         const groupQuestions = await ctx.db
           .query('questions')
           .withIndex('by_group', q => q.eq('groupId', groupId))
@@ -104,13 +87,94 @@ export const create = mutation({
       }
     }
 
+    // Process subthemes, but exclude those that have selected groups as children
+    if (selectedSubthemes.length > 0) {
+      for (const subthemeId of selectedSubthemes) {
+        // Check if this subtheme has any selected groups as children
+        let hasSelectedChildGroups = false;
+
+        if (selectedGroups.length > 0) {
+          // Get groups belonging to this subtheme to check for overlap
+          const subthemeGroups = await ctx.db
+            .query('groups')
+            .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+            .collect();
+
+          hasSelectedChildGroups = subthemeGroups.some(group =>
+            selectedGroups.includes(group._id),
+          );
+        }
+
+        // Only include subtheme questions if no child groups are selected
+        if (!hasSelectedChildGroups) {
+          const subthemeQuestions = await ctx.db
+            .query('questions')
+            .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+            .take(MAX_QUESTIONS * 2);
+          addQuestions(subthemeQuestions);
+        }
+      }
+    }
+
+    // Process themes, but exclude those that have selected subthemes or groups as children
+    if (selectedThemes.length > 0) {
+      for (const themeId of selectedThemes) {
+        // Check if this theme has any selected subthemes as children
+        let hasSelectedChildSubthemes = false;
+        let hasSelectedChildGroups = false;
+
+        if (selectedSubthemes.length > 0) {
+          // Get subthemes belonging to this theme to check for overlap
+          const themeSubthemes = await ctx.db
+            .query('subthemes')
+            .withIndex('by_theme', q => q.eq('themeId', themeId))
+            .collect();
+
+          hasSelectedChildSubthemes = themeSubthemes.some(subtheme =>
+            selectedSubthemes.includes(subtheme._id),
+          );
+        }
+
+        if (selectedGroups.length > 0) {
+          // Check if any selected groups belong to subthemes of this theme
+          const themeSubthemes = await ctx.db
+            .query('subthemes')
+            .withIndex('by_theme', q => q.eq('themeId', themeId))
+            .collect();
+
+          for (const subtheme of themeSubthemes) {
+            const subthemeGroups = await ctx.db
+              .query('groups')
+              .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
+              .collect();
+
+            if (
+              subthemeGroups.some(group => selectedGroups.includes(group._id))
+            ) {
+              hasSelectedChildGroups = true;
+              break;
+            }
+          }
+        }
+
+        // Only include theme questions if no child subthemes or groups are selected
+        if (!hasSelectedChildSubthemes && !hasSelectedChildGroups) {
+          const themeQuestions = await ctx.db
+            .query('questions')
+            .withIndex('by_theme', q => q.eq('themeId', themeId))
+            .take(MAX_QUESTIONS * 2);
+          addQuestions(themeQuestions);
+        }
+      }
+    }
+
     // If no specific selections, get all questions from all themes
     if (
-      (!args.selectedThemes || args.selectedThemes.length === 0) &&
-      (!args.selectedSubthemes || args.selectedSubthemes.length === 0) &&
-      (!args.selectedGroups || args.selectedGroups.length === 0)
+      selectedThemes.length === 0 &&
+      selectedSubthemes.length === 0 &&
+      selectedGroups.length === 0
     ) {
-      const allThemes = await ctx.db.query('themes').take(50); // Limit to avoid memory issues
+      const allThemes = await ctx.db.query('themes').take(50);
       for (const theme of allThemes) {
         const themeQuestions = await ctx.db
           .query('questions')
