@@ -57,64 +57,66 @@ export const create = mutation({
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
       : MAX_QUESTIONS;
 
-    // Process themes one at a time to avoid large scans
+    // Collect questions efficiently using OR logic instead of AND logic
     const allQuestions: Doc<'questions'>[] = [];
+    const processedQuestionIds = new Set<Id<'questions'>>();
 
-    // Define a helper function to check if a question matches subtheme and group filters
-    const matchesFilters = (question: Doc<'questions'>) => {
-      // Check subtheme filter
-      if (
-        args.selectedSubthemes &&
-        args.selectedSubthemes.length > 0 &&
-        (!question.subthemeId ||
-          !args.selectedSubthemes.includes(question.subthemeId))
-      ) {
-        return false;
-      }
-
-      // Check group filter
-      if (
-        args.selectedGroups &&
-        args.selectedGroups.length > 0 &&
-        (!question.groupId || !args.selectedGroups.includes(question.groupId))
-      ) {
-        return false;
-      }
-
-      return true;
+    // Helper function to add questions without duplicates
+    const addQuestions = (questions: Doc<'questions'>[]) => {
+      questions.forEach(q => {
+        if (!processedQuestionIds.has(q._id)) {
+          processedQuestionIds.add(q._id);
+          allQuestions.push(q);
+        }
+      });
     };
 
-    // If no themes are selected, get all available themes
-    let themesToProcess: Id<'themes'>[] = [];
-
-    if (!args.selectedThemes || args.selectedThemes.length === 0) {
-      // Fetch all themes from the database
-      const allThemes = await ctx.db.query('themes').collect();
-      themesToProcess = allThemes.map(theme => theme._id);
-    } else {
-      themesToProcess = args.selectedThemes;
+    // Get questions by selected themes (if any)
+    if (args.selectedThemes && args.selectedThemes.length > 0) {
+      for (const themeId of args.selectedThemes) {
+        const themeQuestions = await ctx.db
+          .query('questions')
+          .filter(q => q.eq(q.field('themeId'), themeId))
+          .take(MAX_QUESTIONS * 2);
+        addQuestions(themeQuestions);
+      }
     }
 
-    // Process each theme
-    for (const themeId of themesToProcess) {
-      // Use take() to avoid full table scans if there are too many questions
-      // We'll collect more than MAX_QUESTIONS initially to ensure we have enough after filtering
-      const maxInitialQuestions = MAX_QUESTIONS * 3;
+    // Get questions by selected subthemes (if any)
+    if (args.selectedSubthemes && args.selectedSubthemes.length > 0) {
+      for (const subthemeId of args.selectedSubthemes) {
+        const subthemeQuestions = await ctx.db
+          .query('questions')
+          .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+          .take(MAX_QUESTIONS * 2);
+        addQuestions(subthemeQuestions);
+      }
+    }
 
-      // Filter by theme ID - using regular query since withIndex for 'by_theme' isn't available
-      const themeQuestions = await ctx.db
-        .query('questions')
-        .filter(q => q.eq(q.field('themeId'), themeId))
-        .take(maxInitialQuestions);
+    // Get questions by selected groups (if any)
+    if (args.selectedGroups && args.selectedGroups.length > 0) {
+      for (const groupId of args.selectedGroups) {
+        const groupQuestions = await ctx.db
+          .query('questions')
+          .filter(q => q.eq(q.field('groupId'), groupId))
+          .take(MAX_QUESTIONS * 2);
+        addQuestions(groupQuestions);
+      }
+    }
 
-      // Apply additional filters to the fetched questions
-      const filteredThemeQuestions = themeQuestions.filter(matchesFilters);
-
-      allQuestions.push(...filteredThemeQuestions);
-
-      // If we already have enough questions across all themes, stop querying
-      if (allQuestions.length >= MAX_QUESTIONS * 2) {
-        break;
+    // If no specific selections, get all questions from all themes
+    if (
+      (!args.selectedThemes || args.selectedThemes.length === 0) &&
+      (!args.selectedSubthemes || args.selectedSubthemes.length === 0) &&
+      (!args.selectedGroups || args.selectedGroups.length === 0)
+    ) {
+      const allThemes = await ctx.db.query('themes').take(100); // Limit to avoid memory issues
+      for (const theme of allThemes) {
+        const themeQuestions = await ctx.db
+          .query('questions')
+          .filter(q => q.eq(q.field('themeId'), theme._id))
+          .take(MAX_QUESTIONS);
+        addQuestions(themeQuestions);
       }
     }
 
