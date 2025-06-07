@@ -1,5 +1,7 @@
 import AccessCheck from '@/components/AccessCheck';
+import { AdminClassWrapper } from '@/components/AdminClassWrapper';
 import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
+import { SessionProvider } from '@/components/providers/SessionProvider';
 import { TermsProvider } from '@/components/providers/TermsProvider';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
@@ -13,32 +15,30 @@ export default async function Layout({
   const isAdmin = await checkRole('admin');
   const termsAccepted = await checkTermsAccepted();
 
-  const mainClassName = `w-full bg-gradient-to-b from-slate-50 via-blue-50 to-indigo-100 min-h-screen ${isAdmin ? '' : 'select-none'}`;
-
   return (
     <SidebarProvider>
-      {/* Session monitoring to detect revoked sessions */}
+      <SessionProvider initialData={{ isAdmin, termsAccepted }}>
+        {/* Session monitoring to detect revoked sessions */}
 
-      {/* Sidebar visible only on md and larger screens */}
-      <div className="hidden md:block">
-        <AppSidebar />
-      </div>
-      <main className={mainClassName.trim()}>
-        {/* Sidebar trigger visible only on md and larger screens */}
+        {/* Sidebar visible only on md and larger screens */}
         <div className="hidden md:block">
-          <SidebarTrigger />
+          <AppSidebar />
         </div>
-        {/* Add padding-bottom for mobile nav, remove for desktop */}
-        <div className="mx-auto max-w-5xl px-2 pb-20 md:px-10 md:py-0">
-          <AccessCheck>
-            <TermsProvider initialTermsAccepted={termsAccepted}>
-              {children}
-            </TermsProvider>
-          </AccessCheck>
-        </div>
-      </main>
-      {/* Mobile bottom nav visible only on screens smaller than md */}
-      <MobileBottomNav />
+        <AdminClassWrapper>
+          {/* Sidebar trigger visible only on md and larger screens */}
+          <div className="hidden md:block">
+            <SidebarTrigger />
+          </div>
+          {/* Add padding-bottom for mobile nav, remove for desktop */}
+          <div className="mx-auto max-w-5xl px-2 pb-20 md:px-10 md:py-0">
+            <AccessCheck>
+              <TermsProvider>{children}</TermsProvider>
+            </AccessCheck>
+          </div>
+        </AdminClassWrapper>
+        {/* Mobile bottom nav visible only on screens smaller than md */}
+        <MobileBottomNav />
+      </SessionProvider>
     </SidebarProvider>
   );
 }

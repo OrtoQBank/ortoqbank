@@ -2,11 +2,15 @@
 
 import { Check, GraduationCap, Loader2, Target } from 'lucide-react';
 
+import { useSession } from './providers/SessionProvider';
+
 export default function AccessCheck({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const { isAdmin } = useSession();
+
   /*  const accessResult = useQuery(api.users.hasCurrentYearAccess); */
   const accessResult = { hasAccess: true };
 
