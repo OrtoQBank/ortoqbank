@@ -23,7 +23,7 @@ export const acceptTermsInClerk = action({
 
       // Update Clerk metadata to mark terms as accepted
       await clerkClient.users.updateUserMetadata(identity.subject, {
-        privateMetadata: {
+        publicMetadata: {
           termsAccepted: true,
         },
       });
