@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation } from 'convex/react';
+import { type Preloaded, usePreloadedQuery } from 'convex/react';
 import { useRouter } from 'next/navigation';
 import { FormProvider, useForm } from 'react-hook-form';
 
@@ -73,7 +74,7 @@ export function TestFormClient() {
       const result = await createCustomQuiz(payload);
 
       if (result.quizId) {
-        router.push(`/teste/${result.quizId}`);
+        router.push(`/criar-teste-2/${result.quizId}`);
       }
     } catch (error) {
       console.error('Erro ao criar teste:', error);
