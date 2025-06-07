@@ -3,7 +3,7 @@ import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
 import { TermsProvider } from '@/components/providers/TermsProvider';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
-import { checkRole } from '@/utils/roles'; // Adjust path if necessary
+import { checkRole, checkTermsAccepted } from '@/utils/roles'; // Adjust path if necessary
 
 export default async function Layout({
   children,
@@ -11,6 +11,7 @@ export default async function Layout({
   children: React.ReactNode;
 }) {
   const isAdmin = await checkRole('admin');
+  const termsAccepted = await checkTermsAccepted();
 
   const mainClassName = `w-full bg-gradient-to-b from-slate-50 via-blue-50 to-indigo-100 min-h-screen ${isAdmin ? '' : 'select-none'}`;
 
@@ -30,7 +31,9 @@ export default async function Layout({
         {/* Add padding-bottom for mobile nav, remove for desktop */}
         <div className="mx-auto max-w-5xl px-2 pb-20 md:px-10 md:py-0">
           <AccessCheck>
-            <TermsProvider>{children}</TermsProvider>
+            <TermsProvider initialTermsAccepted={termsAccepted}>
+              {children}
+            </TermsProvider>
           </AccessCheck>
         </div>
       </main>

@@ -14,11 +14,13 @@ import {
 interface TermsOfServiceModalProps {
   open: boolean;
   onAccept: () => void;
+  isLoading?: boolean;
 }
 
 export function TermsOfServiceModal({
   open,
   onAccept,
+  isLoading = false,
 }: TermsOfServiceModalProps) {
   const scrollRef = useRef<HTMLDivElement>(null);
 
@@ -412,8 +414,12 @@ export function TermsOfServiceModal({
         </div>
 
         <DialogFooter className="mt-2">
-          <Button onClick={onAccept} className="w-full sm:w-auto">
-            Aceito os Termos de Serviço
+          <Button
+            onClick={onAccept}
+            className="w-full sm:w-auto"
+            disabled={isLoading}
+          >
+            {isLoading ? 'Processando...' : 'Aceito os Termos de Serviço'}
           </Button>
         </DialogFooter>
       </DialogContent>

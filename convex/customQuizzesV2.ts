@@ -33,11 +33,7 @@ export const create = mutation({
       v.literal('bookmarked'),
     ),
     numQuestions: v.optional(v.number()),
-    // Legacy taxonomy fields (optional)
-    selectedThemes: v.optional(v.array(v.id('themes'))),
-    selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-    selectedGroups: v.optional(v.array(v.id('groups'))),
-    // New taxonomy fields (optional)
+    // New taxonomy fields
     selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
@@ -50,17 +46,6 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // Validate that at least one taxonomy system is used if filters are provided
-    const hasLegacy =
-      args.selectedThemes?.length ||
-      args.selectedSubthemes?.length ||
-      args.selectedGroups?.length;
-    const hasTaxonomy =
-      args.selectedTaxThemes?.length ||
-      args.selectedTaxSubthemes?.length ||
-      args.selectedTaxGroups?.length ||
-      args.taxonomyPathIds?.length;
-
     // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
@@ -68,23 +53,27 @@ export const create = mutation({
 
     let allQuestions: Doc<'questions'>[] = [];
 
-    // If both taxonomy systems are used or neither is used, get all questions and filter later
-    if ((!hasLegacy && !hasTaxonomy) || (hasLegacy && hasTaxonomy)) {
-      allQuestions = await ctx.db.query('questions').collect();
-    } else if (hasLegacy) {
-      // Use legacy taxonomy system
-      allQuestions = await getQuestionsFromLegacyTaxonomy(ctx, {
-        selectedThemes: args.selectedThemes,
-        selectedSubthemes: args.selectedSubthemes,
-        selectedGroups: args.selectedGroups,
-      });
-    } else if (hasTaxonomy) {
-      // Use new taxonomy system
+    // Check if any taxonomy filters are provided
+    const hasTaxonomy =
+      args.selectedTaxThemes?.length ||
+      args.selectedTaxSubthemes?.length ||
+      args.selectedTaxGroups?.length ||
+      args.taxonomyPathIds?.length;
+
+    if (hasTaxonomy) {
+      // Use new taxonomy system to get filtered questions
       allQuestions = await getQuestionsFromNewTaxonomy(ctx, {
         selectedTaxThemes: args.selectedTaxThemes,
         selectedTaxSubthemes: args.selectedTaxSubthemes,
         selectedTaxGroups: args.selectedTaxGroups,
       });
+    } else {
+      // For "all questions" - get a reasonable sample size (3x the max needed for good randomization)
+      const sampleSize = Math.min(requestedQuestions * 3, 360); // Max 360 questions for good variety
+      allQuestions = await ctx.db
+        .query('questions')
+        .order('desc') // Get recent questions for better variety
+        .take(sampleSize);
     }
 
     // Apply question mode filtering
@@ -117,7 +106,7 @@ export const create = mutation({
       args.description ||
       `Custom quiz with ${finalQuestionIds.length} questions`;
 
-    // Create the custom quiz with both taxonomy systems
+    // Create the custom quiz with new taxonomy system
     const quizId = await ctx.db.insert('customQuizzes', {
       name: quizName,
       description: quizDescription,
@@ -125,11 +114,7 @@ export const create = mutation({
       authorId: userId._id,
       testMode: args.testMode,
       questionMode: args.questionMode,
-      // Legacy fields
-      selectedThemes: args.selectedThemes,
-      selectedSubthemes: args.selectedSubthemes,
-      selectedGroups: args.selectedGroups,
-      // New taxonomy fields
+      // New taxonomy fields only
       selectedTaxThemes: args.selectedTaxThemes,
       selectedTaxSubthemes: args.selectedTaxSubthemes,
       selectedTaxGroups: args.selectedTaxGroups,
@@ -151,58 +136,6 @@ export const create = mutation({
   },
 });
 
-// Helper function to get questions from legacy taxonomy
-async function getQuestionsFromLegacyTaxonomy(
-  ctx: any,
-  filters: {
-    selectedThemes?: Id<'themes'>[];
-    selectedSubthemes?: Id<'subthemes'>[];
-    selectedGroups?: Id<'groups'>[];
-  },
-): Promise<Doc<'questions'>[]> {
-  const allQuestions: Doc<'questions'>[] = [];
-
-  // Helper function to check if a question matches filters
-  const matchesFilters = (question: Doc<'questions'>) => {
-    if (
-      filters.selectedSubthemes?.length &&
-      (!question.subthemeId ||
-        !filters.selectedSubthemes.includes(question.subthemeId))
-    ) {
-      return false;
-    }
-    if (
-      filters.selectedGroups?.length &&
-      (!question.groupId || !filters.selectedGroups.includes(question.groupId))
-    ) {
-      return false;
-    }
-    return true;
-  };
-
-  // Get themes to process
-  let themesToProcess: Id<'themes'>[] = [];
-  if (filters.selectedThemes?.length) {
-    themesToProcess = filters.selectedThemes;
-  } else {
-    const allThemes = await ctx.db.query('themes').collect();
-    themesToProcess = allThemes.map((theme: any) => theme._id);
-  }
-
-  // Process each theme
-  for (const themeId of themesToProcess) {
-    const themeQuestions = await ctx.db
-      .query('questions')
-      .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
-      .collect();
-
-    const filteredThemeQuestions = themeQuestions.filter(matchesFilters);
-    allQuestions.push(...filteredThemeQuestions);
-  }
-
-  return allQuestions;
-}
-
 // Helper function to get questions from new taxonomy
 async function getQuestionsFromNewTaxonomy(
   ctx: any,
@@ -213,8 +146,6 @@ async function getQuestionsFromNewTaxonomy(
   },
 ): Promise<Doc<'questions'>[]> {
   const allQuestions: Doc<'questions'>[] = [];
-
-  // Client has already done hierarchical filtering, so we just query all provided IDs
 
   // Get questions from provided themes
   if (filters.selectedTaxThemes?.length) {
@@ -360,9 +291,6 @@ export const getCustomQuizzes = query({
         v.literal('incorrect'),
         v.literal('bookmarked'),
       ),
-      selectedThemes: v.optional(v.array(v.id('themes'))),
-      selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-      selectedGroups: v.optional(v.array(v.id('groups'))),
       selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
@@ -433,9 +361,6 @@ export const getById = query({
       v.literal('incorrect'),
       v.literal('bookmarked'),
     ),
-    selectedThemes: v.optional(v.array(v.id('themes'))),
-    selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-    selectedGroups: v.optional(v.array(v.id('groups'))),
     selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
@@ -506,9 +431,6 @@ export const searchByName = query({
         v.literal('incorrect'),
         v.literal('bookmarked'),
       ),
-      selectedThemes: v.optional(v.array(v.id('themes'))),
-      selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-      selectedGroups: v.optional(v.array(v.id('groups'))),
       selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
@@ -530,51 +452,5 @@ export const searchByName = query({
       .take(50);
 
     return matchingQuizzes;
-  },
-});
-
-// Migration helper to copy taxonomy data from questions to quiz
-export const migrateTaxonomyFromQuestions = mutation({
-  args: {
-    quizId: v.id('customQuizzes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const quiz = await ctx.db.get(args.quizId);
-    if (!quiz) {
-      throw new Error('Quiz not found');
-    }
-
-    // If quiz already has taxonomy data, skip migration
-    if (
-      quiz.selectedTaxThemes?.length ||
-      quiz.selectedTaxSubthemes?.length ||
-      quiz.selectedTaxGroups?.length
-    ) {
-      return null;
-    }
-
-    // Extract taxonomy info from questions
-    const taxonomyThemes = new Set<Id<'taxonomy'>>();
-    const taxonomySubthemes = new Set<Id<'taxonomy'>>();
-    const taxonomyGroups = new Set<Id<'taxonomy'>>();
-
-    for (const questionId of quiz.questions) {
-      const question = await ctx.db.get(questionId);
-      if (question) {
-        if (question.TaxThemeId) taxonomyThemes.add(question.TaxThemeId);
-        if (question.TaxSubthemeId)
-          taxonomySubthemes.add(question.TaxSubthemeId);
-        if (question.TaxGroupId) taxonomyGroups.add(question.TaxGroupId);
-      }
-    }
-
-    await ctx.db.patch(args.quizId, {
-      selectedTaxThemes: [...taxonomyThemes],
-      selectedTaxSubthemes: [...taxonomySubthemes],
-      selectedTaxGroups: [...taxonomyGroups],
-    });
-
-    return null;
   },
 });
