@@ -18,12 +18,8 @@ export function QuestionCountInput() {
         id="totalQuestions"
         type="number"
         min={1}
-        max={120}
-        {...register('totalQuestions', {
-          required: 'Este campo é obrigatório',
-          min: { value: 1, message: 'Mínimo 1 questão' },
-          max: { value: 120, message: 'Máximo 120 questões' },
-        })}
+        max={200}
+        {...register('totalQuestions')}
         className="w-full"
       />
       {errors.totalQuestions && (
