@@ -8,7 +8,7 @@ export const formSchema = z.object({
     required_error: 'Filtro é obrigatório',
   }),
   taxonomySelection: z.array(z.any()).default([]),
-  totalQuestions: z
+  totalQuestions: z.coerce
     .number()
     .min(1, 'Mínimo de 1 questão')
     .max(200, 'Máximo de 200 questões')
