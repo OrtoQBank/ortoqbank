@@ -132,6 +132,10 @@ export const getById = query({
       selectedThemes: v.optional(v.array(v.id('themes'))),
       selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
       selectedGroups: v.optional(v.array(v.id('groups'))),
+      selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
+      selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
+      selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
+      taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     }),
   ),
   handler: async (ctx, { id }) => {
@@ -230,6 +234,10 @@ export const getQuizData = query({
       selectedThemes: v.optional(v.array(v.id('themes'))),
       selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
       selectedGroups: v.optional(v.array(v.id('groups'))),
+      selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
+      selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
+      selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
+      taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     }),
   ),
   handler: async (ctx, args) => {

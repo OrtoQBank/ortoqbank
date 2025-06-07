@@ -79,6 +79,8 @@ export const getQuizData = query({
       }),
     );
 
+    // Return quiz data, preserving all fields (including new taxonomy fields if they exist)
+    // This ensures backwards compatibility while supporting new fields
     return {
       ...quiz,
       questions: safeQuestions,
