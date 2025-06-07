@@ -1,5 +1,6 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from 'convex/react';
 import { type Preloaded, usePreloadedQuery } from 'convex/react';
 import { useRouter } from 'next/navigation';
@@ -18,21 +19,16 @@ import {
 } from './hooks/useTaxonomyProcessor';
 import { ModeToggle } from './ModeToggle';
 import { QuestionCountInput } from './QuestionCountInput';
+import { type FormData, formSchema } from './schema';
 import TaxFilter from './TaxFilter';
 import type { TaxonomyItem } from './utils/taxonomyProcessor';
-
-type FormData = {
-  mode: 'exam' | 'study';
-  filter: 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
-  taxonomySelection: TaxonomyItem[];
-  totalQuestions: number;
-};
 
 export function TestFormClient() {
   const router = useRouter();
   const createCustomQuiz = useMutation(api.customQuizzesV2.create);
 
   const methods = useForm<FormData>({
+    resolver: zodResolver(formSchema),
     defaultValues: {
       mode: 'exam',
       filter: 'all',
