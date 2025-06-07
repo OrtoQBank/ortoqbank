@@ -37,11 +37,7 @@ export function DebugPanel() {
     testMode: formData.mode,
     questionMode: formData.filter,
     numQuestions: formData.totalQuestions,
-    // Legacy fields (empty when using new taxonomy)
-    selectedThemes: [],
-    selectedSubthemes: [],
-    selectedGroups: [],
-    // New taxonomy fields (processed)
+    // New taxonomy fields only
     ...processedTaxonomy,
   };
 

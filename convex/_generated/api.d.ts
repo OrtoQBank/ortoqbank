@@ -27,6 +27,7 @@ import type * as quizV2 from "../quizV2.js";
 import type * as subthemes from "../subthemes.js";
 import type * as taxonomy from "../taxonomy.js";
 import type * as taxonomyPathMigration from "../taxonomyPathMigration.js";
+import type * as termsActions from "../termsActions.js";
 import type * as themes from "../themes.js";
 import type * as triggers from "../triggers.js";
 import type * as userStats from "../userStats.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   subthemes: typeof subthemes;
   taxonomy: typeof taxonomy;
   taxonomyPathMigration: typeof taxonomyPathMigration;
+  termsActions: typeof termsActions;
   themes: typeof themes;
   triggers: typeof triggers;
   userStats: typeof userStats;

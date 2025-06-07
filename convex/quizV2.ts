@@ -11,11 +11,7 @@ export const create = mutation({
     category: v.union(v.literal('trilha'), v.literal('simulado')),
     questions: v.array(v.id('questions')),
     subcategory: v.optional(v.string()),
-    // Legacy taxonomy fields (optional)
-    themeId: v.optional(v.id('themes')),
-    subthemeId: v.optional(v.id('subthemes')),
-    groupId: v.optional(v.id('groups')),
-    // New taxonomy fields (optional)
+    // New taxonomy fields
     TaxThemeId: v.optional(v.id('taxonomy')),
     TaxSubthemeId: v.optional(v.id('taxonomy')),
     TaxGroupId: v.optional(v.id('taxonomy')),
@@ -25,18 +21,15 @@ export const create = mutation({
   },
   returns: v.id('presetQuizzes'),
   handler: async (ctx, args) => {
-    // Validate that at least one taxonomy system is used
-    const hasLegacy = args.themeId || args.subthemeId || args.groupId;
+    // Validate that taxonomy is provided
     const hasTaxonomy =
       args.TaxThemeId ||
       args.TaxSubthemeId ||
       args.TaxGroupId ||
       args.taxonomyPathIds;
 
-    if (!hasLegacy && !hasTaxonomy) {
-      throw new Error(
-        'At least one taxonomy system (legacy or new) must be specified',
-      );
+    if (!hasTaxonomy) {
+      throw new Error('At least one taxonomy field must be specified');
     }
 
     return await ctx.db.insert('presetQuizzes', {
@@ -45,10 +38,6 @@ export const create = mutation({
       category: args.category,
       questions: args.questions,
       subcategory: args.subcategory,
-      // Legacy fields
-      themeId: args.themeId,
-      subthemeId: args.subthemeId,
-      groupId: args.groupId,
       // New taxonomy fields
       TaxThemeId: args.TaxThemeId,
       TaxSubthemeId: args.TaxSubthemeId,
@@ -68,11 +57,7 @@ export const update = mutation({
     category: v.optional(v.union(v.literal('trilha'), v.literal('simulado'))),
     questions: v.optional(v.array(v.id('questions'))),
     subcategory: v.optional(v.string()),
-    // Legacy taxonomy fields (optional)
-    themeId: v.optional(v.id('themes')),
-    subthemeId: v.optional(v.id('subthemes')),
-    groupId: v.optional(v.id('groups')),
-    // New taxonomy fields (optional)
+    // New taxonomy fields
     TaxThemeId: v.optional(v.id('taxonomy')),
     TaxSubthemeId: v.optional(v.id('taxonomy')),
     TaxGroupId: v.optional(v.id('taxonomy')),
@@ -105,9 +90,6 @@ export const getById = query({
       category: v.union(v.literal('trilha'), v.literal('simulado')),
       questions: v.array(v.any()), // Will be populated with full question data
       subcategory: v.optional(v.string()),
-      themeId: v.optional(v.id('themes')),
-      subthemeId: v.optional(v.id('subthemes')),
-      groupId: v.optional(v.id('groups')),
       TaxThemeId: v.optional(v.id('taxonomy')),
       TaxSubthemeId: v.optional(v.id('taxonomy')),
       TaxGroupId: v.optional(v.id('taxonomy')),
@@ -129,9 +111,6 @@ export const getById = query({
         v.literal('incorrect'),
         v.literal('bookmarked'),
       ),
-      selectedThemes: v.optional(v.array(v.id('themes'))),
-      selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-      selectedGroups: v.optional(v.array(v.id('groups'))),
       selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
@@ -198,9 +177,6 @@ export const getQuizData = query({
         }),
       ),
       subcategory: v.optional(v.string()),
-      themeId: v.optional(v.id('themes')),
-      subthemeId: v.optional(v.id('subthemes')),
-      groupId: v.optional(v.id('groups')),
       TaxThemeId: v.optional(v.id('taxonomy')),
       TaxSubthemeId: v.optional(v.id('taxonomy')),
       TaxGroupId: v.optional(v.id('taxonomy')),
@@ -231,9 +207,6 @@ export const getQuizData = query({
         v.literal('incorrect'),
         v.literal('bookmarked'),
       ),
-      selectedThemes: v.optional(v.array(v.id('themes'))),
-      selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-      selectedGroups: v.optional(v.array(v.id('groups'))),
       selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
       selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
@@ -260,54 +233,6 @@ export const getQuizData = query({
   },
 });
 
-// Query to get quizzes by legacy taxonomy
-export const getByLegacyTaxonomy = query({
-  args: {
-    themeId: v.optional(v.id('themes')),
-    subthemeId: v.optional(v.id('subthemes')),
-    groupId: v.optional(v.id('groups')),
-  },
-  returns: v.array(
-    v.object({
-      _id: v.id('presetQuizzes'),
-      _creationTime: v.number(),
-      name: v.string(),
-      description: v.string(),
-      category: v.union(v.literal('trilha'), v.literal('simulado')),
-      subcategory: v.optional(v.string()),
-      themeId: v.optional(v.id('themes')),
-      subthemeId: v.optional(v.id('subthemes')),
-      groupId: v.optional(v.id('groups')),
-      TaxThemeId: v.optional(v.id('taxonomy')),
-      TaxSubthemeId: v.optional(v.id('taxonomy')),
-      TaxGroupId: v.optional(v.id('taxonomy')),
-      taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
-      isPublic: v.boolean(),
-      displayOrder: v.optional(v.number()),
-    }),
-  ),
-  handler: async (ctx, args) => {
-    if (args.groupId) {
-      return await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_group', q => q.eq('groupId', args.groupId))
-        .collect();
-    } else if (args.subthemeId) {
-      return await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId))
-        .collect();
-    } else if (args.themeId) {
-      return await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_theme', q => q.eq('themeId', args.themeId))
-        .collect();
-    }
-
-    return await ctx.db.query('presetQuizzes').collect();
-  },
-});
-
 // Query to get quizzes by new taxonomy
 export const getByTaxonomy = query({
   args: {
@@ -323,9 +248,6 @@ export const getByTaxonomy = query({
       description: v.string(),
       category: v.union(v.literal('trilha'), v.literal('simulado')),
       subcategory: v.optional(v.string()),
-      themeId: v.optional(v.id('themes')),
-      subthemeId: v.optional(v.id('subthemes')),
-      groupId: v.optional(v.id('groups')),
       TaxThemeId: v.optional(v.id('taxonomy')),
       TaxSubthemeId: v.optional(v.id('taxonomy')),
       TaxGroupId: v.optional(v.id('taxonomy')),
@@ -359,44 +281,5 @@ export const getByTaxonomy = query({
     }
 
     return await ctx.db.query('presetQuizzes').collect();
-  },
-});
-
-// Migration helper function to copy taxonomy data from questions to quiz
-export const migrateTaxonomyFromQuestions = mutation({
-  args: {
-    quizId: v.id('presetQuizzes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const quiz = await ctx.db.get(args.quizId);
-    if (!quiz) {
-      throw new Error('Quiz not found');
-    }
-
-    // If quiz already has taxonomy data, skip migration
-    if (quiz.TaxThemeId || quiz.TaxSubthemeId || quiz.TaxGroupId) {
-      return null;
-    }
-
-    // Get first question to extract taxonomy info
-    if (quiz.questions.length > 0) {
-      const firstQuestion = await ctx.db.get(quiz.questions[0]);
-      if (
-        firstQuestion &&
-        (firstQuestion.TaxThemeId ||
-          firstQuestion.TaxSubthemeId ||
-          firstQuestion.TaxGroupId)
-      ) {
-        await ctx.db.patch(args.quizId, {
-          TaxThemeId: firstQuestion.TaxThemeId,
-          TaxSubthemeId: firstQuestion.TaxSubthemeId,
-          TaxGroupId: firstQuestion.TaxGroupId,
-          taxonomyPathIds: firstQuestion.taxonomyPathIds,
-        });
-      }
-    }
-
-    return null;
   },
 });
