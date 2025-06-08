@@ -129,6 +129,7 @@ export default defineSchema({
     selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
+
     taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
   }).searchIndex('search_by_name', { searchField: 'name' }),
 

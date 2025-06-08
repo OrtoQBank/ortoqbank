@@ -3,20 +3,8 @@
 import { useUser } from '@clerk/nextjs';
 import { useMutation } from 'convex/react';
 import { useQuery } from 'convex-helpers/react/cache/hooks';
-import {
-  Baby,
-  Bone,
-  BookOpen,
-  CircleArrowOutDownRight,
-  Clock,
-  Dna,
-  FileText,
-  Footprints,
-  Hand,
-  Rotate3d,
-  TrainTrack,
-  Wrench,
-} from 'lucide-react';
+import { BookOpen, Clock, FileText } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 
@@ -32,19 +20,42 @@ import { Button } from '@/components/ui/button';
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
 
-const THEME_ICONS: Record<
-  string,
-  React.ComponentType<{ className?: string }>
-> = {
-  Tumores: Dna,
-  Mão: Hand,
-  Coluna: TrainTrack,
-  'Ombro e Cotovelo': Rotate3d,
-  Joelho: Bone,
-  Quadril: CircleArrowOutDownRight,
-  'Ortopedia Pediátrica': Baby,
-  'Pé e Tornozelo': Footprints,
-  'Ciências Básicas': Wrench,
+// Component to render theme icons
+const ThemeIcon = ({
+  themeName,
+  className = 'h-6 w-6 md:h-8 md:w-8',
+}: {
+  themeName: string;
+  className?: string;
+}) => {
+  const iconMap: Record<string, string> = {
+    'Oncologia Ortopédica': '/icons/TUMOR.png',
+    Mão: '/icons/MAO.png',
+    Coluna: '/icons/COLUNA.png',
+    'Ombro e Cotovelo': '/icons/OMBRO.png',
+    Joelho: '/icons/JOELHO.png',
+    Quadril: '/icons/QUADIRL.png',
+    'Ortopedia Pediátrica': '/icons/PEDIATRICA.png',
+    'Pé e Tornozelo': '/icons/PE.png',
+    'Ciências Básicas': '/icons/BASICAS.png',
+  };
+
+  const iconSrc = iconMap[themeName];
+
+  if (!iconSrc) {
+    // Fallback to a default icon if theme name doesn't match
+    return <div className={`${className} rounded-full bg-gray-200`} />;
+  }
+
+  return (
+    <Image
+      src={iconSrc}
+      alt={`${themeName} icon`}
+      width={32}
+      height={32}
+      className={className}
+    />
+  );
 };
 
 export default function ThemesPage() {
@@ -207,7 +218,6 @@ export default function ThemesPage() {
       <Accordion type="single" collapsible className="space-y-4">
         {Object.entries(trilhasByTheme).map(([themeId, trilhas]) => {
           const theme = themes.find(t => t._id === themeId);
-          const Icon = theme ? THEME_ICONS[theme.name] || Dna : Dna;
 
           return (
             <AccordionItem
@@ -217,7 +227,10 @@ export default function ThemesPage() {
             >
               <AccordionTrigger className="hover:bg-muted/20 py-3 hover:no-underline md:px-4">
                 <div className="flex items-center gap-3">
-                  <Icon className="h-6 w-6 md:h-8 md:w-8" />
+                  <ThemeIcon
+                    themeName={theme?.name || 'Trilha'}
+                    className="h-6 w-6 md:h-8 md:w-8"
+                  />
                   <span className="font-medium md:text-xl">
                     {theme?.name || 'Trilha'}
                   </span>
