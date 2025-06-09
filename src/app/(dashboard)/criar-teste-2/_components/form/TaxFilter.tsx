@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from 'convex-helpers/react/cache/hooks';
-import { ChevronRight, Minus } from 'lucide-react';
+import { ChevronRight } from 'lucide-react';
 import { useState } from 'react';
 import { useFormContext } from 'react-hook-form';
 
@@ -117,31 +117,6 @@ export default function TaxFilter() {
   const isSelected = (id: Id<'taxonomy'>) =>
     selectionUtils.isSelected(selection, id);
 
-  // Check if subtheme is partially selected
-  const isSubthemePartial = (subthemeId: Id<'taxonomy'>) => {
-    if (!taxonomyData) return false;
-
-    const groupsWithStatus = taxonomyUtils.getSubthemeGroupsWithStatus(
-      taxonomyData,
-      subthemeId,
-      isSelected,
-    );
-
-    if (groupsWithStatus.length === 0) return false;
-
-    const selectedCount = groupsWithStatus.filter(
-      (g: any) => g.isSelected,
-    ).length;
-    const isSubthemeSelected = isSelected(subthemeId);
-
-    // Show partial state in two cases:
-    // 1. Subtheme is selected but not all groups are selected
-    // 2. Subtheme is not selected but some groups are selected
-    return isSubthemeSelected
-      ? selectedCount < groupsWithStatus.length // Case 1: missing some groups
-      : selectedCount > 0; // Case 2: has some groups selected
-  };
-
   // Get subthemes to show (simplified)
   const getSubthemesToShow = () => {
     if (!taxonomyData) return [];
@@ -208,31 +183,12 @@ export default function TaxFilter() {
       }
     });
 
-    // Add subthemes with partial state handling
+    // Add subthemes
     selectedSubthemes.forEach(subtheme => {
       if (processedIds.has(subtheme.id)) return;
 
-      const isPartial = isSubthemePartial(subtheme.id);
       result.push({ ...subtheme, isExcluded: false });
       processedIds.add(subtheme.id);
-
-      if (isPartial) {
-        const groups = taxonomyUtils.findSubthemeGroups(
-          taxonomyData,
-          subtheme.id,
-        );
-        groups.forEach((group: any) => {
-          if (!processedIds.has(group._id) && !isSelected(group._id)) {
-            result.push({
-              id: group._id,
-              name: group.name,
-              type: 'group',
-              isExcluded: true,
-            });
-            processedIds.add(group._id);
-          }
-        });
-      }
     });
 
     // Add themes without selected children
@@ -300,7 +256,7 @@ export default function TaxFilter() {
       // Add item
       newSelection.push({ id, name, type });
 
-      // For subthemes, add all groups
+      // For subthemes, add all groups and expand the dropdown
       if (type === 'subtheme') {
         const groups = taxonomyUtils.findSubthemeGroups(taxonomyData, id);
         groups.forEach((group: any) => {
@@ -312,6 +268,9 @@ export default function TaxFilter() {
             });
           }
         });
+
+        // Automatically expand the group dropdown for this subtheme
+        setExpandedGroups(prev => new Set(prev).add(id));
       }
     } else {
       // Remove item
@@ -393,35 +352,22 @@ export default function TaxFilter() {
                 <div className="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-3">
                   {subthemes.map((subtheme: any) => {
                     const selected = isSelected(subtheme._id);
-                    const partial = isSubthemePartial(subtheme._id);
 
                     return (
                       <div key={subtheme._id} className="space-y-1">
                         <div className="flex items-center space-x-2">
-                          <div className="relative">
-                            <Checkbox
-                              checked={selected}
-                              onCheckedChange={() =>
-                                toggleSelection(
-                                  subtheme._id,
-                                  subtheme.name,
-                                  'subtheme',
-                                )
-                              }
-                            />
-                            {partial && (
-                              <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-                                <Minus className="h-3 w-3 text-orange-600" />
-                              </div>
-                            )}
-                          </div>
+                          <Checkbox
+                            checked={selected}
+                            onCheckedChange={() =>
+                              toggleSelection(
+                                subtheme._id,
+                                subtheme.name,
+                                'subtheme',
+                              )
+                            }
+                          />
                           <Label className="flex-1 cursor-pointer text-sm">
                             {subtheme.name}
-                            {partial && (
-                              <span className="ml-1 text-xs font-medium text-orange-600">
-                                (parcial)
-                              </span>
-                            )}
                           </Label>
                           {subtheme.children?.length > 0 && (
                             <Button
@@ -505,41 +451,23 @@ export default function TaxFilter() {
           </div>
           <div className="flex flex-wrap gap-2">
             {mostSpecificSelections.map(item => {
-              const isPartial =
-                item.type === 'subtheme' && isSubthemePartial(item.id);
-
               return (
                 <Badge
                   key={item.id}
-                  variant={
-                    item.isExcluded
-                      ? 'destructive'
-                      : isPartial
-                        ? 'secondary'
-                        : 'outline'
-                  }
+                  variant={item.isExcluded ? 'destructive' : 'outline'}
                   className={`text-xs ${
                     item.isExcluded
                       ? 'border-red-200 bg-red-50 line-through opacity-80'
-                      : isPartial
-                        ? 'border-orange-200 bg-orange-50'
-                        : ''
+                      : ''
                   }`}
                 >
                   {item.isExcluded && (
                     <span className="mr-1 font-bold text-red-600">✕</span>
                   )}
-                  {isPartial && (
-                    <span className="mr-1 font-bold text-orange-600">±</span>
-                  )}
                   {item.name}
                   <span
                     className={`ml-1 ${
-                      item.isExcluded
-                        ? 'text-red-400'
-                        : isPartial
-                          ? 'text-orange-600'
-                          : 'text-muted-foreground'
+                      item.isExcluded ? 'text-red-400' : 'text-muted-foreground'
                     }`}
                   >
                     (

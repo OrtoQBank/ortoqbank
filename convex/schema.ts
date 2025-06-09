@@ -66,6 +66,7 @@ export default defineSchema({
     TaxGroupId: v.optional(v.id('taxonomy')),
     TaxThemeName: v.optional(v.string()),
     TaxSubthemeName: v.optional(v.string()),
+    TaxGroupName: v.optional(v.string()),
     taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     authorId: v.optional(v.id('users')),
     isPublic: v.optional(v.boolean()),
