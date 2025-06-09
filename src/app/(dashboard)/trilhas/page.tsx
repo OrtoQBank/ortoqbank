@@ -29,15 +29,15 @@ const ThemeIcon = ({
   className?: string;
 }) => {
   const iconMap: Record<string, string> = {
-    'Oncologia Ortopédica': '/icons/TUMOR.png',
-    Mão: '/icons/MAO.png',
-    Coluna: '/icons/COLUNA.png',
-    'Ombro e Cotovelo': '/icons/OMBRO.png',
-    Joelho: '/icons/JOELHO.png',
-    Quadril: '/icons/QUADIRL.png',
-    'Ortopedia Pediátrica': '/icons/PEDIATRICA.png',
-    'Pé e Tornozelo': '/icons/PE.png',
-    'Ciências Básicas': '/icons/BASICAS.png',
+    'Oncologia Ortopédica': '/icons/tumor.webp',
+    'Mão e Microcirurgia': '/icons/mao.webp',
+    Coluna: '/icons/coluna.webp',
+    'Ombro e Cotovelo': '/icons/ombro.webp',
+    Joelho: '/icons/joelho.webp',
+    Quadril: '/icons/quadril.webp',
+    'Ortopedia Pediátrica': '/icons/pediatrica.webp',
+    'Pé e Tornozelo': '/icons/pe.webp',
+    'Ciências Básicas': '/icons/basicas.webp',
   };
 
   const iconSrc = iconMap[themeName];
