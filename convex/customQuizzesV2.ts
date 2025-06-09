@@ -37,6 +37,7 @@ export const create = mutation({
     selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
     selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
+
     taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
   },
   returns: v.object({
@@ -118,6 +119,7 @@ export const create = mutation({
       selectedTaxThemes: args.selectedTaxThemes,
       selectedTaxSubthemes: args.selectedTaxSubthemes,
       selectedTaxGroups: args.selectedTaxGroups,
+
       taxonomyPathIds: args.taxonomyPathIds,
     });
 
@@ -169,6 +171,7 @@ async function getQuestionsFromNewTaxonomy(
           q.eq('TaxSubthemeId', taxonomyId),
         )
         .collect();
+
       allQuestions.push(...subthemeQuestions);
     }
   }
