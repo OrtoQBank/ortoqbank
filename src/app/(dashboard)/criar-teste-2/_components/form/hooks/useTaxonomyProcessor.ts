@@ -48,7 +48,7 @@ export function useTaxonomyProcessor(
     const result =
       processingOptions.mode === 'hierarchical'
         ? processHierarchicalTaxonomy(taxonomySelection)
-        : processSimpleTaxonomy(taxonomySelection, taxonomyData);
+        : processSimpleTaxonomy(taxonomySelection, taxonomyData?.themes ?? []);
 
     if (processingOptions.debug) {
       debugTaxonomyProcessing(taxonomySelection, result);
