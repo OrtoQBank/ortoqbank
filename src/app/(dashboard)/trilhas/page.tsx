@@ -260,6 +260,11 @@ export default function ThemesPage() {
                                   <Clock className="mr-1 h-3 w-3" />
                                   Em andamento
                                 </Badge>
+                              ) : hasCompletedSessionMap[exam._id] ? (
+                                <Badge className="bg-green-100 text-green-800 hover:bg-green-100 hover:text-green-800 dark:bg-green-900/30 dark:text-green-400 dark:hover:bg-green-900/30 dark:hover:text-green-400">
+                                  <BookOpen className="mr-1 h-3 w-3" />
+                                  Concluído
+                                </Badge>
                               ) : (
                                 <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 hover:text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/30 dark:hover:text-blue-400">
                                   <BookOpen className="mr-1 h-3 w-3" />
@@ -282,19 +287,20 @@ export default function ThemesPage() {
                             >
                               {hasIncompleteSession
                                 ? 'Retomar Teste'
-                                : 'Iniciar Teste'}
+                                : hasCompletedSessionMap[exam._id]
+                                  ? 'Refazer Teste'
+                                  : 'Iniciar Teste'}
                             </Button>
-                            {hasIncompleteSession &&
-                              hasCompletedSessionMap[exam._id] && (
-                                <Link
-                                  href={`/quiz-results/${exam._id}`}
-                                  className="flex-1 md:flex-none"
-                                >
-                                  <Button variant="outline" className="w-full">
-                                    Ver Resultados
-                                  </Button>
-                                </Link>
-                              )}
+                            {hasCompletedSessionMap[exam._id] && (
+                              <Link
+                                href={`/quiz-results/${exam._id}`}
+                                className="flex-1 md:flex-none"
+                              >
+                                <Button variant="outline" className="w-full">
+                                  Ver Resultados
+                                </Button>
+                              </Link>
+                            )}
                           </div>
                         </div>
                       </div>

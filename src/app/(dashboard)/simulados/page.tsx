@@ -105,6 +105,12 @@ export default function SimuladoPage() {
   );
   const incompleteSessions = incompleteSessionsQuery || [];
 
+  // Query to get all completed sessions for the current user
+  const completedSessionsQuery = useQuery(
+    api.quizSessions.getAllCompletedSessions,
+  );
+  const completedSessions = completedSessionsQuery || [];
+
   // Start session mutation
   const startSession = useMutation(api.quizSessions.startQuizSession);
 
@@ -112,6 +118,7 @@ export default function SimuladoPage() {
   const isLoading =
     presetQuizzesQuery === undefined ||
     incompleteSessionsQuery === undefined ||
+    completedSessionsQuery === undefined ||
     !user;
 
   // Filter to only show simulados (category = "simulado")
@@ -170,6 +177,15 @@ export default function SimuladoPage() {
       return map;
     },
     {} as Record<string, Id<'quizSessions'>>,
+  );
+
+  // Create a map to track which quizzes have completed sessions
+  const hasCompletedSessionMap = completedSessions.reduce(
+    (map: Record<string, boolean>, session) => {
+      map[session.quizId] = true;
+      return map;
+    },
+    {} as Record<string, boolean>,
   );
 
   // Handle quiz start/resume
@@ -262,7 +278,9 @@ export default function SimuladoPage() {
                       !!incompleteSessionMap[simulado._id];
                     const status = hasIncompleteSession
                       ? 'in_progress'
-                      : 'not_started';
+                      : hasCompletedSessionMap[simulado._id]
+                        ? 'completed'
+                        : 'not_started';
 
                     return (
                       <div
@@ -292,11 +310,13 @@ export default function SimuladoPage() {
                               onClick={() => handleExamClick(simulado._id)}
                             >
                               {hasIncompleteSession
-                                ? 'Continuar Simulado'
-                                : 'Iniciar Simulado'}
+                                ? 'Retomar Teste'
+                                : status === 'completed'
+                                  ? 'Refazer Teste'
+                                  : 'Iniciar Teste'}
                             </Button>
 
-                            {hasIncompleteSession && (
+                            {hasCompletedSessionMap[simulado._id] && (
                               <Link href={`/quiz-results/${simulado._id}`}>
                                 <Button
                                   variant="outline"

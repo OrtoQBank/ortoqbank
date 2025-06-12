@@ -185,6 +185,7 @@ export default defineSchema({
     parentId: v.optional(v.id('taxonomy')),
     pathIds: v.optional(v.array(v.id('taxonomy'))),
     pathNames: v.optional(v.array(v.string())),
+    prefix: v.optional(v.string()),
   })
     .index('by_parent', ['parentId'])
     .index('by_type', ['type'])
