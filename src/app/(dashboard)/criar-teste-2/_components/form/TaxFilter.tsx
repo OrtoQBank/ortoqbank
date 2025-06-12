@@ -103,7 +103,8 @@ const selectionUtils = {
 };
 
 export default function TaxFilter() {
-  const taxonomyData = useQuery(api.taxonomy.getHierarchicalData);
+  const taxonomyDataResult = useQuery(api.taxonomy.getHierarchicalData);
+  const taxonomyData = taxonomyDataResult?.themes || [];
   const { watch, setValue } = useFormContext();
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
 
@@ -220,7 +221,7 @@ export default function TaxFilter() {
   const subthemesToShow = getSubthemesToShow();
 
   // Loading/empty states
-  if (!taxonomyData) {
+  if (!taxonomyDataResult) {
     return (
       <CardContent>
         <div className="flex items-center justify-center py-8">

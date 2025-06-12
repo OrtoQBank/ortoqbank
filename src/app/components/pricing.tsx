@@ -35,9 +35,8 @@ export default function Pricing() {
             </ul>
 
             <div className="mb-8 text-center">
-              <p className="mb-1 text-gray-600">De: R$ 1.999,90</p>
               <p className="mb-4 text-2xl font-bold text-[#2196F3]">
-                por R$1.899,90 no PIX
+                R$1.999,90 em 2x sem juros
               </p>
               <p className="text-lg font-medium text-gray-700">
                 parcelado em até 12x
