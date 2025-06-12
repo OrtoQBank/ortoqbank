@@ -123,7 +123,7 @@ export function useQuizPayload() {
       testMode: formData.mode,
       questionMode: formData.filter,
       numQuestions: formData.totalQuestions,
-      // New taxonomy fields only
+      // New taxonomy fields only.
       ...processedTaxonomy,
     };
   };
