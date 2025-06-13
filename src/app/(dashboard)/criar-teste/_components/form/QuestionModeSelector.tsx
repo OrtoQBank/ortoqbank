@@ -19,6 +19,8 @@ type QuestionModeSelectorProps = {
   error?: string;
 };
 
+type ModeKey = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
+
 export function QuestionModeSelector({
   value,
   onChange,
@@ -28,7 +30,7 @@ export function QuestionModeSelector({
   const counts = useQuery(api.countFunctions.getAllQuestionCounts, {});
   const loading = counts === undefined;
 
-  const options = [
+  const options: { id: string; label: string; apiKey: ModeKey }[] = [
     { id: 'all', label: 'Todas', apiKey: 'all' },
     { id: 'unanswered', label: 'Não respondidas', apiKey: 'unanswered' },
     { id: 'incorrect', label: 'Incorretas', apiKey: 'incorrect' },
