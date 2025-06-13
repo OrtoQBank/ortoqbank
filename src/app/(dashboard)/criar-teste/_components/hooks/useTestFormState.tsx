@@ -63,18 +63,13 @@ export function useTestFormState() {
   // Only query when user is authenticated
   const isAuthenticated = isLoaded && isSignedIn;
 
-  // Query the count of available questions based on current selection
-  const countQuestions = 1; /* useQuery(
-    api.questionAnalytics.countSelectedQuestions,
+  // Query the count of available questions based on current selection (legacy system)
+  const countQuestions = useQuery(
+    api.countFunctions.getQuestionCountByFilter,
     isAuthenticated
-      ? {
-          questionMode: mapQuestionMode(questionMode || 'all'),
-          selectedThemes: selectedThemes as Id<'themes'>[],
-          selectedSubthemes: selectedSubthemes as Id<'subthemes'>[],
-          selectedGroups: selectedGroups as Id<'groups'>[],
-        }
+      ? { filter: mapQuestionMode(questionMode || 'all') }
       : 'skip',
-  ); */
+  );
 
   // Fetch hierarchical data only when authenticated
   const hierarchicalData = useQuery(
@@ -91,8 +86,8 @@ export function useTestFormState() {
     selectedThemes,
     selectedSubthemes,
     selectedGroups,
-    availableQuestionCount,
-    isCountLoading,
+    availableQuestionCount: countQuestions ?? 0,
+    isCountLoading: countQuestions === undefined && isAuthenticated,
     hierarchicalData,
     mapQuestionMode,
     isAuthenticated,

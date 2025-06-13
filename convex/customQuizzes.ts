@@ -231,69 +231,61 @@ export const create = mutation({
 
       case 'incorrect':
       case 'unanswered': {
-        // Create a map to track question status
-        const answeredQuestions = new Map<Id<'questions'>, boolean>();
+        if (args.questionMode === 'incorrect') {
+          // Efficient approach: only query for stats of questions we actually have
+          const questionIds = allQuestions.map(q => q._id);
+          const incorrectQuestionIds: Id<'questions'>[] = [];
 
-        // First get the IDs of all questions we're interested in
-        const questionIdsSet = new Set(allQuestions.map(q => q._id));
-        const questionIds = [...questionIdsSet];
+          // Process in batches to avoid large queries
+          const batchSize = 50;
+          for (let i = 0; i < questionIds.length; i += batchSize) {
+            const batch = questionIds.slice(i, i + batchSize);
 
-        // Only query completed sessions - use take instead of pagination to avoid cursor issues
-        const completedSessions = await ctx.db
-          .query('quizSessions')
-          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-          .filter(q => q.eq(q.field('isComplete'), true))
-          .take(100); // Limit to most recent 100 sessions for performance
+            // For each question in this batch, check if it's marked as incorrect
+            for (const questionId of batch) {
+              const stat = await ctx.db
+                .query('userQuestionStats')
+                .withIndex('by_user_question', q =>
+                  q.eq('userId', userId._id).eq('questionId', questionId),
+                )
+                .filter(q => q.eq(q.field('isIncorrect'), true))
+                .first();
 
-        // Process each session
-        for (const session of completedSessions) {
-          // Get the quiz to access questions
-          const quiz = await ctx.db.get(session.quizId);
-          if (!quiz || !quiz.questions) continue;
-
-          // Only process questions that are in our filtered set
-          const relevantQuestions = quiz.questions.filter(qId =>
-            questionIdsSet.has(qId),
-          );
-
-          // Process each relevant question in this quiz
-          for (const questionId of relevantQuestions) {
-            const questionIndex = quiz.questions.indexOf(questionId);
-
-            // Skip if the question wasn't found in the quiz
-            if (questionIndex === -1) continue;
-
-            const wasAnswered = questionIndex < session.answers.length;
-
-            // For incorrectly answered questions
-            if (wasAnswered && session.answerFeedback[questionIndex]) {
-              const wasCorrect =
-                session.answerFeedback[questionIndex].isCorrect;
-              // If this is the first time seeing this question or we're updating from correct to incorrect
-              if (
-                !answeredQuestions.has(questionId) ||
-                (answeredQuestions.get(questionId) && !wasCorrect)
-              ) {
-                answeredQuestions.set(questionId, wasCorrect);
+              if (stat) {
+                incorrectQuestionIds.push(questionId);
               }
-            } else if (wasAnswered) {
-              // Question was answered but no feedback available (shouldn't happen)
-              answeredQuestions.set(questionId, true);
-            } else if (!answeredQuestions.has(questionId)) {
-              // Question wasn't answered in this session and no previous record
-              answeredQuestions.set(questionId, false);
             }
           }
-        }
 
-        // Use ternary instead of if/else for better code style
-        modeQuestions = allQuestions
-          .filter(q =>
-            args.questionMode === 'incorrect'
-              ? answeredQuestions.has(q._id) && !answeredQuestions.get(q._id)
-              : !answeredQuestions.has(q._id),
-          )
-          .map(q => q._id);
+          modeQuestions = incorrectQuestionIds;
+        } else {
+          // For unanswered: check which questions have no userQuestionStats entry
+          const questionIds = allQuestions.map(q => q._id);
+          const unansweredQuestionIds: Id<'questions'>[] = [];
+
+          // Process in batches to avoid large queries
+          const batchSize = 50;
+          for (let i = 0; i < questionIds.length; i += batchSize) {
+            const batch = questionIds.slice(i, i + batchSize);
+
+            // For each question in this batch, check if it has been answered
+            for (const questionId of batch) {
+              const stat = await ctx.db
+                .query('userQuestionStats')
+                .withIndex('by_user_question', q =>
+                  q.eq('userId', userId._id).eq('questionId', questionId),
+                )
+                .first();
+
+              // If no stat exists, the question is unanswered
+              if (!stat) {
+                unansweredQuestionIds.push(questionId);
+              }
+            }
+          }
+
+          modeQuestions = unansweredQuestionIds;
+        }
         break;
       }
       // No default
@@ -304,6 +296,16 @@ export const create = mutation({
 
     // Remove duplicates
     let uniqueQuestionIds = [...new Set(filteredQuestionIds)];
+
+    // Check if we have any questions after filtering
+    if (uniqueQuestionIds.length === 0) {
+      return {
+        success: false as const,
+        error: 'NO_QUESTIONS_FOUND_AFTER_FILTER',
+        message:
+          'Nenhuma questão encontrada com os filtros selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
+      };
+    }
 
     // If we have more than the requested number of questions, randomly select the desired amount
     if (uniqueQuestionIds.length > requestedQuestions) {
@@ -593,68 +595,61 @@ export const createWithTaxonomy = mutation({
       }
       case 'unanswered':
       case 'incorrect': {
-        // Create a map to track question status
-        const answeredQuestions = new Map<Id<'questions'>, boolean>();
+        if (args.questionMode === 'incorrect') {
+          // Efficient approach: only query for stats of questions we actually have
+          const questionIds = allQuestions.map(q => q._id);
+          const incorrectQuestionIds: Id<'questions'>[] = [];
 
-        // First get the IDs of all questions we're interested in
-        const questionIdsSet = new Set(uniqueQuestions.map(q => q._id));
+          // Process in batches to avoid large queries
+          const batchSize = 50;
+          for (let i = 0; i < questionIds.length; i += batchSize) {
+            const batch = questionIds.slice(i, i + batchSize);
 
-        // Only query completed sessions
-        const completedSessions = await ctx.db
-          .query('quizSessions')
-          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-          .filter(q => q.eq(q.field('isComplete'), true))
-          .take(100); // Limit to most recent 100 sessions for performance
+            // For each question in this batch, check if it's marked as incorrect
+            for (const questionId of batch) {
+              const stat = await ctx.db
+                .query('userQuestionStats')
+                .withIndex('by_user_question', q =>
+                  q.eq('userId', userId._id).eq('questionId', questionId),
+                )
+                .filter(q => q.eq(q.field('isIncorrect'), true))
+                .first();
 
-        // Process each session
-        for (const session of completedSessions) {
-          // Get the quiz to access questions
-          const quiz = await ctx.db.get(session.quizId);
-          if (!quiz || !quiz.questions) continue;
-
-          // Only process questions that are in our filtered set
-          const relevantQuestions = quiz.questions.filter(qId =>
-            questionIdsSet.has(qId),
-          );
-
-          // Process each relevant question in this quiz
-          for (const questionId of relevantQuestions) {
-            const questionIndex = quiz.questions.indexOf(questionId);
-
-            // Skip if the question wasn't found in the quiz
-            if (questionIndex === -1) continue;
-
-            const wasAnswered = questionIndex < session.answers.length;
-
-            // For incorrectly answered questions
-            if (wasAnswered && session.answerFeedback[questionIndex]) {
-              const wasCorrect =
-                session.answerFeedback[questionIndex].isCorrect;
-              // If this is the first time seeing this question or we're updating from correct to incorrect
-              if (
-                !answeredQuestions.has(questionId) ||
-                (answeredQuestions.get(questionId) && !wasCorrect)
-              ) {
-                answeredQuestions.set(questionId, wasCorrect);
+              if (stat) {
+                incorrectQuestionIds.push(questionId);
               }
-            } else if (wasAnswered) {
-              // Question was answered but no feedback available (shouldn't happen)
-              answeredQuestions.set(questionId, true);
-            } else if (!answeredQuestions.has(questionId)) {
-              // Question wasn't answered in this session and no previous record
-              answeredQuestions.set(questionId, false);
             }
           }
-        }
 
-        // Filter based on mode
-        modeQuestions = uniqueQuestions
-          .filter(q =>
-            args.questionMode === 'incorrect'
-              ? answeredQuestions.has(q._id) && !answeredQuestions.get(q._id)
-              : !answeredQuestions.has(q._id),
-          )
-          .map(q => q._id);
+          modeQuestions = incorrectQuestionIds;
+        } else {
+          // For unanswered: check which questions have no userQuestionStats entry
+          const questionIds = allQuestions.map(q => q._id);
+          const unansweredQuestionIds: Id<'questions'>[] = [];
+
+          // Process in batches to avoid large queries
+          const batchSize = 50;
+          for (let i = 0; i < questionIds.length; i += batchSize) {
+            const batch = questionIds.slice(i, i + batchSize);
+
+            // For each question in this batch, check if it has been answered
+            for (const questionId of batch) {
+              const stat = await ctx.db
+                .query('userQuestionStats')
+                .withIndex('by_user_question', q =>
+                  q.eq('userId', userId._id).eq('questionId', questionId),
+                )
+                .first();
+
+              // If no stat exists, the question is unanswered
+              if (!stat) {
+                unansweredQuestionIds.push(questionId);
+              }
+            }
+          }
+
+          modeQuestions = unansweredQuestionIds;
+        }
         break;
       }
       // No default
@@ -665,6 +660,16 @@ export const createWithTaxonomy = mutation({
 
     // Remove duplicates
     let uniqueQuestionIds = [...new Set(filteredQuestionIds)];
+
+    // Check if we have any questions after filtering
+    if (uniqueQuestionIds.length === 0) {
+      return {
+        success: false as const,
+        error: 'NO_QUESTIONS_FOUND_AFTER_FILTER',
+        message:
+          'Nenhuma questão encontrada com os filtros selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
+      };
+    }
 
     // If we have more than the requested number of questions, randomly select the desired amount
     if (uniqueQuestionIds.length > requestedQuestions) {
