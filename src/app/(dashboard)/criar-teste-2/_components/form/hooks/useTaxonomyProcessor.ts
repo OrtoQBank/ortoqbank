@@ -48,7 +48,7 @@ export function useTaxonomyProcessor(
     const result =
       processingOptions.mode === 'hierarchical'
         ? processHierarchicalTaxonomy(taxonomySelection)
-        : processSimpleTaxonomy(taxonomySelection, taxonomyData);
+        : processSimpleTaxonomy(taxonomySelection, taxonomyData?.themes ?? []);
 
     if (processingOptions.debug) {
       debugTaxonomyProcessing(taxonomySelection, result);
@@ -123,7 +123,7 @@ export function useQuizPayload() {
       testMode: formData.mode,
       questionMode: formData.filter,
       numQuestions: formData.totalQuestions,
-      // New taxonomy fields only
+      // New taxonomy fields only.
       ...processedTaxonomy,
     };
   };
