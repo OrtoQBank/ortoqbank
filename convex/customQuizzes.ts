@@ -382,8 +382,7 @@ export const deleteCustomQuiz = mutation({
     quizId: v.id('customQuizzes'),
   },
   handler: async (ctx, args) => {
-    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
-    //const userId = await getUserIdDev(ctx);
+    const userId = await getCurrentUserOrThrow(ctx);
 
     const quiz = await ctx.db.get(args.quizId);
 
@@ -391,7 +390,7 @@ export const deleteCustomQuiz = mutation({
       throw new Error('Quiz not found');
     }
 
-    if (quiz.authorId !== userId) {
+    if (quiz.authorId !== userId._id) {
       throw new Error('You are not authorized to delete this quiz');
     }
 
@@ -399,7 +398,7 @@ export const deleteCustomQuiz = mutation({
     const sessions = await ctx.db
       .query('quizSessions')
       .withIndex('by_user_quiz', q =>
-        q.eq('userId', userId).eq('quizId', args.quizId),
+        q.eq('userId', userId._id).eq('quizId', args.quizId),
       )
       .collect();
 
@@ -417,8 +416,7 @@ export const deleteCustomQuiz = mutation({
 export const getById = query({
   args: { id: v.id('customQuizzes') },
   handler: async (ctx, { id }) => {
-    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
-    //const userId = await getUserIdDev(ctx);
+    const userId = await getCurrentUserOrThrow(ctx);
     const quiz = await ctx.db.get(id);
 
     if (!quiz) {
@@ -426,7 +424,7 @@ export const getById = query({
     }
 
     // Verify that the user has access to this quiz
-    if (quiz.authorId !== userId) {
+    if (quiz.authorId !== userId._id) {
       throw new Error('Not authorized to access this quiz');
     }
 
@@ -448,8 +446,7 @@ export const updateName = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
-    //const userId = await getUserIdDev(ctx);
+    const userId = await getCurrentUserOrThrow(ctx);
 
     const quiz = await ctx.db.get(args.id);
 
@@ -458,7 +455,7 @@ export const updateName = mutation({
     }
 
     // Verify that the user has access to this quiz
-    if (quiz.authorId !== userId) {
+    if (quiz.authorId !== userId._id) {
       throw new Error('Not authorized to update this quiz');
     }
 
@@ -480,8 +477,7 @@ export const searchByName = query({
       return [];
     }
 
-    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
-    //const userId = await getUserIdDev(ctx);
+    const userId = await getCurrentUserOrThrow(ctx);
 
     // Normalize the search term
     const searchTerm = args.name.trim();
@@ -491,7 +487,7 @@ export const searchByName = query({
     const matchingQuizzes = await ctx.db
       .query('customQuizzes')
       .withSearchIndex('search_by_name', q => q.search('name', searchTerm))
-      .filter(q => q.eq(q.field('authorId'), userId))
+      .filter(q => q.eq(q.field('authorId'), userId._id))
       .take(50); // Limit results to reduce bandwidth
 
     return matchingQuizzes;
