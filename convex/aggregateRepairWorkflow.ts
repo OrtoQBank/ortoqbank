@@ -158,11 +158,40 @@ export const repairUserAggregatesWorkflow = workflow.define({
       {},
     );
 
-    console.log(`Workflow: User aggregates repair completed!`, finalCounts);
-    return {
+    // Compare loop totals with verified totals for debugging
+    const loopTotals = {
       answered: totalAnswered,
       incorrect: totalIncorrect,
       bookmarked: totalBookmarked,
+    };
+
+    console.log(`Workflow: Loop totals:`, loopTotals);
+    console.log(`Workflow: Verified totals:`, finalCounts);
+
+    // Log any discrepancies
+    if (loopTotals.answered !== finalCounts.totalAnswered) {
+      console.warn(
+        `Discrepancy in answered count: loop=${loopTotals.answered}, verified=${finalCounts.totalAnswered}`,
+      );
+    }
+    if (loopTotals.incorrect !== finalCounts.totalIncorrect) {
+      console.warn(
+        `Discrepancy in incorrect count: loop=${loopTotals.incorrect}, verified=${finalCounts.totalIncorrect}`,
+      );
+    }
+    if (loopTotals.bookmarked !== finalCounts.totalBookmarked) {
+      console.warn(
+        `Discrepancy in bookmarked count: loop=${loopTotals.bookmarked}, verified=${finalCounts.totalBookmarked}`,
+      );
+    }
+
+    console.log(`Workflow: User aggregates repair completed!`, finalCounts);
+
+    // Return the verified totals instead of loop totals
+    return {
+      answered: finalCounts.totalAnswered,
+      incorrect: finalCounts.totalIncorrect,
+      bookmarked: finalCounts.totalBookmarked,
     };
   },
 });
@@ -182,21 +211,43 @@ export const clearAggregatesStep = internalMutation({
 // Clear user aggregates step
 export const clearUserAggregatesStep = internalMutation({
   args: {},
-  returns: v.null(),
+  returns: v.object({
+    totalUsersCleared: v.number(),
+  }),
   handler: async ctx => {
     console.log('Step: Clearing user aggregates...');
 
-    // Get all users to clear their namespaces
-    const users = await ctx.db.query('users').collect();
+    let cursor: string | null = null;
+    let totalUsersCleared = 0;
+    const batchSize = 50; // Process users in batches of 50
 
-    for (const user of users) {
-      await answeredByUser.clear(ctx, { namespace: user._id });
-      await incorrectByUser.clear(ctx, { namespace: user._id });
-      await bookmarkedByUser.clear(ctx, { namespace: user._id });
+    while (true) {
+      // Paginate through users in batches
+      const result = await ctx.db.query('users').paginate({
+        cursor,
+        numItems: batchSize,
+      });
+
+      // Clear aggregates for users in this batch
+      for (const user of result.page) {
+        await answeredByUser.clear(ctx, { namespace: user._id });
+        await incorrectByUser.clear(ctx, { namespace: user._id });
+        await bookmarkedByUser.clear(ctx, { namespace: user._id });
+        totalUsersCleared++;
+      }
+
+      console.log(
+        `Step: Cleared aggregates for batch of ${result.page.length} users (total: ${totalUsersCleared})`,
+      );
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
     }
 
-    console.log(`Step: Cleared aggregates for ${users.length} users`);
-    return null;
+    console.log(
+      `Step: Cleared aggregates for ${totalUsersCleared} users total`,
+    );
+    return { totalUsersCleared };
   },
 });
 
@@ -370,39 +421,58 @@ export const verifyUserAggregatesStep = internalMutation({
   handler: async ctx => {
     console.log('Step: Verifying user aggregates...');
 
-    const users = await ctx.db.query('users').collect();
+    let cursor: string | null = null;
     let totalAnswered = 0;
     let totalIncorrect = 0;
     let totalBookmarked = 0;
+    let userCount = 0;
+    const batchSize = 50; // Process users in batches of 50
 
-    for (const user of users) {
-      const answered = await answeredByUser.count(ctx, {
-        namespace: user._id,
-        bounds: {},
-      });
-      const incorrect = await incorrectByUser.count(ctx, {
-        namespace: user._id,
-        bounds: {},
-      });
-      const bookmarked = await bookmarkedByUser.count(ctx, {
-        namespace: user._id,
-        bounds: {},
+    while (true) {
+      // Paginate through users in batches
+      const result = await ctx.db.query('users').paginate({
+        cursor,
+        numItems: batchSize,
       });
 
-      totalAnswered += answered;
-      totalIncorrect += incorrect;
-      totalBookmarked += bookmarked;
+      // Verify aggregates for users in this batch
+      for (const user of result.page) {
+        const answered = await (answeredByUser.count as any)(ctx, {
+          namespace: user._id,
+          bounds: {},
+        });
+        const incorrect = await (incorrectByUser.count as any)(ctx, {
+          namespace: user._id,
+          bounds: {},
+        });
+        const bookmarked = await (bookmarkedByUser.count as any)(ctx, {
+          namespace: user._id,
+          bounds: {},
+        });
+
+        totalAnswered += answered;
+        totalIncorrect += incorrect;
+        totalBookmarked += bookmarked;
+        userCount++;
+      }
+
+      console.log(
+        `Step: Verified batch of ${result.page.length} users (total: ${userCount})`,
+      );
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
     }
 
-    const result = {
+    const finalResult = {
       totalAnswered,
       totalIncorrect,
       totalBookmarked,
-      userCount: users.length,
+      userCount,
     };
 
-    console.log(`Step: Final verification - User aggregates:`, result);
-    return result;
+    console.log(`Step: Final verification - User aggregates:`, finalResult);
+    return finalResult;
   },
 });
 
