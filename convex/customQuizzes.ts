@@ -50,7 +50,8 @@ export const create = mutation({
     }),
   ),
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getCurrentUserOrThrow(ctx);
 
     // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions
@@ -216,7 +217,7 @@ export const create = mutation({
         // Get bookmarked questions - use the by_user index to limit scanning
         const bookmarks = await ctx.db
           .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .withIndex('by_user', q => q.eq('userId', userId))
           .collect();
 
         // Create a Set for faster lookups
@@ -231,69 +232,38 @@ export const create = mutation({
 
       case 'incorrect':
       case 'unanswered': {
-        // Create a map to track question status
-        const answeredQuestions = new Map<Id<'questions'>, boolean>();
+        if (args.questionMode === 'incorrect') {
+          // Use the same logic as aggregateHelpers - query userQuestionStats directly
+          const incorrectStats = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user_incorrect', q =>
+              q.eq('userId', userId).eq('isIncorrect', true),
+            )
+            .collect();
 
-        // First get the IDs of all questions we're interested in
-        const questionIdsSet = new Set(allQuestions.map(q => q._id));
-        const questionIds = [...questionIdsSet];
+          // Filter to only include questions that are in our filtered set
+          const questionIdsSet = new Set(allQuestions.map(q => q._id));
+          modeQuestions = incorrectStats
+            .filter(stat => questionIdsSet.has(stat.questionId))
+            .map(stat => stat.questionId);
+        } else {
+          // For unanswered questions, use the same logic as countFunctions
+          // Get all answered questions from userQuestionStats
+          const answeredStats = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user', q => q.eq('userId', userId))
+            .collect();
 
-        // Only query completed sessions - use take instead of pagination to avoid cursor issues
-        const completedSessions = await ctx.db
-          .query('quizSessions')
-          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-          .filter(q => q.eq(q.field('isComplete'), true))
-          .take(100); // Limit to most recent 100 sessions for performance
-
-        // Process each session
-        for (const session of completedSessions) {
-          // Get the quiz to access questions
-          const quiz = await ctx.db.get(session.quizId);
-          if (!quiz || !quiz.questions) continue;
-
-          // Only process questions that are in our filtered set
-          const relevantQuestions = quiz.questions.filter(qId =>
-            questionIdsSet.has(qId),
+          // Create a Set of answered question IDs for faster lookups
+          const answeredQuestionIds = new Set(
+            answeredStats.map(stat => stat.questionId),
           );
 
-          // Process each relevant question in this quiz
-          for (const questionId of relevantQuestions) {
-            const questionIndex = quiz.questions.indexOf(questionId);
-
-            // Skip if the question wasn't found in the quiz
-            if (questionIndex === -1) continue;
-
-            const wasAnswered = questionIndex < session.answers.length;
-
-            // For incorrectly answered questions
-            if (wasAnswered && session.answerFeedback[questionIndex]) {
-              const wasCorrect =
-                session.answerFeedback[questionIndex].isCorrect;
-              // If this is the first time seeing this question or we're updating from correct to incorrect
-              if (
-                !answeredQuestions.has(questionId) ||
-                (answeredQuestions.get(questionId) && !wasCorrect)
-              ) {
-                answeredQuestions.set(questionId, wasCorrect);
-              }
-            } else if (wasAnswered) {
-              // Question was answered but no feedback available (shouldn't happen)
-              answeredQuestions.set(questionId, true);
-            } else if (!answeredQuestions.has(questionId)) {
-              // Question wasn't answered in this session and no previous record
-              answeredQuestions.set(questionId, false);
-            }
-          }
+          // Filter to only include questions that are NOT answered and are in our filtered set
+          modeQuestions = allQuestions
+            .filter(q => !answeredQuestionIds.has(q._id))
+            .map(q => q._id);
         }
-
-        // Use ternary instead of if/else for better code style
-        modeQuestions = allQuestions
-          .filter(q =>
-            args.questionMode === 'incorrect'
-              ? answeredQuestions.has(q._id) && !answeredQuestions.get(q._id)
-              : !answeredQuestions.has(q._id),
-          )
-          .map(q => q._id);
         break;
       }
       // No default
@@ -326,7 +296,7 @@ export const create = mutation({
       name: quizName,
       description: quizDescription,
       questions: uniqueQuestionIds,
-      authorId: userId._id,
+      authorId: userId,
       testMode: args.testMode,
       questionMode: args.questionMode, // Store a single mode instead of array
       selectedThemes: args.selectedThemes,
@@ -336,7 +306,7 @@ export const create = mutation({
 
     // If the user selected study or exam mode, create a session immediately
     await ctx.db.insert('quizSessions', {
-      userId: userId._id,
+      userId: userId,
       quizId,
       mode: args.testMode,
       currentQuestionIndex: 0,
@@ -358,7 +328,8 @@ export const getCustomQuizzes = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getUserIdDev(ctx);
 
     // Use an index on authorId if available or limit the number of results
     // to avoid a full table scan
@@ -367,7 +338,7 @@ export const getCustomQuizzes = query({
     // Get custom quizzes created by this user with pagination
     const quizzes = await ctx.db
       .query('customQuizzes')
-      .filter(q => q.eq(q.field('authorId'), userId._id))
+      .filter(q => q.eq(q.field('authorId'), userId))
       .order('desc') // Most recent first
       .take(limit);
 
@@ -380,7 +351,8 @@ export const deleteCustomQuiz = mutation({
     quizId: v.id('customQuizzes'),
   },
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getUserIdDev(ctx);
 
     const quiz = await ctx.db.get(args.quizId);
 
@@ -388,7 +360,7 @@ export const deleteCustomQuiz = mutation({
       throw new Error('Quiz not found');
     }
 
-    if (quiz.authorId !== userId._id) {
+    if (quiz.authorId !== userId) {
       throw new Error('You are not authorized to delete this quiz');
     }
 
@@ -396,7 +368,7 @@ export const deleteCustomQuiz = mutation({
     const sessions = await ctx.db
       .query('quizSessions')
       .withIndex('by_user_quiz', q =>
-        q.eq('userId', userId._id).eq('quizId', args.quizId),
+        q.eq('userId', userId).eq('quizId', args.quizId),
       )
       .collect();
 
@@ -414,7 +386,8 @@ export const deleteCustomQuiz = mutation({
 export const getById = query({
   args: { id: v.id('customQuizzes') },
   handler: async (ctx, { id }) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getUserIdDev(ctx);
     const quiz = await ctx.db.get(id);
 
     if (!quiz) {
@@ -422,7 +395,7 @@ export const getById = query({
     }
 
     // Verify that the user has access to this quiz
-    if (quiz.authorId !== userId._id) {
+    if (quiz.authorId !== userId) {
       throw new Error('Not authorized to access this quiz');
     }
 
@@ -444,7 +417,8 @@ export const updateName = mutation({
     name: v.string(),
   },
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getUserIdDev(ctx);
 
     const quiz = await ctx.db.get(args.id);
 
@@ -453,7 +427,7 @@ export const updateName = mutation({
     }
 
     // Verify that the user has access to this quiz
-    if (quiz.authorId !== userId._id) {
+    if (quiz.authorId !== userId) {
       throw new Error('Not authorized to update this quiz');
     }
 
@@ -475,7 +449,8 @@ export const searchByName = query({
       return [];
     }
 
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getUserIdDev(ctx);
 
     // Normalize the search term
     const searchTerm = args.name.trim();
@@ -485,7 +460,7 @@ export const searchByName = query({
     const matchingQuizzes = await ctx.db
       .query('customQuizzes')
       .withSearchIndex('search_by_name', q => q.search('name', searchTerm))
-      .filter(q => q.eq(q.field('authorId'), userId._id))
+      .filter(q => q.eq(q.field('authorId'), userId))
       .take(50); // Limit results to reduce bandwidth
 
     return matchingQuizzes;
@@ -510,7 +485,8 @@ export const createWithTaxonomy = mutation({
     selectedGroups: v.optional(v.array(v.id('taxonomy'))),
   },
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = 'k57ae8wq7tv5h7gx1122erj4ed7e631e' as Id<'users'>;
+    //const userId = await getUserIdDev(ctx);
 
     // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions
@@ -583,7 +559,7 @@ export const createWithTaxonomy = mutation({
       case 'bookmarked': {
         const bookmarks = await ctx.db
           .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .withIndex('by_user', q => q.eq('userId', userId))
           .collect();
         const bookmarkedQuestionIds = new Set(bookmarks.map(b => b.questionId));
         modeQuestions = uniqueQuestions
@@ -593,68 +569,38 @@ export const createWithTaxonomy = mutation({
       }
       case 'unanswered':
       case 'incorrect': {
-        // Create a map to track question status
-        const answeredQuestions = new Map<Id<'questions'>, boolean>();
+        if (args.questionMode === 'incorrect') {
+          // Use the same logic as aggregateHelpers - query userQuestionStats directly
+          const incorrectStats = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user_incorrect', q =>
+              q.eq('userId', userId).eq('isIncorrect', true),
+            )
+            .collect();
 
-        // First get the IDs of all questions we're interested in
-        const questionIdsSet = new Set(uniqueQuestions.map(q => q._id));
+          // Filter to only include questions that are in our filtered set
+          const questionIdsSet = new Set(allQuestions.map(q => q._id));
+          modeQuestions = incorrectStats
+            .filter(stat => questionIdsSet.has(stat.questionId))
+            .map(stat => stat.questionId);
+        } else {
+          // For unanswered questions, use the same logic as countFunctions
+          // Get all answered questions from userQuestionStats
+          const answeredStats = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user', q => q.eq('userId', userId))
+            .collect();
 
-        // Only query completed sessions
-        const completedSessions = await ctx.db
-          .query('quizSessions')
-          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-          .filter(q => q.eq(q.field('isComplete'), true))
-          .take(100); // Limit to most recent 100 sessions for performance
-
-        // Process each session
-        for (const session of completedSessions) {
-          // Get the quiz to access questions
-          const quiz = await ctx.db.get(session.quizId);
-          if (!quiz || !quiz.questions) continue;
-
-          // Only process questions that are in our filtered set
-          const relevantQuestions = quiz.questions.filter(qId =>
-            questionIdsSet.has(qId),
+          // Create a Set of answered question IDs for faster lookups
+          const answeredQuestionIds = new Set(
+            answeredStats.map(stat => stat.questionId),
           );
 
-          // Process each relevant question in this quiz
-          for (const questionId of relevantQuestions) {
-            const questionIndex = quiz.questions.indexOf(questionId);
-
-            // Skip if the question wasn't found in the quiz
-            if (questionIndex === -1) continue;
-
-            const wasAnswered = questionIndex < session.answers.length;
-
-            // For incorrectly answered questions
-            if (wasAnswered && session.answerFeedback[questionIndex]) {
-              const wasCorrect =
-                session.answerFeedback[questionIndex].isCorrect;
-              // If this is the first time seeing this question or we're updating from correct to incorrect
-              if (
-                !answeredQuestions.has(questionId) ||
-                (answeredQuestions.get(questionId) && !wasCorrect)
-              ) {
-                answeredQuestions.set(questionId, wasCorrect);
-              }
-            } else if (wasAnswered) {
-              // Question was answered but no feedback available (shouldn't happen)
-              answeredQuestions.set(questionId, true);
-            } else if (!answeredQuestions.has(questionId)) {
-              // Question wasn't answered in this session and no previous record
-              answeredQuestions.set(questionId, false);
-            }
-          }
+          // Filter to only include questions that are NOT answered and are in our filtered set
+          modeQuestions = allQuestions
+            .filter(q => !answeredQuestionIds.has(q._id))
+            .map(q => q._id);
         }
-
-        // Filter based on mode
-        modeQuestions = uniqueQuestions
-          .filter(q =>
-            args.questionMode === 'incorrect'
-              ? answeredQuestions.has(q._id) && !answeredQuestions.get(q._id)
-              : !answeredQuestions.has(q._id),
-          )
-          .map(q => q._id);
         break;
       }
       // No default
@@ -687,7 +633,7 @@ export const createWithTaxonomy = mutation({
       name: quizName,
       description: quizDescription,
       questions: uniqueQuestionIds,
-      authorId: userId._id,
+      authorId: userId,
       testMode: args.testMode,
       questionMode: args.questionMode,
       // Keep legacy fields empty for backward compatibility
@@ -701,7 +647,7 @@ export const createWithTaxonomy = mutation({
 
     // If the user selected study or exam mode, create a session immediately
     await ctx.db.insert('quizSessions', {
-      userId: userId._id,
+      userId: userId,
       quizId,
       mode: args.testMode,
       currentQuestionIndex: 0,

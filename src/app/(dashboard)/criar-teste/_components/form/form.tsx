@@ -148,7 +148,21 @@ export default function TestForm() {
   };
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
+    <form
+      onSubmit={e => {
+        if (!isCountLoading && availableQuestionCount === 0) {
+          e.preventDefault();
+          setSubmissionState('no-questions');
+          setResultMessage({
+            title: 'Nenhuma questão encontrada',
+            description:
+              'Não há questões disponíveis com os filtros selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
+          });
+        } else {
+          handleSubmit(onSubmit)(e);
+        }
+      }}
+    >
       {/* Modals */}
       <NameModal
         isOpen={showNameModal}
