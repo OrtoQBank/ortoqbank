@@ -435,24 +435,32 @@ export const verifyUserAggregatesStep = internalMutation({
         numItems: batchSize,
       });
 
-      // Verify aggregates for users in this batch
-      for (const user of result.page) {
-        const answered = await (answeredByUser.count as any)(ctx, {
-          namespace: user._id,
-          bounds: {},
-        });
-        const incorrect = await (incorrectByUser.count as any)(ctx, {
-          namespace: user._id,
-          bounds: {},
-        });
-        const bookmarked = await (bookmarkedByUser.count as any)(ctx, {
-          namespace: user._id,
-          bounds: {},
-        });
+      // Verify aggregates for users in this batch (parallel queries)
+      const userCounts = await Promise.all(
+        result.page.map(async user => {
+          const [answered, incorrect, bookmarked] = await Promise.all([
+            (answeredByUser.count as any)(ctx, {
+              namespace: user._id,
+              bounds: {},
+            }),
+            (incorrectByUser.count as any)(ctx, {
+              namespace: user._id,
+              bounds: {},
+            }),
+            (bookmarkedByUser.count as any)(ctx, {
+              namespace: user._id,
+              bounds: {},
+            }),
+          ]);
+          return { answered, incorrect, bookmarked };
+        }),
+      );
 
-        totalAnswered += answered;
-        totalIncorrect += incorrect;
-        totalBookmarked += bookmarked;
+      // Aggregate the results
+      for (const counts of userCounts) {
+        totalAnswered += counts.answered;
+        totalIncorrect += counts.incorrect;
+        totalBookmarked += counts.bookmarked;
         userCount++;
       }
 
