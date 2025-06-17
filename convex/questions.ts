@@ -10,7 +10,7 @@ import {
   mutation,
   query,
 } from './_generated/server';
-import { questionCountByTheme } from './aggregates';
+import { questionCountByTheme, totalQuestionCount } from './aggregates';
 import {
   _updateQuestionStatsOnDelete,
   _updateQuestionStatsOnInsert,
@@ -26,6 +26,7 @@ async function _internalInsertQuestion(
   const questionId = await ctx.db.insert('questions', data);
   const questionDoc = (await ctx.db.get(questionId))!;
   await questionCountByTheme.insert(ctx, questionDoc);
+  await totalQuestionCount.insert(ctx, questionDoc);
   // Also update the other aggregate if needed
   await _updateQuestionStatsOnInsert(ctx, questionDoc);
   return questionId;
@@ -43,6 +44,7 @@ async function _internalUpdateQuestion(
   await ctx.db.patch(id, updates);
   const newQuestionDoc = (await ctx.db.get(id))!;
   await questionCountByTheme.replace(ctx, oldQuestionDoc, newQuestionDoc);
+  await totalQuestionCount.replace(ctx, oldQuestionDoc, newQuestionDoc);
   // Note: Add update logic for _updateQuestionStats if needed here as well
 }
 
@@ -57,6 +59,7 @@ async function _internalDeleteQuestion(
   }
   await ctx.db.delete(id);
   await questionCountByTheme.delete(ctx, questionDoc);
+  await totalQuestionCount.delete(ctx, questionDoc);
   // Also update the other aggregate
   await _updateQuestionStatsOnDelete(ctx, questionDoc);
   return true; // Indicate successful deletion
@@ -376,6 +379,7 @@ export const insertIntoThemeAggregate = internalMutation({
     // have full type inference across action/mutation boundary easily.
     const questionDoc = args.questionDoc as Doc<'questions'>;
     await questionCountByTheme.insert(ctx, questionDoc);
+    await totalQuestionCount.insert(ctx, questionDoc);
   },
 });
 

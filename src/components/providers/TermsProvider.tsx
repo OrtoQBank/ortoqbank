@@ -12,7 +12,7 @@ interface TermsProviderProps {
 }
 
 export function TermsProvider({ children }: TermsProviderProps) {
-  const { termsAccepted } = useSession();
+  const { termsAccepted, updateTermsAccepted } = useSession();
   const acceptTermsAction = useAction(api.termsActions.acceptTermsInClerk);
 
   // Use a state to prevent flickering when data is loading
@@ -30,10 +30,10 @@ export function TermsProvider({ children }: TermsProviderProps) {
     try {
       setIsAccepting(true);
       await acceptTermsAction({});
+      
+      // Update session state immediately for better UX
+      updateTermsAccepted(true);
       setShowModal(false);
-
-      // Force a page refresh to get the updated session with new metadata
-      globalThis.location.reload();
     } catch (error) {
       console.error('Error accepting terms:', error);
       // You might want to show an error message to the user here
