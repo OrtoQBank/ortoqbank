@@ -30,7 +30,7 @@ export default async function Layout({
             <SidebarTrigger />
           </div>
           {/* Add padding-bottom for mobile nav, remove for desktop */}
-          <div className="mx-auto max-w-5xl px-2 pb-20 md:px-10 md:py-0">
+          <div className="mx-auto max-w-5xl px-2 pb-20 pt-4 md:px-6 md:py-6">
             <AccessCheck>
               <TermsProvider>{children}</TermsProvider>
             </AccessCheck>

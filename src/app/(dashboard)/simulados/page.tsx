@@ -207,7 +207,7 @@ export default function SimuladoPage() {
   // Show loading state while any data is still loading
   if (isLoading) {
     return (
-      <div className="container mx-auto mt-10 rounded-lg border bg-white p-6">
+      <div className="rounded-lg border bg-white p-6">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
           Simulados
         </h1>
@@ -222,7 +222,7 @@ export default function SimuladoPage() {
   // If there are no simulados (only show this after everything is loaded)
   if (Object.keys(simuladosBySubcategory).length === 0) {
     return (
-      <div className="container mx-auto mt-10 rounded-lg border bg-white p-6">
+      <div className="rounded-lg border bg-white p-6">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
           Simulados
         </h1>
@@ -236,16 +236,16 @@ export default function SimuladoPage() {
   }
 
   return (
-    <div className="container mx-auto pt-4 md:p-6">
+    <div className="rounded-lg border bg-white p-6">
       <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
         Simulados
       </h1>
-      <Accordion
-        type="single"
-        collapsible
-        className="space-y-4"
-        defaultValue={subcategoryOrder[0]}
-      >
+        <Accordion
+          type="single"
+          collapsible
+          className="space-y-4"
+          defaultValue={subcategoryOrder[0]}
+        >
         {subcategoryOrder.map(subcategory => {
           const simulados = simuladosBySubcategory[subcategory] || [];
           if (simulados.length === 0) return;
@@ -336,7 +336,7 @@ export default function SimuladoPage() {
             </AccordionItem>
           );
         })}
-      </Accordion>
+        </Accordion>
     </div>
   );
 }

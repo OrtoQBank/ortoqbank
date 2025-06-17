@@ -182,7 +182,7 @@ export default function ThemesPage() {
   // Show loading state while any data is still loading
   if (isLoading) {
     return (
-      <div className="container mx-auto mt-10 rounded-lg border bg-white p-6">
+      <div className="rounded-lg border bg-white p-6">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
           Trilhas
         </h1>
@@ -197,7 +197,7 @@ export default function ThemesPage() {
   // If there are no trilhas for any theme (only show this after everything is loaded)
   if (Object.keys(trilhasByTheme).length === 0) {
     return (
-      <div className="container mx-auto p-0 md:p-6">
+      <div className="rounded-lg border bg-white p-6">
         <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
           Trilhas
         </h1>
@@ -211,11 +211,11 @@ export default function ThemesPage() {
   }
 
   return (
-    <div className="container mx-auto pt-4 md:p-6">
+    <div className="rounded-lg border bg-white p-6">
       <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
         Trilhas
       </h1>
-      <Accordion type="single" collapsible className="space-y-4">
+        <Accordion type="single" collapsible className="space-y-4">
         {Object.entries(trilhasByTheme).map(([themeId, trilhas]) => {
           const theme = themes.find(t => t._id === themeId);
 
@@ -311,7 +311,7 @@ export default function ThemesPage() {
             </AccordionItem>
           );
         })}
-      </Accordion>
+        </Accordion>
     </div>
   );
 }
