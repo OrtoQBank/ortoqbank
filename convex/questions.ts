@@ -25,10 +25,18 @@ async function _internalInsertQuestion(
 ) {
   const questionId = await ctx.db.insert('questions', data);
   const questionDoc = (await ctx.db.get(questionId))!;
-  await questionCountByTheme.insert(ctx, questionDoc);
-  await totalQuestionCount.insert(ctx, questionDoc);
-  // Also update the other aggregate if needed
-  await _updateQuestionStatsOnInsert(ctx, questionDoc);
+  
+  try {
+    await questionCountByTheme.insert(ctx, questionDoc);
+    await totalQuestionCount.insert(ctx, questionDoc);
+    // Also update the other aggregate if needed
+    await _updateQuestionStatsOnInsert(ctx, questionDoc);
+  } catch (error) {
+    // Rollback: delete the question to maintain consistency
+    await ctx.db.delete(questionId);
+    throw new Error(`Failed to update aggregates after question creation: ${error}`);
+  }
+  
   return questionId;
 }
 
