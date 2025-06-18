@@ -5,7 +5,6 @@ import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { Card, CardContent } from '@/components/ui/card';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
@@ -58,14 +57,12 @@ export default function TestForm() {
   // Show loading state while authentication is being checked
   if (!isAuthenticated) {
     return (
-      <Card>
-        <CardContent className="flex min-h-[400px] items-center justify-center p-6">
-          <div className="text-center">
-            <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500"></div>
-            <p className="text-gray-600">Carregando...</p>
-          </div>
-        </CardContent>
-      </Card>
+      <div className="flex min-h-[400px] items-center justify-center p-6">
+        <div className="text-center">
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
     );
   }
 
@@ -189,8 +186,7 @@ export default function TestForm() {
         message={resultMessage}
       />
 
-      <Card>
-        <CardContent className="space-y-12 p-4 sm:space-y-14 sm:p-6">
+      <div className="space-y-12 sm:space-y-14">
           {/* Test Mode Section */}
           <TestModeSelector
             value={testMode}
@@ -299,8 +295,7 @@ export default function TestForm() {
           >
             {isSubmitting ? 'Gerando seu teste...' : 'Gerar Teste'}
           </Button>
-        </CardContent>
-      </Card>
+      </div>
     </form>
   );
 }
