@@ -33,6 +33,11 @@ const COUPON_CONFIG = {
       value: 1500,
       description: 'Preço especial grupo R$ 1500',
     },
+    APRENDA: {
+      type: 'percentage',
+      value: 10,
+      description: '10% de desconto',
+    },
   } as Record<
     string,
     {
