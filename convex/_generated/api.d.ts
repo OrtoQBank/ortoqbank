@@ -18,6 +18,7 @@ import type * as customQuizzesV2 from "../customQuizzesV2.js";
 import type * as groups from "../groups.js";
 import type * as groupsNew from "../groupsNew.js";
 import type * as http from "../http.js";
+import type * as init from "../init.js";
 import type * as migration from "../migration.js";
 import type * as migrations from "../migrations.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   groups: typeof groups;
   groupsNew: typeof groupsNew;
   http: typeof http;
+  init: typeof init;
   migration: typeof migration;
   migrations: typeof migrations;
   presetQuizzes: typeof presetQuizzes;
