@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { useEffect, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -71,6 +71,11 @@ export function EditExamDialog({
   const { toast } = useToast();
   const [searchInput, setSearchInput] = useState('');
   const debouncedSearchValue = useDebounce(searchInput, 500); // 500ms debounce delay
+  const [deletingQuestionId, setDeletingQuestionId] = useState<string | null>(
+    null,
+  );
+
+  const deleteQuestion = useMutation(api.questions.deleteQuestion);
   const [name, setName] = useState(quiz.name);
   const [description, setDescription] = useState(quiz.description);
   const [category, setCategory] = useState<'trilha' | 'simulado'>(
@@ -114,6 +119,46 @@ export function EditExamDialog({
       newSelected.add(questionId);
     }
     setSelectedQuestions(newSelected);
+  };
+
+  const handleDeleteQuestion = async (
+    questionId: string,
+    questionTitle: string,
+  ) => {
+    if (
+      !confirm(
+        `Tem certeza que deseja excluir a questão "${questionTitle}"?\n\nEsta ação removerá a questão de todos os testes/trilhas que a contêm e não pode ser desfeita.`,
+      )
+    ) {
+      return;
+    }
+
+    setDeletingQuestionId(questionId);
+    try {
+      await deleteQuestion({ id: questionId as Id<'questions'> });
+
+      // Remove the question from selected questions if it was selected
+      const newSelected = new Set(selectedQuestions);
+      newSelected.delete(questionId);
+      setSelectedQuestions(newSelected);
+
+      toast({
+        title: 'Sucesso',
+        description: 'Questão excluída com sucesso!',
+      });
+
+      // Clear search to refresh results
+      setSearchInput('');
+    } catch (error) {
+      console.error('Erro ao excluir questão:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível excluir a questão.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingQuestionId(null);
+    }
   };
 
   const handleSave = async () => {
@@ -244,24 +289,40 @@ export function EditExamDialog({
                 searchResults.map(question => (
                   <div
                     key={question._id}
-                    className="mb-2 flex items-center space-x-2"
+                    className="mb-2 flex items-center justify-between space-x-2"
                   >
-                    <Checkbox
-                      id={question._id}
-                      checked={selectedQuestions.has(question._id)}
-                      onCheckedChange={() => handleToggleQuestion(question._id)}
-                    />
-                    <Label htmlFor={question._id} className="flex flex-col">
-                      <span className="text-sm font-medium">
-                        {question.questionCode || 'Sem código'}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        {question.title}
-                      </span>
-                      <span className="text-muted-foreground text-xs">
-                        Tema: {question.theme?.name || 'Não especificado'}
-                      </span>
-                    </Label>
+                    <div className="flex items-center space-x-2">
+                      <Checkbox
+                        id={question._id}
+                        checked={selectedQuestions.has(question._id)}
+                        onCheckedChange={() =>
+                          handleToggleQuestion(question._id)
+                        }
+                      />
+                      <Label htmlFor={question._id} className="flex flex-col">
+                        <span className="text-sm font-medium">
+                          {question.questionCode || 'Sem código'}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          {question.title}
+                        </span>
+                        <span className="text-muted-foreground text-xs">
+                          Tema: {question.theme?.name || 'Não especificado'}
+                        </span>
+                      </Label>
+                    </div>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() =>
+                        handleDeleteQuestion(question._id, question.title)
+                      }
+                      disabled={deletingQuestionId === question._id}
+                    >
+                      {deletingQuestionId === question._id
+                        ? 'Excluindo...'
+                        : 'Excluir'}
+                    </Button>
                   </div>
                 ))
               )

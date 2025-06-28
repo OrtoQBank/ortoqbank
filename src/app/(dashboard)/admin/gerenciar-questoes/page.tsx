@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -14,14 +14,19 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useToast } from '@/hooks/use-toast';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
 
 export default function GerenciarQuestoes() {
   const router = useRouter();
+  const { toast } = useToast();
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
+  const [deletingId, setDeletingId] = useState<Id<'questions'> | null>(null);
+
+  const deleteQuestion = useMutation(api.questions.deleteQuestion);
 
   // Use the searchByCode query when search is provided, otherwise show nothing
   const searchResults =
@@ -41,6 +46,42 @@ export default function GerenciarQuestoes() {
 
   const handleView = (questionId: Id<'questions'>) => {
     router.push(`/admin/gerenciar-questoes/${questionId}`);
+  };
+
+  const handleDelete = async (
+    questionId: Id<'questions'>,
+    questionTitle: string,
+  ) => {
+    if (
+      !confirm(
+        `Tem certeza que deseja excluir a questão "${questionTitle}"?\n\nEsta ação removerá a questão de todos os testes/trilhas que a contêm e não pode ser desfeita.`,
+      )
+    ) {
+      return;
+    }
+
+    setDeletingId(questionId);
+    try {
+      await deleteQuestion({ id: questionId });
+      toast({
+        title: 'Sucesso',
+        description: 'Questão excluída com sucesso!',
+      });
+      // Refresh the search results by re-triggering the search
+      if (searchQuery.trim()) {
+        setSearchQuery(''); // Clear and reset to trigger a refresh
+        setTimeout(() => setSearchQuery(searchInput.trim()), 100);
+      }
+    } catch (error) {
+      console.error('Erro ao excluir questão:', error);
+      toast({
+        title: 'Erro',
+        description: 'Não foi possível excluir a questão.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingId(null);
+    }
   };
 
   return (
@@ -110,6 +151,18 @@ export default function GerenciarQuestoes() {
                         onClick={() => handleView(question._id)}
                       >
                         Visualizar
+                      </Button>
+                      <Button
+                        variant="destructive"
+                        size="sm"
+                        onClick={() =>
+                          handleDelete(question._id, question.title)
+                        }
+                        disabled={deletingId === question._id}
+                      >
+                        {deletingId === question._id
+                          ? 'Excluindo...'
+                          : 'Excluir'}
                       </Button>
                     </TableCell>
                   </TableRow>
