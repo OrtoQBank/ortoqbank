@@ -40,6 +40,12 @@ function QuestionsCountCard() {
   const { fetchQuestionsCount, error } = useFetchQuestionsCount();
   const [count, setCount] = useState<number>(0);
   const [loading, setLoading] = useState<boolean>(false);
+  const [shouldThrowError, setShouldThrowError] = useState<boolean>(false);
+
+  // This will trigger the error boundary during render
+  if (shouldThrowError) {
+    throw new Error('Test error for error boundary - thrown during render');
+  }
 
   const loadData = async () => {
     setLoading(true);
@@ -61,12 +67,20 @@ function QuestionsCountCard() {
       ) : (
         <p className="text-2xl font-bold">{count}</p>
       )}
-      <button
-        onClick={loadData}
-        className="mt-4 rounded bg-gray-200 px-4 py-2 hover:bg-gray-300"
-      >
-        Refresh
-      </button>
+      <div className="mt-4 space-x-2">
+        <button
+          onClick={loadData}
+          className="rounded bg-gray-200 px-4 py-2 hover:bg-gray-300"
+        >
+          Refresh
+        </button>
+        <button
+          onClick={() => setShouldThrowError(true)}
+          className="rounded bg-red-500 px-4 py-2 text-white hover:bg-red-600"
+        >
+          Test Error Boundary
+        </button>
+      </div>
     </div>
   );
 }
