@@ -2,25 +2,6 @@ import { withSentryConfig } from '@sentry/nextjs';
 import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
-
-async headers() {
-  return [
-    {
-      source: "/:path*",
-      headers: [
-        {
-          key: 'Cross-Origin-Opener-Policy',
-          value: 'same-origin',
-        },
-        {
-          key: 'Cross-Origin-Embedder-Policy',
-          value: 'require-corp',
-        },
-      ],
-    },
-  ]
-},
-
   trailingSlash: false,
   // This is required to support PostHog trailing slash API requests
   skipTrailingSlashRedirect: true,
