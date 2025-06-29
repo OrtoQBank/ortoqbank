@@ -3,6 +3,63 @@ import { v } from 'convex/values';
 import { Id } from './_generated/dataModel';
 import { internalMutation } from './_generated/server';
 
+// Helper function to safely extract text from JSON structured content
+function safeExtractTextFromJson(
+  jsonString: string,
+  fallback: string = '',
+): string {
+  try {
+    const parsed = JSON.parse(jsonString);
+
+    // Check if the expected structure exists: content[0].content[0].text
+    if (
+      parsed &&
+      typeof parsed === 'object' &&
+      Array.isArray(parsed.content) &&
+      parsed.content.length > 0 &&
+      parsed.content[0] &&
+      typeof parsed.content[0] === 'object' &&
+      Array.isArray(parsed.content[0].content) &&
+      parsed.content[0].content.length > 0 &&
+      parsed.content[0].content[0] &&
+      typeof parsed.content[0].content[0] === 'object' &&
+      typeof parsed.content[0].content[0].text === 'string'
+    ) {
+      return parsed.content[0].content[0].text;
+    }
+
+    // If structure doesn't match, try to extract any text we can find
+    if (parsed && typeof parsed === 'object') {
+      // Try to find text in a flatter structure
+      if (typeof parsed.text === 'string') {
+        return parsed.text;
+      }
+
+      // Try to find text in content array
+      if (Array.isArray(parsed.content)) {
+        for (const item of parsed.content) {
+          if (item && typeof item.text === 'string') {
+            return item.text;
+          }
+        }
+      }
+    }
+
+    console.warn(
+      'JSON structure does not match expected format, using fallback:',
+      jsonString.slice(0, 100),
+    );
+    return fallback;
+  } catch (error) {
+    console.error(
+      'Failed to parse JSON, using fallback:',
+      error,
+      jsonString.slice(0, 100),
+    );
+    return fallback;
+  }
+}
+
 // Configuration
 const QUESTIONS_TO_GENERATE = 50;
 
@@ -362,10 +419,14 @@ const seedDatabase = internalMutation({
         questionCode: questionData.questionCode,
         questionText: questionData.questionText,
         explanationText: questionData.explanation,
-        questionTextString: JSON.parse(questionData.questionText).content[0]
-          .content[0].text,
-        explanationTextString: JSON.parse(questionData.explanation).content[0]
-          .content[0].text,
+        questionTextString: safeExtractTextFromJson(
+          questionData.questionText,
+          questionData.title, // Use title as fallback if JSON parsing fails
+        ),
+        explanationTextString: safeExtractTextFromJson(
+          questionData.explanation,
+          `Explicação para: ${questionData.title}`, // Use descriptive fallback
+        ),
         alternatives: questionData.alternatives,
         correctAlternativeIndex: questionData.correctAlternativeIndex,
         themeId: createdThemes[questionData.themeIndex],
@@ -388,22 +449,22 @@ const seedDatabase = internalMutation({
         presetQuizData.category === 'trilha' &&
         presetQuizData.themeIndex !== undefined
       ) {
-        // Get questions from the specific theme
-        const themeId = createdThemes[presetQuizData.themeIndex];
-        const themeQuestions = SEED_DATA.questions
-          .filter(q => q.themeIndex === presetQuizData.themeIndex)
-          .slice(0, 10); // Take first 10 questions from this theme
+        // Get questions from the specific theme - track original indices for efficiency
+        const themeQuestionIndices: number[] = [];
+        for (
+          let i = 0;
+          i < SEED_DATA.questions.length && themeQuestionIndices.length < 10;
+          i++
+        ) {
+          if (SEED_DATA.questions[i].themeIndex === presetQuizData.themeIndex) {
+            themeQuestionIndices.push(i);
+          }
+        }
 
-        questionsForQuiz = themeQuestions.map((_, index) => {
-          // Find the actual question ID by matching the index
-          const questionIndex = SEED_DATA.questions.findIndex(
-            q =>
-              q.themeIndex === presetQuizData.themeIndex &&
-              SEED_DATA.questions.indexOf(q) ===
-                SEED_DATA.questions.indexOf(themeQuestions[index]),
-          );
-          return createdQuestions[questionIndex];
-        });
+        // Map directly to created questions using the tracked indices
+        questionsForQuiz = themeQuestionIndices.map(
+          index => createdQuestions[index],
+        );
       } else {
         // For simulados, take random questions from different themes
         questionsForQuiz = createdQuestions.slice(0, 15); // Take first 15 questions

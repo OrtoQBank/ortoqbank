@@ -34,6 +34,7 @@ export function MotherDuckClientProvider({
   const connectionRef = useRef<
     PromiseWithResolvers<MDConnection | undefined> | undefined
   >(undefined);
+  const cleanupRef = useRef<(() => void) | undefined>(undefined);
 
   if (connectionRef.current === undefined) {
     connectionRef.current = Promise.withResolvers<MDConnection | undefined>();
@@ -75,16 +76,49 @@ export function MotherDuckClientProvider({
     const initializeConnection = async () => {
       try {
         const mdToken = await fetchMotherDuckToken();
-        const result = initMotherDuckConnection(mdToken, database);
+        const result = await initMotherDuckConnection(mdToken, database);
         if (connectionRef.current) {
           connectionRef.current.resolve(result);
         }
+
+        // Store cleanup function
+        cleanupRef.current = async () => {
+          if (result) {
+            try {
+              // Set database instance TTL to zero to force cleanup
+              // This is the recommended way to clean up MotherDuck connections
+              await result.evaluateQuery(
+                "SET motherduck_dbinstance_inactivity_ttl='0ms'",
+              );
+              console.log('MotherDuck connection cleanup initiated');
+            } catch (cleanupError) {
+              console.warn('Error during connection cleanup:', cleanupError);
+            }
+          }
+        };
       } catch (error) {
         console.error(error);
+        if (connectionRef.current) {
+          connectionRef.current.reject(error);
+        }
       }
     };
     initializeConnection();
-  }, []);
+
+    // Cleanup function that runs when component unmounts or database changes
+    return () => {
+      if (cleanupRef.current) {
+        cleanupRef.current();
+        cleanupRef.current = undefined;
+      }
+      // Reset connection ref for new database
+      if (connectionRef.current) {
+        connectionRef.current = Promise.withResolvers<
+          MDConnection | undefined
+        >();
+      }
+    };
+  }, [database]);
 
   const value = useMemo(
     () => ({
