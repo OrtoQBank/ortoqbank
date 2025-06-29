@@ -281,6 +281,25 @@ const seedDatabase = internalMutation({
     }),
   }),
   handler: async (ctx, args) => {
+    // PRODUCTION SAFETY CHECK
+    const deploymentUrl = process.env.CONVEX_SITE_URL || '';
+    const isProduction =
+      deploymentUrl.includes('.convex.site') ||
+      process.env.NODE_ENV === 'production';
+
+    if (isProduction && !args.force) {
+      throw new Error(
+        'SAFETY: This seeding function is blocked in production. ' +
+          'If you really need to run this, set force=true, but this is DANGEROUS!',
+      );
+    }
+
+    if (isProduction && args.force) {
+      console.warn(
+        'WARNING: Running database seeding in PRODUCTION with force=true!',
+      );
+    }
+
     // Check if data already exists to make this idempotent
     const existingThemes = await ctx.db.query('themes').collect();
     if (existingThemes.length > 0 && !args.force) {
@@ -432,6 +451,18 @@ const seedPresetQuizzesOnly = internalMutation({
     }),
   }),
   handler: async (ctx, args) => {
+    // PRODUCTION SAFETY CHECK
+    const deploymentUrl = process.env.CONVEX_SITE_URL || '';
+    const isProduction =
+      deploymentUrl.includes('.convex.site') ||
+      process.env.NODE_ENV === 'production';
+
+    if (isProduction) {
+      throw new Error(
+        'SAFETY: This seeding function is blocked in production to prevent data corruption!',
+      );
+    }
+
     console.log('Seeding presetQuizzes only...');
 
     // Get existing themes
@@ -505,6 +536,18 @@ const clearPresetQuizzes = internalMutation({
   args: {},
   returns: v.object({ message: v.string(), deletedCount: v.number() }),
   handler: async (ctx, args) => {
+    // PRODUCTION SAFETY CHECK
+    const deploymentUrl = process.env.CONVEX_SITE_URL || '';
+    const isProduction =
+      deploymentUrl.includes('.convex.site') ||
+      process.env.NODE_ENV === 'production';
+
+    if (isProduction) {
+      throw new Error(
+        'SAFETY: This clear function is blocked in production to prevent data loss!',
+      );
+    }
+
     const allPresetQuizzes = await ctx.db.query('presetQuizzes').collect();
     let deletedCount = 0;
 
