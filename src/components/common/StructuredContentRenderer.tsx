@@ -193,6 +193,17 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
       );
       break;
     }
+    case 'blockquote': {
+      element = (
+        <blockquote
+          key={key}
+          className="my-4 border-l-4 border-gray-300 pl-4 text-gray-700 italic"
+        >
+          {children}
+        </blockquote>
+      );
+      break;
+    }
     default: {
       console.warn(`Unsupported node type: ${node.type}`);
       element = undefined;

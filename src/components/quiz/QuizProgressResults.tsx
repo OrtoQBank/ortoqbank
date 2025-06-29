@@ -1,5 +1,3 @@
-/* eslint-disable unicorn/no-nested-ternary */
-
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import { useEffect, useState } from 'react';
 

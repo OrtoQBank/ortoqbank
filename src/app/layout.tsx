@@ -7,6 +7,7 @@ import localFont from 'next/font/local';
 import Script from 'next/script';
 import NextTopLoader from 'nextjs-toploader';
 
+import ErrorBoundary from '@/components/error-boundary';
 import { PostHogProvider } from '@/components/PostHogProvider';
 import { Toaster } from '@/components/ui/toaster';
 
@@ -42,14 +43,16 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sifonn.variable} antialiased`}
       >
-        <PostHogProvider>
-          <ConvexClientProvider>
-            <NextTopLoader />
-            {children}
-            <Analytics />
-            <Toaster />
-          </ConvexClientProvider>
-        </PostHogProvider>
+        <ErrorBoundary>
+          <PostHogProvider>
+            <ConvexClientProvider>
+              <NextTopLoader />
+              {children}
+              <Analytics />
+              <Toaster />
+            </ConvexClientProvider>
+          </PostHogProvider>
+        </ErrorBoundary>
 
         {/* Facebook Pixel */}
         <Script
@@ -76,6 +79,7 @@ export default function RootLayout({
             width="1"
             style={{ display: 'none' }}
             src="https://www.facebook.com/tr?id=1038461214913312&ev=PageView&noscript=1"
+            alt="Facebook Pixel"
           />
         </noscript>
       </body>

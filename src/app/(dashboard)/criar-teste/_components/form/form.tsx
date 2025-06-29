@@ -187,114 +187,122 @@ export default function TestForm() {
       />
 
       <div className="space-y-12 sm:space-y-14">
-          {/* Test Mode Section */}
-          <TestModeSelector
-            value={testMode}
-            onChange={value =>
-              form.setValue('testMode', value, { shouldValidate: true })
-            }
-          />
+        {/* Test Mode Section */}
+        <TestModeSelector
+          value={testMode}
+          onChange={value =>
+            form.setValue('testMode', value, { shouldValidate: true })
+          }
+        />
 
-          {/* Question Mode Section */}
-          <QuestionModeSelector
-            value={questionMode}
-            onChange={value =>
-              form.setValue('questionMode', value, { shouldValidate: true })
-            }
-            error={form.formState.errors.questionMode?.message}
-          />
+        {/* Question Mode Section */}
+        <QuestionModeSelector
+          value={questionMode}
+          onChange={value =>
+            form.setValue('questionMode', value, { shouldValidate: true })
+          }
+          error={form.formState.errors.questionMode?.message}
+        />
 
-          {/* Themes Section */}
-          <ThemeSelector
-            themes={hierarchicalData?.themes || []}
+        {/* Themes Section */}
+        <ThemeSelector
+          themes={(hierarchicalData?.themes || []).sort((a, b) =>
+            (a.name || '').localeCompare(b.name || ''),
+          )}
+          selectedThemes={selectedThemes}
+          onToggleTheme={themeId => {
+            const current = selectedThemes || [];
+            form.setValue(
+              'selectedThemes',
+              current.includes(themeId)
+                ? current.filter(id => id !== themeId)
+                : [...current, themeId],
+              { shouldValidate: true },
+            );
+          }}
+          error={form.formState.errors.selectedThemes?.message}
+        />
+
+        {/* Subthemes Section - only if themes are selected */}
+        {selectedThemes.length > 0 && (
+          <SubthemeSelector
+            themes={(hierarchicalData?.themes || []).sort((a, b) =>
+              (a.name || '').localeCompare(b.name || ''),
+            )}
+            subthemes={(hierarchicalData?.subthemes || []).sort((a, b) =>
+              (a.name || '').localeCompare(b.name || ''),
+            )}
+            groups={(hierarchicalData?.groups || []).sort((a, b) =>
+              (a.name || '').localeCompare(b.name || ''),
+            )}
             selectedThemes={selectedThemes}
-            onToggleTheme={themeId => {
-              const current = selectedThemes || [];
+            selectedSubthemes={selectedSubthemes}
+            selectedGroups={selectedGroups}
+            onToggleSubtheme={subthemeId => {
+              const current = selectedSubthemes || [];
               form.setValue(
-                'selectedThemes',
-                current.includes(themeId)
-                  ? current.filter(id => id !== themeId)
-                  : [...current, themeId],
+                'selectedSubthemes',
+                current.includes(subthemeId)
+                  ? current.filter(id => id !== subthemeId)
+                  : [...current, subthemeId],
                 { shouldValidate: true },
               );
             }}
-            error={form.formState.errors.selectedThemes?.message}
+            onToggleGroup={groupId => {
+              const current = selectedGroups || [];
+              form.setValue(
+                'selectedGroups',
+                current.includes(groupId)
+                  ? current.filter(id => id !== groupId)
+                  : [...current, groupId],
+                { shouldValidate: true },
+              );
+            }}
+            onToggleMultipleGroups={groupIds => {
+              const current = selectedGroups || [];
+              // Create a new set from the current groups
+              const updatedGroups = new Set(current);
+
+              // For each group ID in the array, toggle its presence in the set
+              groupIds.forEach(groupId => {
+                if (updatedGroups.has(groupId)) {
+                  updatedGroups.delete(groupId);
+                } else {
+                  updatedGroups.add(groupId);
+                }
+              });
+
+              // Update the form state with the new array
+              form.setValue('selectedGroups', [...updatedGroups], {
+                shouldValidate: true,
+              });
+            }}
           />
+        )}
 
-          {/* Subthemes Section - only if themes are selected */}
-          {selectedThemes.length > 0 && (
-            <SubthemeSelector
-              themes={hierarchicalData?.themes || []}
-              subthemes={hierarchicalData?.subthemes || []}
-              groups={hierarchicalData?.groups || []}
-              selectedThemes={selectedThemes}
-              selectedSubthemes={selectedSubthemes}
-              selectedGroups={selectedGroups}
-              onToggleSubtheme={subthemeId => {
-                const current = selectedSubthemes || [];
-                form.setValue(
-                  'selectedSubthemes',
-                  current.includes(subthemeId)
-                    ? current.filter(id => id !== subthemeId)
-                    : [...current, subthemeId],
-                  { shouldValidate: true },
-                );
-              }}
-              onToggleGroup={groupId => {
-                const current = selectedGroups || [];
-                form.setValue(
-                  'selectedGroups',
-                  current.includes(groupId)
-                    ? current.filter(id => id !== groupId)
-                    : [...current, groupId],
-                  { shouldValidate: true },
-                );
-              }}
-              onToggleMultipleGroups={groupIds => {
-                const current = selectedGroups || [];
-                // Create a new set from the current groups
-                const updatedGroups = new Set(current);
+        {/* Question Count Section */}
+        <QuestionCountSelector
+          value={numQuestions}
+          onChange={value =>
+            form.setValue('numQuestions', value, { shouldValidate: true })
+          }
+          error={form.formState.errors.numQuestions?.message}
+        />
 
-                // For each group ID in the array, toggle its presence in the set
-                groupIds.forEach(groupId => {
-                  if (updatedGroups.has(groupId)) {
-                    updatedGroups.delete(groupId);
-                  } else {
-                    updatedGroups.add(groupId);
-                  }
-                });
-
-                // Update the form state with the new array
-                form.setValue('selectedGroups', [...updatedGroups], {
-                  shouldValidate: true,
-                });
-              }}
-            />
-          )}
-
-          {/* Question Count Section */}
-          <QuestionCountSelector
-            value={numQuestions}
-            onChange={value =>
-              form.setValue('numQuestions', value, { shouldValidate: true })
-            }
-            error={form.formState.errors.numQuestions?.message}
-          />
-
-          {/* Available Questions Info disabled for now as inefficient */}
-          {/*    <AvailableQuestionsInfo
+        {/* Available Questions Info disabled for now as inefficient */}
+        {/*    <AvailableQuestionsInfo
             isLoading={isCountLoading}
             count={availableQuestionCount}
             requestedCount={numQuestions}
           /> */}
 
-          <Button
-            type="submit"
-            className="w-full bg-blue-500 hover:bg-blue-600"
-            disabled={isSubmitting}
-          >
-            {isSubmitting ? 'Gerando seu teste...' : 'Gerar Teste'}
-          </Button>
+        <Button
+          type="submit"
+          className="w-full bg-blue-500 hover:bg-blue-600"
+          disabled={isSubmitting}
+        >
+          {isSubmitting ? 'Gerando seu teste...' : 'Gerar Teste'}
+        </Button>
       </div>
     </form>
   );

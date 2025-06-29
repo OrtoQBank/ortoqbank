@@ -25,18 +25,65 @@ async function _internalInsertQuestion(
 ) {
   const questionId = await ctx.db.insert('questions', data);
   const questionDoc = (await ctx.db.get(questionId))!;
-  
+
+  console.log(`Attempting to insert question ${questionId} into aggregates...`);
+
+  // Try to update aggregates, but don't fail the question creation if there are aggregate issues
+  let aggregateErrors: string[] = [];
+
+  // 1. Theme count aggregate
   try {
     await questionCountByTheme.insert(ctx, questionDoc);
-    await totalQuestionCount.insert(ctx, questionDoc);
-    // Also update the other aggregate if needed
-    await _updateQuestionStatsOnInsert(ctx, questionDoc);
-  } catch (error) {
-    // Rollback: delete the question to maintain consistency
-    await ctx.db.delete(questionId);
-    throw new Error(`Failed to update aggregates after question creation: ${error}`);
+    console.log(
+      `Successfully inserted question ${questionId} into theme aggregate`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error inserting question ${questionId} into theme aggregate:`,
+      error,
+    );
+    aggregateErrors.push(`theme aggregate: ${error.message}`);
   }
-  
+
+  // 2. Total count aggregate
+  try {
+    await totalQuestionCount.insert(ctx, questionDoc);
+    console.log(
+      `Successfully inserted question ${questionId} into total count aggregate`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error inserting question ${questionId} into total count aggregate:`,
+      error,
+    );
+    aggregateErrors.push(`total count aggregate: ${error.message}`);
+  }
+
+  // 3. Question stats aggregate (no-op but wrap it)
+  try {
+    await _updateQuestionStatsOnInsert(ctx, questionDoc);
+    console.log(
+      `Successfully called _updateQuestionStatsOnInsert for question ${questionId}`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error in _updateQuestionStatsOnInsert for question ${questionId}:`,
+      error,
+    );
+    aggregateErrors.push(`question stats: ${error.message}`);
+  }
+
+  if (aggregateErrors.length > 0) {
+    console.warn(
+      `Question ${questionId} created successfully but with aggregate issues:`,
+      aggregateErrors,
+    );
+  } else {
+    console.log(
+      `Question ${questionId} created successfully with all aggregates updated`,
+    );
+  }
+
   return questionId;
 }
 
@@ -51,8 +98,27 @@ async function _internalUpdateQuestion(
   }
   await ctx.db.patch(id, updates);
   const newQuestionDoc = (await ctx.db.get(id))!;
-  await questionCountByTheme.replace(ctx, oldQuestionDoc, newQuestionDoc);
-  await totalQuestionCount.replace(ctx, oldQuestionDoc, newQuestionDoc);
+
+  // Only update aggregates if themeId changed (which affects question counts)
+  if (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) {
+    // Handle aggregate updates with error recovery
+    // If the question doesn't exist in the aggregate, insert it instead of replacing
+    try {
+      await questionCountByTheme.replace(ctx, oldQuestionDoc, newQuestionDoc);
+    } catch (error: any) {
+      if (error.code === 'DELETE_MISSING_KEY') {
+        console.warn(
+          `Question ${id} not found in theme aggregate, inserting instead`,
+        );
+        await questionCountByTheme.insert(ctx, newQuestionDoc);
+      } else {
+        throw error;
+      }
+    }
+
+    // totalQuestionCount doesn't change when moving between themes, so no update needed
+  }
+
   // Note: Add update logic for _updateQuestionStats if needed here as well
 }
 
@@ -66,10 +132,56 @@ async function _internalDeleteQuestion(
     return false; // Indicate deletion didn't happen
   }
   await ctx.db.delete(id);
-  await questionCountByTheme.delete(ctx, questionDoc);
-  await totalQuestionCount.delete(ctx, questionDoc);
-  // Also update the other aggregate
-  await _updateQuestionStatsOnDelete(ctx, questionDoc);
+
+  // Handle ALL aggregate operations with comprehensive error recovery
+  // If any operation fails with DELETE_MISSING_KEY, just skip it and continue
+
+  console.log(`Attempting to delete question ${id} from aggregates...`);
+
+  // 1. Theme count aggregate
+  try {
+    await questionCountByTheme.delete(ctx, questionDoc);
+    console.log(`Successfully deleted question ${id} from theme aggregate`);
+  } catch (error: any) {
+    console.warn(`Error deleting question ${id} from theme aggregate:`, error);
+    if (error.code !== 'DELETE_MISSING_KEY') {
+      console.error(`Unexpected error type:`, error);
+    }
+    // Continue regardless of error type for now
+  }
+
+  // 2. Total count aggregate
+  try {
+    await totalQuestionCount.delete(ctx, questionDoc);
+    console.log(
+      `Successfully deleted question ${id} from total count aggregate`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error deleting question ${id} from total count aggregate:`,
+      error,
+    );
+    if (error.code !== 'DELETE_MISSING_KEY') {
+      console.error(`Unexpected error type:`, error);
+    }
+    // Continue regardless of error type for now
+  }
+
+  // 3. Question stats aggregate (although it's a no-op, wrap it just in case)
+  try {
+    await _updateQuestionStatsOnDelete(ctx, questionDoc);
+    console.log(
+      `Successfully called _updateQuestionStatsOnDelete for question ${id}`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error in _updateQuestionStatsOnDelete for question ${id}:`,
+      error,
+    );
+    // Continue regardless of error
+  }
+
+  console.log(`Completed deletion process for question ${id}`);
   return true; // Indicate successful deletion
 }
 
@@ -340,7 +452,25 @@ export const deleteQuestion = mutation({
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) throw new Error('Not authenticated');
 
-    // Use the helper function
+    // First, remove the question from all preset quizzes that contain it
+    const allPresetQuizzes = await ctx.db.query('presetQuizzes').collect();
+    for (const quiz of allPresetQuizzes) {
+      if (quiz.questions.includes(args.id)) {
+        const updatedQuestions = quiz.questions.filter(qId => qId !== args.id);
+        await ctx.db.patch(quiz._id, { questions: updatedQuestions });
+      }
+    }
+
+    // Also remove the question from all custom quizzes that contain it
+    const allCustomQuizzes = await ctx.db.query('customQuizzes').collect();
+    for (const quiz of allCustomQuizzes) {
+      if (quiz.questions.includes(args.id)) {
+        const updatedQuestions = quiz.questions.filter(qId => qId !== args.id);
+        await ctx.db.patch(quiz._id, { questions: updatedQuestions });
+      }
+    }
+
+    // Then delete the question itself using the helper function
     const success = await _internalDeleteQuestion(ctx, args.id);
     return success;
   },
