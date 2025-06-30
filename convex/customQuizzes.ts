@@ -21,6 +21,657 @@ function shuffleArray<T>(array: T[]): T[] {
   return shuffled;
 }
 
+/**
+ * Determines if all groups in a subtheme are selected
+ */
+async function areAllGroupsSelected(
+  ctx: any,
+  subthemeId: Id<'subthemes'>,
+  selectedGroups: Id<'groups'>[],
+): Promise<boolean> {
+  const allGroups = await ctx.db
+    .query('groups')
+    .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+    .collect();
+
+  if (allGroups.length === 0) return true; // No groups in subtheme
+
+  const allGroupIds = new Set(allGroups.map((g: Doc<'groups'>) => g._id));
+  return (
+    selectedGroups.every((groupId: Id<'groups'>) => allGroupIds.has(groupId)) &&
+    allGroupIds.size === selectedGroups.length
+  );
+}
+
+/**
+ * Analyzes hierarchy relationships to determine the most specific collection strategy
+ */
+async function analyzeHierarchyRelationships(
+  ctx: any,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+): Promise<{
+  collectionPlan: Array<{
+    type: 'theme' | 'subtheme' | 'groups';
+    id: string;
+    includeChildlessQuestions?: boolean;
+    specificGroups?: Id<'groups'>[];
+  }>;
+  relationships: {
+    subthemeToTheme: Map<Id<'subthemes'>, Id<'themes'>>;
+    groupToSubtheme: Map<Id<'groups'>, Id<'subthemes'>>;
+  };
+}> {
+  const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
+  const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
+
+  // Get all subtheme relationships
+  for (const subthemeId of selectedSubthemes) {
+    const subtheme = await ctx.db.get(subthemeId);
+    if (subtheme?.themeId) {
+      subthemeToTheme.set(subthemeId, subtheme.themeId);
+    }
+  }
+
+  // Get all group relationships
+  for (const groupId of selectedGroups) {
+    const group = await ctx.db.get(groupId);
+    if (group?.subthemeId) {
+      groupToSubtheme.set(groupId, group.subthemeId);
+
+      // Also get the theme for this group
+      const subtheme = await ctx.db.get(group.subthemeId);
+      if (subtheme?.themeId) {
+        subthemeToTheme.set(group.subthemeId, subtheme.themeId);
+      }
+    }
+  }
+
+  // Build smart collection plan - only collect from most specific level per hierarchy path
+  const collectionPlan: Array<{
+    type: 'theme' | 'subtheme' | 'groups';
+    id: string;
+    includeChildlessQuestions?: boolean;
+    specificGroups?: Id<'groups'>[];
+  }> = [];
+
+  // Group selected groups by their subtheme
+  const groupsBySubtheme = new Map<Id<'subthemes'>, Id<'groups'>[]>();
+  for (const groupId of selectedGroups) {
+    const subthemeId = groupToSubtheme.get(groupId);
+    if (subthemeId) {
+      if (!groupsBySubtheme.has(subthemeId)) {
+        groupsBySubtheme.set(subthemeId, []);
+      }
+      groupsBySubtheme.get(subthemeId)!.push(groupId);
+    }
+  }
+
+  // Process each selected subtheme
+  for (const subthemeId of selectedSubthemes) {
+    const groupsForThisSubtheme = groupsBySubtheme.get(subthemeId);
+
+    if (groupsForThisSubtheme && groupsForThisSubtheme.length > 0) {
+      // Groups are selected for this subtheme - collect from groups only
+      collectionPlan.push({
+        type: 'groups',
+        id: subthemeId,
+        specificGroups: groupsForThisSubtheme,
+      });
+    } else {
+      // No groups selected - collect subtheme questions without groups
+      collectionPlan.push({
+        type: 'subtheme',
+        id: subthemeId,
+        includeChildlessQuestions: true, // Only questions without groups
+      });
+    }
+  }
+
+  // Process ALL selected themes - get theme questions that don't belong to any subtheme
+  for (const themeId of selectedThemes) {
+    collectionPlan.push({
+      type: 'theme',
+      id: themeId,
+      includeChildlessQuestions: true, // Only questions without subtheme assignment
+    });
+  }
+
+  return {
+    collectionPlan,
+    relationships: {
+      subthemeToTheme,
+      groupToSubtheme,
+    },
+  };
+}
+
+/**
+ * Optimized question collection that chooses the most efficient query path
+ */
+async function collectQuestionsOptimized(
+  ctx: any,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+): Promise<Doc<'questions'>[]> {
+  console.log(`🚀 DEBUG: collectQuestionsOptimized called with:`, {
+    themes: selectedThemes.length,
+    subthemes: selectedSubthemes.length,
+    groups: selectedGroups.length,
+  });
+
+  // Scenario 1: No filters - get all questions directly
+  if (
+    selectedThemes.length === 0 &&
+    selectedSubthemes.length === 0 &&
+    selectedGroups.length === 0
+  ) {
+    console.log(`🚀 DEBUG: Taking path 1: No filters`);
+    return await ctx.db.query('questions').take(maxQuestions * 2);
+  }
+
+  // Special case: Theme-only selection means "get ALL questions from these themes"
+  if (
+    selectedThemes.length > 0 &&
+    selectedSubthemes.length === 0 &&
+    selectedGroups.length === 0
+  ) {
+    console.log(`🚀 DEBUG: Taking path 2: Theme-only selection`);
+    const allQuestions: Doc<'questions'>[] = [];
+    const processedQuestionIds = new Set<Id<'questions'>>();
+
+    const addQuestions = (questions: Doc<'questions'>[]) => {
+      questions.forEach((q: any) => {
+        if (!processedQuestionIds.has(q._id)) {
+          processedQuestionIds.add(q._id);
+          allQuestions.push(q);
+        }
+      });
+    };
+
+    // Get ALL questions from selected themes (including all subthemes and groups)
+    for (const themeId of selectedThemes) {
+      const themeQuestions = await ctx.db
+        .query('questions')
+        .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
+        .take(maxQuestions * 2);
+      addQuestions(themeQuestions);
+    }
+
+    console.log(
+      `🚀 DEBUG: Theme-only path returned ${allQuestions.length} questions`,
+    );
+    return allQuestions;
+  }
+
+  // For all other cases, use the hierarchy restriction logic
+  console.log(`🚀 DEBUG: Taking path 3: Hierarchy restriction logic`);
+  return await collectQuestionsWithHierarchyRestriction(
+    ctx,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    maxQuestions,
+  );
+}
+
+/**
+ * Hierarchy restriction logic - subthemes override themes, groups override subthemes
+ */
+async function collectQuestionsWithHierarchyRestriction(
+  ctx: any,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+): Promise<Doc<'questions'>[]> {
+  const allQuestions: Doc<'questions'>[] = [];
+  const processedQuestionIds = new Set<Id<'questions'>>();
+
+  const addQuestions = (questions: Doc<'questions'>[]) => {
+    questions.forEach((q: any) => {
+      if (!processedQuestionIds.has(q._id)) {
+        processedQuestionIds.add(q._id);
+        allQuestions.push(q);
+      }
+    });
+  };
+
+  console.log(`🔍 DEBUG: ===== HIERARCHY RESTRICTION LOGIC =====`);
+  console.log(`🔍 DEBUG: Input - Themes:`, selectedThemes);
+  console.log(`🔍 DEBUG: Input - Subthemes:`, selectedSubthemes);
+  console.log(`🔍 DEBUG: Input - Groups:`, selectedGroups);
+
+  // Step 1: Get subtheme-to-theme relationships
+  const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
+  for (const subthemeId of selectedSubthemes) {
+    const subtheme = await ctx.db.get(subthemeId);
+    if (subtheme?.themeId) {
+      subthemeToTheme.set(subthemeId, subtheme.themeId);
+    }
+  }
+
+  // Step 2: Get group-to-subtheme relationships
+  const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
+  for (const groupId of selectedGroups) {
+    const group = await ctx.db.get(groupId);
+    if (group?.subthemeId) {
+      groupToSubtheme.set(groupId, group.subthemeId);
+    }
+  }
+
+  // Step 3: Group selected groups by their subtheme
+  const groupsBySubtheme = new Map<Id<'subthemes'>, Id<'groups'>[]>();
+  for (const groupId of selectedGroups) {
+    const subthemeId = groupToSubtheme.get(groupId);
+    if (subthemeId) {
+      if (!groupsBySubtheme.has(subthemeId)) {
+        groupsBySubtheme.set(subthemeId, []);
+      }
+      groupsBySubtheme.get(subthemeId)!.push(groupId);
+    }
+  }
+
+  // Step 4: Process subthemes (they override groups and may override themes)
+  const processedSubthemes = new Set<Id<'subthemes'>>();
+  console.log(
+    `🔍 DEBUG: Processing ${selectedSubthemes.length} subthemes:`,
+    selectedSubthemes,
+  );
+  console.log(
+    `🔍 DEBUG: Groups by subtheme:`,
+    Object.fromEntries(groupsBySubtheme),
+  );
+
+  // Check if ANY groups are selected globally
+  const hasAnyGroupsSelected = selectedGroups.length > 0;
+  console.log(`🔍 DEBUG: Has any groups selected: ${hasAnyGroupsSelected}`);
+
+  // If groups are selected but no subthemes are explicitly selected,
+  // we need to process the implied subthemes that contain those groups
+  const subthemesToProcess = new Set(selectedSubthemes);
+  if (hasAnyGroupsSelected) {
+    for (const [subthemeId] of groupsBySubtheme) {
+      subthemesToProcess.add(subthemeId);
+      console.log(
+        `🔍 DEBUG: Adding implied subtheme ${subthemeId} because it contains selected groups`,
+      );
+
+      // Also add this implied subtheme to the theme override mapping
+      const subtheme = await ctx.db.get(subthemeId);
+      if (subtheme?.themeId) {
+        subthemeToTheme.set(subthemeId, subtheme.themeId);
+        console.log(
+          `🔍 DEBUG: Marking theme ${subtheme.themeId} as overridden by implied subtheme ${subthemeId}`,
+        );
+      }
+    }
+  }
+
+  console.log(`🔍 DEBUG: Final subthemes to process:`, [...subthemesToProcess]);
+
+  for (const subthemeId of subthemesToProcess) {
+    const groupsForThisSubtheme = groupsBySubtheme.get(subthemeId);
+    const isExplicitlySelected = selectedSubthemes.includes(subthemeId);
+
+    console.log(
+      `🔍 DEBUG: Processing subtheme ${subthemeId}, groups:`,
+      groupsForThisSubtheme,
+      `explicitly selected: ${isExplicitlySelected}`,
+    );
+
+    if (groupsForThisSubtheme && groupsForThisSubtheme.length > 0) {
+      console.log(
+        `🔍 DEBUG: Subtheme ${subthemeId} has groups selected - using restriction logic`,
+      );
+      let groupQuestionsCount = 0;
+
+      // Get questions from selected groups
+      for (const groupId of groupsForThisSubtheme) {
+        const beforeCount = allQuestions.length;
+        const groupQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_group', (q: any) => q.eq('groupId', groupId))
+          .take(maxQuestions * 2);
+        addQuestions(groupQuestions);
+        const addedFromGroup = allQuestions.length - beforeCount;
+        groupQuestionsCount += addedFromGroup;
+        console.log(
+          `🔍 DEBUG: Group ${groupId} added ${addedFromGroup} questions`,
+        );
+      }
+
+      // Only get subtheme non-group questions if the subtheme was explicitly selected
+      if (isExplicitlySelected) {
+        const beforeSubthemeCount = allQuestions.length;
+        const allSubthemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+          .take(maxQuestions * 2);
+
+        const subthemeQuestionsWithoutGroups = allSubthemeQuestions.filter(
+          (q: any) => q.groupId === undefined || q.groupId === null,
+        );
+        addQuestions(subthemeQuestionsWithoutGroups);
+        const addedFromSubtheme = allQuestions.length - beforeSubthemeCount;
+        console.log(
+          `🔍 DEBUG: Subtheme ${subthemeId} (without groups) added ${addedFromSubtheme} questions`,
+        );
+        console.log(
+          `🔍 DEBUG: Total for subtheme ${subthemeId}: ${groupQuestionsCount + addedFromSubtheme} questions`,
+        );
+      } else {
+        console.log(
+          `🔍 DEBUG: Subtheme ${subthemeId} was not explicitly selected - only using group questions`,
+        );
+        console.log(
+          `🔍 DEBUG: Total for subtheme ${subthemeId}: ${groupQuestionsCount} questions (groups only)`,
+        );
+      }
+    } else {
+      // This subtheme has no groups selected
+      if (hasAnyGroupsSelected) {
+        if (isExplicitlySelected) {
+          // Groups are selected globally, but this subtheme has none selected
+          // Still get questions from this subtheme that don't belong to any group (only if explicitly selected)
+          console.log(
+            `🔍 DEBUG: Subtheme ${subthemeId} has no groups but groups are selected elsewhere - getting non-group questions`,
+          );
+          const beforeCount = allQuestions.length;
+          const allSubthemeQuestions = await ctx.db
+            .query('questions')
+            .withIndex('by_subtheme', (q: any) =>
+              q.eq('subthemeId', subthemeId),
+            )
+            .take(maxQuestions * 2);
+
+          const subthemeQuestionsWithoutGroups = allSubthemeQuestions.filter(
+            (q: any) => q.groupId === undefined || q.groupId === null,
+          );
+          addQuestions(subthemeQuestionsWithoutGroups);
+          const addedFromSubtheme = allQuestions.length - beforeCount;
+          console.log(
+            `🔍 DEBUG: Subtheme ${subthemeId} (non-group questions only) added ${addedFromSubtheme} questions`,
+          );
+        } else {
+          console.log(
+            `🔍 DEBUG: Subtheme ${subthemeId} was not explicitly selected and has no groups - skipping`,
+          );
+        }
+      } else {
+        // Only get all subtheme questions if NO groups are selected anywhere
+        console.log(
+          `🔍 DEBUG: Subtheme ${subthemeId} has no groups and no global groups selected - getting all questions`,
+        );
+        const beforeCount = allQuestions.length;
+        const subthemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+          .take(maxQuestions * 2);
+        addQuestions(subthemeQuestions);
+        const addedFromSubtheme = allQuestions.length - beforeCount;
+        console.log(
+          `🔍 DEBUG: Subtheme ${subthemeId} (all) added ${addedFromSubtheme} questions`,
+        );
+      }
+    }
+
+    processedSubthemes.add(subthemeId);
+  }
+
+  // Step 5: Process themes that are NOT overridden by their subthemes
+  const overriddenThemes = new Set(subthemeToTheme.values());
+  console.log(
+    `🔍 DEBUG: Processing ${selectedThemes.length} themes:`,
+    selectedThemes,
+  );
+  console.log(`🔍 DEBUG: Overridden themes:`, [...overriddenThemes]);
+
+  for (const themeId of selectedThemes) {
+    if (overriddenThemes.has(themeId)) {
+      console.log(`🔍 DEBUG: Theme ${themeId} is overridden - skipping`);
+    } else {
+      console.log(
+        `🔍 DEBUG: Theme ${themeId} is NOT overridden - adding questions`,
+      );
+      const beforeCount = allQuestions.length;
+      const themeQuestions = await ctx.db
+        .query('questions')
+        .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
+        .take(maxQuestions * 2);
+      addQuestions(themeQuestions);
+      const addedFromTheme = allQuestions.length - beforeCount;
+      console.log(
+        `🔍 DEBUG: Theme ${themeId} added ${addedFromTheme} questions`,
+      );
+    }
+  }
+
+  console.log(`🔍 DEBUG: FINAL TOTAL: ${allQuestions.length} questions`);
+  console.log(
+    `🔍 DEBUG: Question IDs:`,
+    allQuestions.map(q => q._id),
+  );
+  return allQuestions;
+}
+
+/**
+ * Original intersection logic extracted as separate function
+ */
+async function collectQuestionsWithIntersection(
+  ctx: any,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+): Promise<Doc<'questions'>[]> {
+  // Step 1: Build group candidates from selected themes and subthemes
+  const groupCandidates = new Set<Id<'groups'>>();
+
+  // Add groups from selected themes
+  for (const themeId of selectedThemes) {
+    const subthemes = await ctx.db
+      .query('subthemes')
+      .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
+      .collect();
+
+    for (const subtheme of subthemes) {
+      const groups = await ctx.db
+        .query('groups')
+        .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subtheme._id))
+        .collect();
+      groups.forEach((g: Doc<'groups'>) => groupCandidates.add(g._id));
+    }
+  }
+
+  // Add groups from selected subthemes
+  for (const subthemeId of selectedSubthemes) {
+    const groups = await ctx.db
+      .query('groups')
+      .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+      .collect();
+    groups.forEach((g: Doc<'groups'>) => groupCandidates.add(g._id));
+  }
+
+  // Step 2: Final group set = selectedGroups ∩ groupCandidates
+  const validGroupIds = selectedGroups.filter(groupId =>
+    groupCandidates.has(groupId),
+  );
+
+  // Step 3: Collect questions from valid groups
+  const allQuestions: Doc<'questions'>[] = [];
+  const processedQuestionIds = new Set<Id<'questions'>>();
+
+  // Helper function to add questions without duplicates
+  const addQuestions = (questions: Doc<'questions'>[]) => {
+    questions.forEach((q: any) => {
+      if (!processedQuestionIds.has(q._id)) {
+        processedQuestionIds.add(q._id);
+        allQuestions.push(q);
+      }
+    });
+  };
+
+  // Get questions from all valid groups
+  for (const groupId of validGroupIds) {
+    const groupQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_group', (q: any) => q.eq('groupId', groupId))
+      .take(maxQuestions * 2);
+    addQuestions(groupQuestions);
+  }
+
+  // When groups are selected, also include questions from the same subthemes that have no group
+  if (validGroupIds.length > 0) {
+    // Get the subthemes that contain the selected groups
+    const subthemesWithSelectedGroups = new Set<Id<'subthemes'>>();
+    for (const groupId of validGroupIds) {
+      const group = await ctx.db.get(groupId);
+      if (group?.subthemeId) {
+        subthemesWithSelectedGroups.add(group.subthemeId);
+      }
+    }
+
+    // For each subtheme that has selected groups, get questions with no group
+    for (const subthemeId of subthemesWithSelectedGroups) {
+      const allSubthemeQuestions = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+        .take(maxQuestions * 2);
+
+      // Filter to only questions without a group (undefined/null groupId)
+      const subthemeQuestionsWithoutGroup = allSubthemeQuestions.filter(
+        (q: any) => q.groupId === undefined || q.groupId === null,
+      );
+      addQuestions(subthemeQuestionsWithoutGroup);
+    }
+  }
+
+  // If no groups are involved, fall back to the broader selections
+  if (validGroupIds.length === 0) {
+    // Process hierarchy: subthemes take precedence over themes
+    if (selectedSubthemes.length > 0) {
+      // Get questions directly from selected subthemes (only those with no group assignment)
+      for (const subthemeId of selectedSubthemes) {
+        const allSubthemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+          .take(maxQuestions * 2);
+
+        // Only include questions with no group assignment
+        const subthemeQuestionsWithoutGroup = allSubthemeQuestions.filter(
+          (q: any) => q.groupId === undefined || q.groupId === null,
+        );
+        addQuestions(subthemeQuestionsWithoutGroup);
+      }
+    } else if (selectedThemes.length > 0) {
+      // Get questions directly from selected themes
+      // If no subthemes/groups selected, include ALL questions from themes
+      // If subthemes/groups were selected but none were valid, only include unassigned questions
+      const shouldIncludeAllThemeQuestions =
+        selectedSubthemes.length === 0 && selectedGroups.length === 0;
+
+      for (const themeId of selectedThemes) {
+        const allThemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
+          .take(maxQuestions * 2);
+
+        if (shouldIncludeAllThemeQuestions) {
+          // Include ALL questions from this theme
+          addQuestions(allThemeQuestions);
+        } else {
+          // Only include questions with no subtheme or group assignment
+          const themeQuestionsWithoutSubthemeOrGroup = allThemeQuestions.filter(
+            (q: any) =>
+              (q.subthemeId === undefined || q.subthemeId === null) &&
+              (q.groupId === undefined || q.groupId === null),
+          );
+          addQuestions(themeQuestionsWithoutSubthemeOrGroup);
+        }
+      }
+    } else {
+      // If no specific selections at all, get all questions
+      const allThemes = await ctx.db.query('themes').take(50);
+      for (const theme of allThemes) {
+        const themeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_theme', (q: any) => q.eq('themeId', theme._id))
+          .take(maxQuestions);
+        addQuestions(themeQuestions);
+      }
+    }
+  }
+
+  return allQuestions;
+}
+
+/**
+ * Optimized user stats filtering
+ */
+async function applyUserStatsFilter(
+  ctx: any,
+  userId: Id<'users'>,
+  questions: Doc<'questions'>[],
+  questionMode: QuestionMode,
+): Promise<Id<'questions'>[]> {
+  switch (questionMode) {
+    case 'all': {
+      return questions.map((q: Doc<'questions'>) => q._id);
+    }
+
+    case 'bookmarked': {
+      const bookmarks = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .collect();
+
+      const bookmarkedIds = new Set(bookmarks.map((b: any) => b.questionId));
+      return questions
+        .filter((q: Doc<'questions'>) => bookmarkedIds.has(q._id))
+        .map((q: Doc<'questions'>) => q._id);
+    }
+
+    case 'unanswered': {
+      // Get all answered questions for this user at once
+      const answeredStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .collect();
+
+      const answeredQuestionIds = new Set(
+        answeredStats.map((s: any) => s.questionId),
+      );
+      return questions
+        .filter((q: Doc<'questions'>) => !answeredQuestionIds.has(q._id))
+        .map((q: Doc<'questions'>) => q._id);
+    }
+
+    case 'incorrect': {
+      // Get all incorrect questions for this user at once
+      const incorrectStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .filter((q: any) => q.eq(q.field('isIncorrect'), true))
+        .collect();
+
+      const incorrectQuestionIds = new Set(
+        incorrectStats.map((s: any) => s.questionId),
+      );
+      return questions
+        .filter((q: Doc<'questions'>) => incorrectQuestionIds.has(q._id))
+        .map((q: Doc<'questions'>) => q._id);
+    }
+
+    default: {
+      return questions.map((q: Doc<'questions'>) => q._id);
+    }
+  }
+}
+
 export const create = mutation({
   args: {
     name: v.string(),
@@ -57,99 +708,18 @@ export const create = mutation({
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
       : MAX_QUESTIONS;
 
-    // Step 1: Build group candidates from selected themes and subthemes
+    // Use optimized question collection
     const selectedThemes = args.selectedThemes || [];
     const selectedSubthemes = args.selectedSubthemes || [];
     const selectedGroups = args.selectedGroups || [];
 
-    const groupCandidates = new Set<Id<'groups'>>();
-
-    // Add groups from selected themes
-    for (const themeId of selectedThemes) {
-      const subthemes = await ctx.db
-        .query('subthemes')
-        .withIndex('by_theme', q => q.eq('themeId', themeId))
-        .collect();
-
-      for (const subtheme of subthemes) {
-        const groups = await ctx.db
-          .query('groups')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
-          .collect();
-        groups.forEach(g => groupCandidates.add(g._id));
-      }
-    }
-
-    // Add groups from selected subthemes
-    for (const subthemeId of selectedSubthemes) {
-      const groups = await ctx.db
-        .query('groups')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
-        .collect();
-      groups.forEach(g => groupCandidates.add(g._id));
-    }
-
-    // Step 2: Final group set = selectedGroups ∩ groupCandidates
-    // This ensures we only accept group IDs that belong to selected themes/subthemes
-    const validGroupIds = selectedGroups.filter(groupId =>
-      groupCandidates.has(groupId),
+    const allQuestions = await collectQuestionsOptimized(
+      ctx,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      requestedQuestions,
     );
-
-    // Step 3: Collect questions from valid groups
-    const allQuestions: Doc<'questions'>[] = [];
-    const processedQuestionIds = new Set<Id<'questions'>>();
-
-    // Helper function to add questions without duplicates
-    const addQuestions = (questions: Doc<'questions'>[]) => {
-      questions.forEach(q => {
-        if (!processedQuestionIds.has(q._id)) {
-          processedQuestionIds.add(q._id);
-          allQuestions.push(q);
-        }
-      });
-    };
-
-    // Get questions from all valid groups
-    for (const groupId of validGroupIds) {
-      const groupQuestions = await ctx.db
-        .query('questions')
-        .withIndex('by_group', q => q.eq('groupId', groupId))
-        .take(MAX_QUESTIONS * 2);
-      addQuestions(groupQuestions);
-    }
-
-    // If no groups are involved, fall back to the broader selections
-    if (validGroupIds.length === 0) {
-      // Get questions directly from selected subthemes (that have no groups involved)
-      for (const subthemeId of selectedSubthemes) {
-        const subthemeQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
-          .take(MAX_QUESTIONS * 2);
-        addQuestions(subthemeQuestions);
-      }
-
-      // Get questions directly from selected themes (that have no subthemes involved)
-      for (const themeId of selectedThemes) {
-        const themeQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_theme', q => q.eq('themeId', themeId))
-          .take(MAX_QUESTIONS * 2);
-        addQuestions(themeQuestions);
-      }
-
-      // If no specific selections at all, get all questions
-      if (selectedThemes.length === 0 && selectedSubthemes.length === 0) {
-        const allThemes = await ctx.db.query('themes').take(50);
-        for (const theme of allThemes) {
-          const themeQuestions = await ctx.db
-            .query('questions')
-            .withIndex('by_theme', q => q.eq('themeId', theme._id))
-            .take(MAX_QUESTIONS);
-          addQuestions(themeQuestions);
-        }
-      }
-    }
 
     // If there are no questions matching the criteria, return an error response
     if (allQuestions.length === 0) {
@@ -166,103 +736,13 @@ export const create = mutation({
       };
     }
 
-    // Apply different filters based on question mode
-    const filteredQuestionIds: Id<'questions'>[] = [];
-
-    // Process the single mode
-    let modeQuestions: Id<'questions'>[] = [];
-
-    switch (args.questionMode) {
-      case 'all': {
-        // Include all questions matching theme/subtheme/group criteria
-        modeQuestions = allQuestions.map(q => q._id);
-        break;
-      }
-
-      case 'bookmarked': {
-        // Get bookmarked questions - use the by_user index to limit scanning
-        const bookmarks = await ctx.db
-          .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', userId._id))
-          .collect();
-
-        // Create a Set for faster lookups
-        const bookmarkedIds = new Set(bookmarks.map(b => b.questionId));
-
-        // Filter questions to only include those that are bookmarked
-        modeQuestions = allQuestions
-          .filter(q => bookmarkedIds.has(q._id))
-          .map(q => q._id);
-        break;
-      }
-
-      case 'incorrect':
-      case 'unanswered': {
-        if (args.questionMode === 'incorrect') {
-          // Efficient approach: only query for stats of questions we actually have
-          const questionIds = allQuestions.map(q => q._id);
-          const incorrectQuestionIds: Id<'questions'>[] = [];
-
-          // Process in batches to avoid large queries
-          const batchSize = 50;
-          for (let i = 0; i < questionIds.length; i += batchSize) {
-            const batch = questionIds.slice(i, i + batchSize);
-
-            // For each question in this batch, check if it's marked as incorrect
-            for (const questionId of batch) {
-              const stat = await ctx.db
-                .query('userQuestionStats')
-                .withIndex('by_user_question', q =>
-                  q.eq('userId', userId._id).eq('questionId', questionId),
-                )
-                .filter(q => q.eq(q.field('isIncorrect'), true))
-                .first();
-
-              if (stat) {
-                incorrectQuestionIds.push(questionId);
-              }
-            }
-          }
-
-          modeQuestions = incorrectQuestionIds;
-        } else {
-          // For unanswered: check which questions have no userQuestionStats entry
-          const questionIds = allQuestions.map(q => q._id);
-          const unansweredQuestionIds: Id<'questions'>[] = [];
-
-          // Process in batches to avoid large queries
-          const batchSize = 50;
-          for (let i = 0; i < questionIds.length; i += batchSize) {
-            const batch = questionIds.slice(i, i + batchSize);
-
-            // For each question in this batch, check if it has been answered
-            for (const questionId of batch) {
-              const stat = await ctx.db
-                .query('userQuestionStats')
-                .withIndex('by_user_question', q =>
-                  q.eq('userId', userId._id).eq('questionId', questionId),
-                )
-                .first();
-
-              // If no stat exists, the question is unanswered
-              if (!stat) {
-                unansweredQuestionIds.push(questionId);
-              }
-            }
-          }
-
-          modeQuestions = unansweredQuestionIds;
-        }
-        break;
-      }
-      // No default
-    }
-
-    // Add questions from this mode to the filtered list
-    filteredQuestionIds.push(...modeQuestions);
-
-    // Remove duplicates
-    let uniqueQuestionIds = [...new Set(filteredQuestionIds)];
+    // Apply optimized user stats filtering
+    let uniqueQuestionIds = await applyUserStatsFilter(
+      ctx,
+      userId._id,
+      allQuestions,
+      args.questionMode,
+    );
 
     // Check if we have any questions after filtering
     if (uniqueQuestionIds.length === 0) {
@@ -336,7 +816,7 @@ export const getCustomQuizzes = query({
     // Get custom quizzes created by this user with pagination
     const quizzes = await ctx.db
       .query('customQuizzes')
-      .filter(q => q.eq(q.field('authorId'), userId._id))
+      .filter((q: any) => q.eq(q.field('authorId'), userId._id))
       .order('desc') // Most recent first
       .take(limit);
 
@@ -364,7 +844,7 @@ export const deleteCustomQuiz = mutation({
     // Delete any active sessions for this quiz - using proper index
     const sessions = await ctx.db
       .query('quizSessions')
-      .withIndex('by_user_quiz', q =>
+      .withIndex('by_user_quiz', (q: any) =>
         q.eq('userId', userId._id).eq('quizId', args.quizId),
       )
       .collect();
@@ -453,8 +933,10 @@ export const searchByName = query({
     // Also filter by the current user's ID since custom quizzes are user-specific
     const matchingQuizzes = await ctx.db
       .query('customQuizzes')
-      .withSearchIndex('search_by_name', q => q.search('name', searchTerm))
-      .filter(q => q.eq(q.field('authorId'), userId._id))
+      .withSearchIndex('search_by_name', (q: any) =>
+        q.search('name', searchTerm),
+      )
+      .filter((q: any) => q.eq(q.field('authorId'), userId._id))
       .take(50); // Limit results to reduce bandwidth
 
     return matchingQuizzes;
@@ -600,13 +1082,15 @@ export const debugQuestionCollection = mutation({
     for (const themeId of selectedThemes) {
       const subthemes = await ctx.db
         .query('subthemes')
-        .withIndex('by_theme', q => q.eq('themeId', themeId))
+        .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
         .collect();
 
       for (const subtheme of subthemes) {
         const groups = await ctx.db
           .query('groups')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
+          .withIndex('by_subtheme', (q: any) =>
+            q.eq('subthemeId', subtheme._id),
+          )
           .collect();
         groups.forEach(g => groupCandidates.add(g._id));
       }
@@ -616,7 +1100,7 @@ export const debugQuestionCollection = mutation({
     for (const subthemeId of selectedSubthemes) {
       const groups = await ctx.db
         .query('groups')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
         .collect();
       groups.forEach(g => groupCandidates.add(g._id));
     }
@@ -653,7 +1137,7 @@ export const debugQuestionCollection = mutation({
     // Helper function to add questions without duplicates
     const addQuestions = (questions: Doc<'questions'>[], step: string) => {
       const stepQuestionIds: string[] = [];
-      questions.forEach(q => {
+      questions.forEach((q: any) => {
         if (!processedQuestionIds.has(q._id)) {
           processedQuestionIds.add(q._id);
           allQuestions.push(q);
@@ -661,12 +1145,16 @@ export const debugQuestionCollection = mutation({
         }
       });
 
-      // Update debug info based on step
+      // Update debug info based on step - accumulate for groups, replace for others
       switch (step) {
         case 'groups': {
-          debugInfo.step2_groupsProcessed.questionIds = stepQuestionIds;
+          // Accumulate group questions (both from groups and null-group questions)
+          debugInfo.step2_groupsProcessed.questionIds = [
+            ...debugInfo.step2_groupsProcessed.questionIds,
+            ...stepQuestionIds,
+          ];
           debugInfo.step2_groupsProcessed.questionsFound =
-            stepQuestionIds.length;
+            debugInfo.step2_groupsProcessed.questionIds.length;
 
           break;
         }
@@ -693,28 +1181,74 @@ export const debugQuestionCollection = mutation({
       for (const groupId of validGroupIds) {
         const groupQuestions = await ctx.db
           .query('questions')
-          .withIndex('by_group', q => q.eq('groupId', groupId))
+          .withIndex('by_group', (q: any) => q.eq('groupId', groupId))
           .take(MAX_QUESTIONS * 2);
         addQuestions(groupQuestions, 'groups');
       }
+
+      // When groups are selected, also include questions from the same subthemes that have no group
+      const subthemesWithSelectedGroups = new Set<Id<'subthemes'>>();
+      for (const groupId of validGroupIds) {
+        const group = await ctx.db.get(groupId);
+        if (group?.subthemeId) {
+          subthemesWithSelectedGroups.add(group.subthemeId);
+        }
+      }
+
+      // For each subtheme that has selected groups, get questions with no group
+      for (const subthemeId of subthemesWithSelectedGroups) {
+        const allSubthemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
+          .take(MAX_QUESTIONS * 2);
+
+        // Filter to only questions without a group (undefined/null groupId)
+        const subthemeQuestionsWithoutGroup = allSubthemeQuestions.filter(
+          (q: any) => q.groupId === undefined || q.groupId === null,
+        );
+        addQuestions(subthemeQuestionsWithoutGroup, 'groups');
+      }
     } else {
-      // Fallback: Get questions from selected subthemes if no valid groups
+      // Fallback: Process hierarchy - subthemes take precedence over themes
       if (selectedSubthemes.length > 0) {
         for (const subthemeId of selectedSubthemes) {
-          const subthemeQuestions = await ctx.db
+          const allSubthemeQuestions = await ctx.db
             .query('questions')
-            .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+            .withIndex('by_subtheme', (q: any) =>
+              q.eq('subthemeId', subthemeId),
+            )
             .take(MAX_QUESTIONS * 2);
-          addQuestions(subthemeQuestions, 'subthemes');
+
+          // Only include questions with no group assignment
+          const subthemeQuestionsWithoutGroup = allSubthemeQuestions.filter(
+            (q: any) => q.groupId === undefined || q.groupId === null,
+          );
+          addQuestions(subthemeQuestionsWithoutGroup, 'subthemes');
         }
       } else if (selectedThemes.length > 0) {
         // Fallback: Get questions from selected themes if no subthemes
+        const shouldIncludeAllThemeQuestions =
+          selectedSubthemes.length === 0 && selectedGroups.length === 0;
+
         for (const themeId of selectedThemes) {
-          const themeQuestions = await ctx.db
+          const allThemeQuestions = await ctx.db
             .query('questions')
-            .withIndex('by_theme', q => q.eq('themeId', themeId))
+            .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
             .take(MAX_QUESTIONS * 2);
-          addQuestions(themeQuestions, 'themes');
+
+          if (shouldIncludeAllThemeQuestions) {
+            // Include ALL questions from this theme
+            addQuestions(allThemeQuestions, 'themes');
+          } else {
+            // Only include questions with no subtheme or group assignment
+            const themeQuestionsWithoutSubthemeOrGroup =
+              allThemeQuestions.filter(
+                (q: any) =>
+                  (q.subthemeId === undefined || q.subthemeId === null) &&
+                  (q.groupId === undefined || q.groupId === null),
+              );
+            addQuestions(themeQuestionsWithoutSubthemeOrGroup, 'themes');
+          }
         }
       } else {
         // No selections at all - get all questions
@@ -723,7 +1257,7 @@ export const debugQuestionCollection = mutation({
           debugInfo.step4_themesProcessed.themesQueried.push(theme._id);
           const themeQuestions = await ctx.db
             .query('questions')
-            .withIndex('by_theme', q => q.eq('themeId', theme._id))
+            .withIndex('by_theme', (q: any) => q.eq('themeId', theme._id))
             .take(MAX_QUESTIONS);
           addQuestions(themeQuestions, 'themes');
         }
@@ -733,7 +1267,7 @@ export const debugQuestionCollection = mutation({
     // Update step 5 debug info
     debugInfo.step5_totalQuestions.totalUniqueQuestions = allQuestions.length;
     debugInfo.step5_totalQuestions.allQuestionIds = allQuestions.map(
-      q => q._id,
+      (q: any) => q._id,
     );
 
     // Apply different filters based on question mode
@@ -745,7 +1279,7 @@ export const debugQuestionCollection = mutation({
     switch (args.questionMode) {
       case 'all': {
         // Include all questions matching theme/subtheme/group criteria
-        modeQuestions = allQuestions.map(q => q._id);
+        modeQuestions = allQuestions.map((q: any) => q._id);
         break;
       }
 
@@ -753,7 +1287,7 @@ export const debugQuestionCollection = mutation({
         // Get bookmarked questions - use the by_user index to limit scanning
         const bookmarks = await ctx.db
           .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .withIndex('by_user', (q: any) => q.eq('userId', userId._id))
           .collect();
 
         // Create a Set for faster lookups
@@ -761,8 +1295,8 @@ export const debugQuestionCollection = mutation({
 
         // Filter questions to only include those that are bookmarked
         modeQuestions = allQuestions
-          .filter(q => bookmarkedIds.has(q._id))
-          .map(q => q._id);
+          .filter((q: any) => bookmarkedIds.has(q._id))
+          .map((q: any) => q._id);
         break;
       }
 
@@ -770,7 +1304,7 @@ export const debugQuestionCollection = mutation({
       case 'unanswered': {
         if (args.questionMode === 'incorrect') {
           // Efficient approach: only query for stats of questions we actually have
-          const questionIds = allQuestions.map(q => q._id);
+          const questionIds = allQuestions.map((q: any) => q._id);
           const incorrectQuestionIds: Id<'questions'>[] = [];
 
           // Process in batches to avoid large queries
@@ -782,10 +1316,10 @@ export const debugQuestionCollection = mutation({
             for (const questionId of batch) {
               const stat = await ctx.db
                 .query('userQuestionStats')
-                .withIndex('by_user_question', q =>
+                .withIndex('by_user_question', (q: any) =>
                   q.eq('userId', userId._id).eq('questionId', questionId),
                 )
-                .filter(q => q.eq(q.field('isIncorrect'), true))
+                .filter((q: any) => q.eq(q.field('isIncorrect'), true))
                 .first();
 
               if (stat) {
@@ -797,7 +1331,7 @@ export const debugQuestionCollection = mutation({
           modeQuestions = incorrectQuestionIds;
         } else {
           // For unanswered: check which questions have no userQuestionStats entry
-          const questionIds = allQuestions.map(q => q._id);
+          const questionIds = allQuestions.map((q: any) => q._id);
           const unansweredQuestionIds: Id<'questions'>[] = [];
 
           // Process in batches to avoid large queries
@@ -809,7 +1343,7 @@ export const debugQuestionCollection = mutation({
             for (const questionId of batch) {
               const stat = await ctx.db
                 .query('userQuestionStats')
-                .withIndex('by_user_question', q =>
+                .withIndex('by_user_question', (q: any) =>
                   q.eq('userId', userId._id).eq('questionId', questionId),
                 )
                 .first();
@@ -895,7 +1429,9 @@ export const createWithTaxonomy = mutation({
         for (const taxonomyId of args.selectedThemes) {
           const themeQuestions = await ctx.db
             .query('questions')
-            .withIndex('by_taxonomy_theme', q => q.eq('TaxThemeId', taxonomyId))
+            .withIndex('by_taxonomy_theme', (q: any) =>
+              q.eq('TaxThemeId', taxonomyId),
+            )
             .collect();
           allQuestions.push(...themeQuestions);
         }
@@ -906,7 +1442,7 @@ export const createWithTaxonomy = mutation({
         for (const taxonomyId of args.selectedSubthemes) {
           const subthemeQuestions = await ctx.db
             .query('questions')
-            .withIndex('by_taxonomy_subtheme', q =>
+            .withIndex('by_taxonomy_subtheme', (q: any) =>
               q.eq('TaxSubthemeId', taxonomyId),
             )
             .collect();
@@ -919,7 +1455,9 @@ export const createWithTaxonomy = mutation({
         for (const taxonomyId of args.selectedGroups) {
           const groupQuestions = await ctx.db
             .query('questions')
-            .withIndex('by_taxonomy_group', q => q.eq('TaxGroupId', taxonomyId))
+            .withIndex('by_taxonomy_group', (q: any) =>
+              q.eq('TaxGroupId', taxonomyId),
+            )
             .collect();
           allQuestions.push(...groupQuestions);
         }
@@ -932,7 +1470,7 @@ export const createWithTaxonomy = mutation({
     // Remove duplicates (in case a question appears in multiple taxonomies)
     const uniqueQuestions = allQuestions.filter(
       (question, index, self) =>
-        index === self.findIndex(q => q._id === question._id),
+        index === self.findIndex((q: any) => q._id === question._id),
     );
 
     // Apply question mode filtering
@@ -941,25 +1479,25 @@ export const createWithTaxonomy = mutation({
 
     switch (args.questionMode) {
       case 'all': {
-        modeQuestions = uniqueQuestions.map(q => q._id);
+        modeQuestions = uniqueQuestions.map((q: any) => q._id);
         break;
       }
       case 'bookmarked': {
         const bookmarks = await ctx.db
           .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .withIndex('by_user', (q: any) => q.eq('userId', userId._id))
           .collect();
         const bookmarkedQuestionIds = new Set(bookmarks.map(b => b.questionId));
         modeQuestions = uniqueQuestions
-          .filter(q => bookmarkedQuestionIds.has(q._id))
-          .map(q => q._id);
+          .filter((q: any) => bookmarkedQuestionIds.has(q._id))
+          .map((q: any) => q._id);
         break;
       }
       case 'unanswered':
       case 'incorrect': {
         if (args.questionMode === 'incorrect') {
           // Efficient approach: only query for stats of questions we actually have
-          const questionIds = allQuestions.map(q => q._id);
+          const questionIds = allQuestions.map((q: any) => q._id);
           const incorrectQuestionIds: Id<'questions'>[] = [];
 
           // Process in batches to avoid large queries
@@ -971,10 +1509,10 @@ export const createWithTaxonomy = mutation({
             for (const questionId of batch) {
               const stat = await ctx.db
                 .query('userQuestionStats')
-                .withIndex('by_user_question', q =>
+                .withIndex('by_user_question', (q: any) =>
                   q.eq('userId', userId._id).eq('questionId', questionId),
                 )
-                .filter(q => q.eq(q.field('isIncorrect'), true))
+                .filter((q: any) => q.eq(q.field('isIncorrect'), true))
                 .first();
 
               if (stat) {
@@ -986,7 +1524,7 @@ export const createWithTaxonomy = mutation({
           modeQuestions = incorrectQuestionIds;
         } else {
           // For unanswered: check which questions have no userQuestionStats entry
-          const questionIds = allQuestions.map(q => q._id);
+          const questionIds = allQuestions.map((q: any) => q._id);
           const unansweredQuestionIds: Id<'questions'>[] = [];
 
           // Process in batches to avoid large queries
@@ -998,7 +1536,7 @@ export const createWithTaxonomy = mutation({
             for (const questionId of batch) {
               const stat = await ctx.db
                 .query('userQuestionStats')
-                .withIndex('by_user_question', q =>
+                .withIndex('by_user_question', (q: any) =>
                   q.eq('userId', userId._id).eq('questionId', questionId),
                 )
                 .first();

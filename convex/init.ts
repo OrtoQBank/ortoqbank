@@ -61,7 +61,7 @@ function safeExtractTextFromJson(
 }
 
 // Configuration
-const QUESTIONS_TO_GENERATE = 50;
+const QUESTIONS_TO_GENERATE = 100;
 
 // Question templates for variety
 const QUESTION_TEMPLATES = [
@@ -119,8 +119,33 @@ const ALTERNATIVES_POOL = [
 ];
 
 // Function to generate random questions
-function generateQuestions(count: number) {
-  const questions = [];
+function generateQuestions(
+  count: number,
+  themes: Array<{ name: string; prefix: string }>,
+  subthemes: Array<{ name: string; prefix: string; themeIndex: number }>,
+  groups: Array<{ name: string; prefix: string; subthemeIndex: number }>,
+): Array<{
+  title: string;
+  questionText: string;
+  explanation: string;
+  alternatives: string[];
+  correctAlternativeIndex: number;
+  questionCode: string;
+  themeIndex: number;
+  subthemeIndex: number;
+  groupIndex: number;
+}> {
+  const questions: Array<{
+    title: string;
+    questionText: string;
+    explanation: string;
+    alternatives: string[];
+    correctAlternativeIndex: number;
+    questionCode: string;
+    themeIndex: number;
+    subthemeIndex: number;
+    groupIndex: number;
+  }> = [];
 
   for (let i = 0; i < count; i++) {
     const templateIndex = i % QUESTION_TEMPLATES.length;
@@ -180,10 +205,79 @@ function generateQuestions(count: number) {
 
     const correctAlternativeIndex = i % 4; // Rotate correct answers
 
-    // Distribute questions across themes/subthemes/groups
+    // Distribute questions across themes/subthemes/groups with proper hierarchy
     const themeIndex = i % 5; // 5 themes
-    const subthemeIndex = i % 15; // 15 subthemes total
-    const groupIndex = i % 12; // 12 groups total
+
+    // Get subthemes that belong to this theme
+    const subthemesForTheme: Array<{
+      name: string;
+      prefix: string;
+      themeIndex: number;
+      originalIndex: number;
+    }> = subthemes
+      .map(
+        (
+          subtheme: { name: string; prefix: string; themeIndex: number },
+          index: number,
+        ) => ({ ...subtheme, originalIndex: index }),
+      )
+      .filter(
+        (subtheme: {
+          name: string;
+          prefix: string;
+          themeIndex: number;
+          originalIndex: number;
+        }) => subtheme.themeIndex === themeIndex,
+      );
+    const subthemeData: {
+      name: string;
+      prefix: string;
+      themeIndex: number;
+      originalIndex: number;
+    } = subthemesForTheme[i % subthemesForTheme.length];
+    const subthemeIndex: number = subthemeData.originalIndex;
+
+    // Get groups that belong to this subtheme
+    const groupsForSubtheme: Array<{
+      name: string;
+      prefix: string;
+      subthemeIndex: number;
+      originalIndex: number;
+    }> = groups
+      .map(
+        (
+          group: { name: string; prefix: string; subthemeIndex: number },
+          index: number,
+        ) => ({ ...group, originalIndex: index }),
+      )
+      .filter(
+        (group: {
+          name: string;
+          prefix: string;
+          subthemeIndex: number;
+          originalIndex: number;
+        }) => group.subthemeIndex === subthemeIndex,
+      );
+
+    // If no groups exist for this subtheme, fallback to first available group
+    const groupData: {
+      name: string;
+      prefix: string;
+      subthemeIndex: number;
+      originalIndex: number;
+    } =
+      groupsForSubtheme.length > 0
+        ? groupsForSubtheme[i % groupsForSubtheme.length]
+        : groups.map(
+            (
+              group: { name: string; prefix: string; subthemeIndex: number },
+              index: number,
+            ) => ({
+              ...group,
+              originalIndex: index,
+            }),
+          )[i % groups.length];
+    const groupIndex: number = groupData.originalIndex;
 
     questions.push({
       title: questionTitle,
@@ -264,64 +358,75 @@ function generatePresetQuizzes() {
 }
 
 // Sample data structure
+const themes = [
+  { name: 'Ortopedia Básica', prefix: 'ORT' },
+  { name: 'Traumatologia', prefix: 'TRA' },
+  { name: 'Cirurgia do Joelho', prefix: 'JOE' },
+  { name: 'Cirurgia da Coluna', prefix: 'COL' },
+  { name: 'Ortopedia Pediátrica', prefix: 'PED' },
+];
+
+const subthemes = [
+  // Ortopedia Básica subthemes
+  { name: 'Anatomia Básica', prefix: 'AB', themeIndex: 0 },
+  { name: 'Biomecânica', prefix: 'BM', themeIndex: 0 },
+  { name: 'Patologia Básica', prefix: 'PB', themeIndex: 0 },
+
+  // Traumatologia subthemes
+  { name: 'Fraturas', prefix: 'FR', themeIndex: 1 },
+  { name: 'Luxações', prefix: 'LX', themeIndex: 1 },
+  { name: 'Lesões de Partes Moles', prefix: 'PM', themeIndex: 1 },
+
+  // Cirurgia do Joelho subthemes
+  { name: 'Menisco', prefix: 'ME', themeIndex: 2 },
+  { name: 'Ligamentos', prefix: 'LI', themeIndex: 2 },
+  { name: 'Cartilagem', prefix: 'CA', themeIndex: 2 },
+
+  // Cirurgia da Coluna subthemes
+  { name: 'Cervical', prefix: 'CE', themeIndex: 3 },
+  { name: 'Torácica', prefix: 'TO', themeIndex: 3 },
+  { name: 'Lombar', prefix: 'LO', themeIndex: 3 },
+
+  // Ortopedia Pediátrica subthemes
+  { name: 'Deformidades Congênitas', prefix: 'DC', themeIndex: 4 },
+  { name: 'Displasia do Quadril', prefix: 'DQ', themeIndex: 4 },
+  { name: 'Pé Torto Congênito', prefix: 'PC', themeIndex: 4 },
+];
+
+const groups = [
+  // Anatomia Básica groups
+  { name: 'Ossos', prefix: 'O', subthemeIndex: 0 },
+  { name: 'Articulações', prefix: 'A', subthemeIndex: 0 },
+  { name: 'Músculos', prefix: 'M', subthemeIndex: 0 },
+
+  // Biomecânica groups
+  { name: 'Forças', prefix: 'F', subthemeIndex: 1 },
+  { name: 'Momentos', prefix: 'M', subthemeIndex: 1 },
+
+  // Patologia Básica groups
+  { name: 'Inflamação', prefix: 'I', subthemeIndex: 2 },
+  { name: 'Degeneração', prefix: 'D', subthemeIndex: 2 },
+
+  // Fraturas groups
+  { name: 'Classificação', prefix: 'C', subthemeIndex: 3 },
+  { name: 'Tratamento', prefix: 'T', subthemeIndex: 3 },
+  { name: 'Complicações', prefix: 'C', subthemeIndex: 3 },
+
+  // Menisco groups
+  { name: 'Lesões Traumáticas', prefix: 'T', subthemeIndex: 6 },
+  { name: 'Lesões Degenerativas', prefix: 'D', subthemeIndex: 6 },
+];
+
 const SEED_DATA = {
-  themes: [
-    { name: 'Ortopedia Básica', prefix: 'ORT' },
-    { name: 'Traumatologia', prefix: 'TRA' },
-    { name: 'Cirurgia do Joelho', prefix: 'JOE' },
-    { name: 'Cirurgia da Coluna', prefix: 'COL' },
-    { name: 'Ortopedia Pediátrica', prefix: 'PED' },
-  ],
-  subthemes: [
-    // Ortopedia Básica subthemes
-    { name: 'Anatomia Básica', prefix: 'AB', themeIndex: 0 },
-    { name: 'Biomecânica', prefix: 'BM', themeIndex: 0 },
-    { name: 'Patologia Básica', prefix: 'PB', themeIndex: 0 },
-
-    // Traumatologia subthemes
-    { name: 'Fraturas', prefix: 'FR', themeIndex: 1 },
-    { name: 'Luxações', prefix: 'LX', themeIndex: 1 },
-    { name: 'Lesões de Partes Moles', prefix: 'PM', themeIndex: 1 },
-
-    // Cirurgia do Joelho subthemes
-    { name: 'Menisco', prefix: 'ME', themeIndex: 2 },
-    { name: 'Ligamentos', prefix: 'LI', themeIndex: 2 },
-    { name: 'Cartilagem', prefix: 'CA', themeIndex: 2 },
-
-    // Cirurgia da Coluna subthemes
-    { name: 'Cervical', prefix: 'CE', themeIndex: 3 },
-    { name: 'Torácica', prefix: 'TO', themeIndex: 3 },
-    { name: 'Lombar', prefix: 'LO', themeIndex: 3 },
-
-    // Ortopedia Pediátrica subthemes
-    { name: 'Deformidades Congênitas', prefix: 'DC', themeIndex: 4 },
-    { name: 'Displasia do Quadril', prefix: 'DQ', themeIndex: 4 },
-    { name: 'Pé Torto Congênito', prefix: 'PC', themeIndex: 4 },
-  ],
-  groups: [
-    // Anatomia Básica groups
-    { name: 'Ossos', prefix: 'O', subthemeIndex: 0 },
-    { name: 'Articulações', prefix: 'A', subthemeIndex: 0 },
-    { name: 'Músculos', prefix: 'M', subthemeIndex: 0 },
-
-    // Biomecânica groups
-    { name: 'Forças', prefix: 'F', subthemeIndex: 1 },
-    { name: 'Momentos', prefix: 'M', subthemeIndex: 1 },
-
-    // Patologia Básica groups
-    { name: 'Inflamação', prefix: 'I', subthemeIndex: 2 },
-    { name: 'Degeneração', prefix: 'D', subthemeIndex: 2 },
-
-    // Fraturas groups
-    { name: 'Classificação', prefix: 'C', subthemeIndex: 3 },
-    { name: 'Tratamento', prefix: 'T', subthemeIndex: 3 },
-    { name: 'Complicações', prefix: 'C', subthemeIndex: 3 },
-
-    // Menisco groups
-    { name: 'Lesões Traumáticas', prefix: 'T', subthemeIndex: 6 },
-    { name: 'Lesões Degenerativas', prefix: 'D', subthemeIndex: 6 },
-  ],
-  questions: generateQuestions(QUESTIONS_TO_GENERATE),
+  themes,
+  subthemes,
+  groups,
+  questions: generateQuestions(
+    QUESTIONS_TO_GENERATE,
+    themes,
+    subthemes,
+    groups,
+  ),
   presetQuizzes: generatePresetQuizzes(),
 };
 
@@ -419,14 +524,8 @@ const seedDatabase = internalMutation({
         questionCode: questionData.questionCode,
         questionText: questionData.questionText,
         explanationText: questionData.explanation,
-        questionTextString: safeExtractTextFromJson(
-          questionData.questionText,
-          questionData.title, // Use title as fallback if JSON parsing fails
-        ),
-        explanationTextString: safeExtractTextFromJson(
-          questionData.explanation,
-          `Explicação para: ${questionData.title}`, // Use descriptive fallback
-        ),
+        questionTextString: questionData.questionText,
+        explanationTextString: questionData.explanation,
         alternatives: questionData.alternatives,
         correctAlternativeIndex: questionData.correctAlternativeIndex,
         themeId: createdThemes[questionData.themeIndex],
