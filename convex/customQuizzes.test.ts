@@ -191,5 +191,149 @@ describe('CustomQuizzes Functions', () => {
         expect(result.questionCount).toBeGreaterThan(0);
       }
     });
+
+    it('should respect the maximum number of questions requested by user', async () => {
+      const t = convexTest(schema);
+
+      const asUser = t.withIdentity({
+        name: 'Test User',
+        subject: 'test-user',
+        tokenIdentifier: 'test-user-token',
+      });
+
+      // Create a user record first
+      await t.run(async ctx => {
+        await ctx.db.insert('users', {
+          email: 'user@test.com',
+          clerkUserId: 'test-user',
+        });
+      });
+
+      // Create test theme
+      const themeId = await asUser.mutation(api.themes.create, {
+        name: 'Test Theme with Many Questions',
+      });
+
+      // Create 50 questions (more than the requested max of 42)
+      const questionCreationPromises = [];
+      for (let i = 1; i <= 50; i++) {
+        questionCreationPromises.push(
+          asUser.mutation(api.questions.create, {
+            title: `Test Question ${i}`,
+            questionTextString: JSON.stringify({
+              type: 'doc',
+              content: [{ type: 'text', text: `What is ${i}+1?` }],
+            }),
+            explanationTextString: JSON.stringify({
+              type: 'doc',
+              content: [{ type: 'text', text: `Answer is ${i + 1}` }],
+            }),
+            alternatives: [`${i + 1}`, `${i + 2}`, `${i + 3}`, `${i + 4}`],
+            correctAlternativeIndex: 0,
+            themeId,
+          }),
+        );
+      }
+
+      await Promise.all(questionCreationPromises);
+
+      // Create a custom quiz requesting exactly 42 questions
+      const result = await asUser.mutation(api.customQuizzes.create, {
+        name: 'Max 42 Questions Quiz',
+        description: 'A quiz that should have at most 42 questions',
+        testMode: 'study',
+        questionMode: 'all',
+        numQuestions: 42,
+        selectedThemes: [themeId],
+      });
+
+      // Verify the quiz was created successfully
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.quizId).toBeDefined();
+        expect(result.questionCount).toBe(42);
+
+        // Verify the actual quiz in the database has exactly 42 questions
+        const quiz = await asUser.query(api.customQuizzes.getById, {
+          id: result.quizId,
+        });
+
+        expect(quiz.questions).toHaveLength(42);
+        expect(quiz.name).toBe('Max 42 Questions Quiz');
+        expect(quiz.testMode).toBe('study');
+        expect(quiz.questionMode).toBe('all');
+      }
+    });
+
+    it('should return all available questions when requested count exceeds available', async () => {
+      const t = convexTest(schema);
+
+      const asUser = t.withIdentity({
+        name: 'Test User',
+        subject: 'test-user',
+        tokenIdentifier: 'test-user-token',
+      });
+
+      // Create a user record first
+      await t.run(async ctx => {
+        await ctx.db.insert('users', {
+          email: 'user@test.com',
+          clerkUserId: 'test-user',
+        });
+      });
+
+      // Create test theme
+      const themeId = await asUser.mutation(api.themes.create, {
+        name: 'Test Theme with Few Questions',
+      });
+
+      // Create only 5 questions (fewer than the requested 42)
+      const questionCreationPromises = [];
+      for (let i = 1; i <= 5; i++) {
+        questionCreationPromises.push(
+          asUser.mutation(api.questions.create, {
+            title: `Test Question ${i}`,
+            questionTextString: JSON.stringify({
+              type: 'doc',
+              content: [{ type: 'text', text: `What is ${i}+1?` }],
+            }),
+            explanationTextString: JSON.stringify({
+              type: 'doc',
+              content: [{ type: 'text', text: `Answer is ${i + 1}` }],
+            }),
+            alternatives: [`${i + 1}`, `${i + 2}`, `${i + 3}`, `${i + 4}`],
+            correctAlternativeIndex: 0,
+            themeId,
+          }),
+        );
+      }
+
+      await Promise.all(questionCreationPromises);
+
+      // Create a custom quiz requesting 42 questions (more than available)
+      const result = await asUser.mutation(api.customQuizzes.create, {
+        name: 'Requesting More Than Available',
+        description: 'A quiz requesting more questions than available',
+        testMode: 'study',
+        questionMode: 'all',
+        numQuestions: 42,
+        selectedThemes: [themeId],
+      });
+
+      // Verify the quiz was created successfully
+      expect(result.success).toBe(true);
+      if (result.success) {
+        expect(result.quizId).toBeDefined();
+        expect(result.questionCount).toBe(5); // Should return only the 5 available questions
+
+        // Verify the actual quiz in the database has exactly 5 questions
+        const quiz = await asUser.query(api.customQuizzes.getById, {
+          id: result.quizId,
+        });
+
+        expect(quiz.questions).toHaveLength(5);
+        expect(quiz.questions.length).toBeLessThanOrEqual(42);
+      }
+    });
   });
 });

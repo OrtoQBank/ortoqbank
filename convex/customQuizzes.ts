@@ -776,7 +776,6 @@ export const debugQuestionCollection = mutation({
   }),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
-    const MAX_QUESTIONS = 120;
 
     // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions

@@ -188,20 +188,22 @@ export default function TestForm() {
       />
 
       {/* Debug Panel - Development Only */}
-      <DebugPanel
-        formData={{
-          testMode: testMode,
-          questionMode: questionMode,
-          numQuestions: numQuestions,
-          selectedThemes: selectedThemes,
-          selectedSubthemes: selectedSubthemes,
-          selectedGroups: selectedGroups,
-        }}
-        mappedQuestionMode={mapQuestionMode(questionMode)}
-        availableQuestionCount={availableQuestionCount}
-        isCountLoading={isCountLoading}
-        hierarchicalData={hierarchicalData}
-      />
+      {process.env.NODE_ENV === 'development' && (
+        <DebugPanel
+          formData={{
+            testMode: testMode,
+            questionMode: questionMode,
+            numQuestions: numQuestions,
+            selectedThemes: selectedThemes,
+            selectedSubthemes: selectedSubthemes,
+            selectedGroups: selectedGroups,
+          }}
+          mappedQuestionMode={mapQuestionMode(questionMode)}
+          availableQuestionCount={availableQuestionCount}
+          isCountLoading={isCountLoading}
+          hierarchicalData={hierarchicalData}
+        />
+      )}
 
       <div className="space-y-12 sm:space-y-14">
         {/* Test Mode Section */}
