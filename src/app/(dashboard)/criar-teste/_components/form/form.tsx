@@ -11,6 +11,7 @@ import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useTestFormState } from '../hooks/useTestFormState';
 import { type TestFormData } from '../schema';
 import { AvailableQuestionsInfo } from './AvailableQuestionsInfo';
+import { DebugPanel } from './DebugPanel';
 import { FeedbackModal } from './modals/FeedbackModal';
 import { NameModal } from './modals/NameModal';
 import { QuestionCountSelector } from './QuestionCountSelector';
@@ -185,6 +186,24 @@ export default function TestForm() {
         state={submissionState}
         message={resultMessage}
       />
+
+      {/* Debug Panel - Development Only */}
+      {process.env.NODE_ENV === 'development' && (
+        <DebugPanel
+          formData={{
+            testMode: testMode,
+            questionMode: questionMode,
+            numQuestions: numQuestions,
+            selectedThemes: selectedThemes,
+            selectedSubthemes: selectedSubthemes,
+            selectedGroups: selectedGroups,
+          }}
+          mappedQuestionMode={mapQuestionMode(questionMode)}
+          availableQuestionCount={availableQuestionCount}
+          isCountLoading={isCountLoading}
+          hierarchicalData={hierarchicalData}
+        />
+      )}
 
       <div className="space-y-12 sm:space-y-14">
         {/* Test Mode Section */}

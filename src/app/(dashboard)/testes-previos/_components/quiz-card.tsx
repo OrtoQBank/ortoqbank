@@ -8,6 +8,7 @@ import {
   Clock,
   Edit,
   RotateCcw,
+  Trash2,
   X,
 } from 'lucide-react';
 import Link from 'next/link';
@@ -74,10 +75,13 @@ export function QuizCard({
   const inputRef = useRef<HTMLInputElement>(null);
   const { toast } = useToast();
   const [showDialog, setShowDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
 
-  // Get the update mutation from Convex
+  // Get the mutations from Convex
   const updateQuizName = useMutation(api.customQuizzes.updateName);
   const startQuizSession = useMutation(api.quizSessions.startQuizSession);
+  const deleteQuiz = useMutation(api.customQuizzes.deleteCustomQuiz);
 
   // Check if there's a completed session for this quiz
   const completedSession = useQuery(
@@ -180,6 +184,28 @@ export function QuizCard({
     setShowDialog(false);
   };
 
+  // Handle delete quiz
+  const handleDeleteQuiz = async () => {
+    setIsDeleting(true);
+    try {
+      await deleteQuiz({ quizId: quiz._id });
+      toast({
+        title: 'Teste excluído',
+        description: 'O teste foi excluído com sucesso.',
+      });
+      setShowDeleteDialog(false);
+    } catch (error) {
+      console.error('Error deleting quiz:', error);
+      toast({
+        title: 'Erro ao excluir',
+        description: 'Não foi possível excluir o teste. Tente novamente.',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
   // Simplified approach to get theme IDs
   let themeIds: string[] = [];
   if (quiz.themes && Array.isArray(quiz.themes)) {
@@ -264,17 +290,28 @@ export function QuizCard({
               </div>
             </div>
           ) : (
-            <div className="flex items-center gap-2">
+            <div className="flex items-center justify-between gap-2">
               <h3 className="line-clamp-1 text-lg font-bold">{quiz.name}</h3>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setIsEditing(true)}
-                className="ml-1 h-6 w-6 p-0 opacity-0 transition-opacity group-hover:opacity-100 hover:opacity-100"
-                title="Editar nome"
-              >
-                <Edit className="h-3.5 w-3.5" />
-              </Button>
+              <div className="flex items-center gap-1">
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setIsEditing(true)}
+                  className="h-6 w-6 p-0"
+                  title="Editar nome"
+                >
+                  <Edit className="h-3.5 w-3.5" />
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowDeleteDialog(true)}
+                  className="h-6 w-6 p-0 text-red-600 hover:text-red-700"
+                  title="Excluir teste"
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                </Button>
+              </div>
             </div>
           )}
           <p className="text-muted-foreground line-clamp-2 text-sm">
@@ -376,6 +413,37 @@ export function QuizCard({
             <Button onClick={handleStartNewSession}>Iniciar novo teste</Button>
             <Button variant="outline" onClick={handleViewResults}>
               Ver resultados
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Delete confirmation dialog */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir teste personalizado</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir o teste &quot;{quiz.name}&quot;?
+              Esta ação não pode ser desfeita e todos os resultados associados
+              também serão removidos.
+            </DialogDescription>
+          </DialogHeader>
+
+          <DialogFooter className="gap-2 sm:justify-start">
+            <Button
+              variant="destructive"
+              onClick={handleDeleteQuiz}
+              disabled={isDeleting}
+            >
+              {isDeleting ? 'Excluindo...' : 'Excluir teste'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => setShowDeleteDialog(false)}
+              disabled={isDeleting}
+            >
+              Cancelar
             </Button>
           </DialogFooter>
         </DialogContent>

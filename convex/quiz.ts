@@ -71,6 +71,8 @@ export const getQuizData = query({
     if (!quiz) throw new Error('Quiz not found');
 
     // Get all questions and sanitize them
+    // Note: Promise.all with ctx.db.get() is actually optimal in Convex
+    // since individual document lookups are highly optimized
     const safeQuestions: SafeQuestion[] = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
@@ -84,6 +86,36 @@ export const getQuizData = query({
     return {
       ...quiz,
       questions: safeQuestions,
+    };
+  },
+});
+
+// Lightweight version for quiz results - only fetches essential question fields
+export const getQuizDataForResults = query({
+  args: { quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')) },
+  handler: async (ctx, args) => {
+    const quiz = await ctx.db.get(args.quizId);
+    if (!quiz) throw new Error('Quiz not found');
+
+    // Get lightweight question data - only what's needed for results display
+    const lightweightQuestions = await Promise.all(
+      quiz.questions.map(async questionId => {
+        const question = await ctx.db.get(questionId);
+        if (!question) throw new Error('Question not found');
+        return {
+          _id: question._id,
+          _creationTime: question._creationTime,
+          questionTextString: question.questionTextString,
+          alternatives: question.alternatives,
+          correctAlternativeIndex: question.correctAlternativeIndex,
+          questionCode: question.questionCode,
+        };
+      }),
+    );
+
+    return {
+      ...quiz,
+      questions: lightweightQuestions,
     };
   },
 });
