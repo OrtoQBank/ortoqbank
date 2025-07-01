@@ -610,6 +610,45 @@ export const getById = query({
   },
 });
 
+// Lightweight version for quiz results - only fetches essential question fields
+export const getByIdForResults = query({
+  args: { id: v.id('customQuizzes') },
+  handler: async (ctx, { id }) => {
+    const userId = await getCurrentUserOrThrow(ctx);
+    const quiz = await ctx.db.get(id);
+
+    if (!quiz) {
+      throw new Error('Quiz not found');
+    }
+
+    // Verify that the user has access to this quiz
+    if (quiz.authorId !== userId._id) {
+      throw new Error('Not authorized to access this quiz');
+    }
+
+    // Get lightweight question data - only what's needed for results display
+    const lightweightQuestions = await Promise.all(
+      quiz.questions.map(async questionId => {
+        const question = await ctx.db.get(questionId);
+        if (!question) return null;
+        return {
+          _id: question._id,
+          _creationTime: question._creationTime,
+          questionTextString: question.questionTextString,
+          alternatives: question.alternatives,
+          correctAlternativeIndex: question.correctAlternativeIndex,
+          questionCode: question.questionCode,
+        };
+      }),
+    );
+
+    return {
+      ...quiz,
+      questions: lightweightQuestions.filter(Boolean), // Remove any null values
+    };
+  },
+});
+
 export const updateName = mutation({
   args: {
     id: v.id('customQuizzes'),

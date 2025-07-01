@@ -50,14 +50,14 @@ export default function UniversalQuizResultsPage() {
   // Determine the quiz type and fetch the appropriate data
   const isCustom = isCustomQuiz(quizId);
 
-  // Use conditional queries with "skip" to skip execution
+  // Use lightweight queries optimized for results display
   const presetQuizResult = useQuery(
-    api.quiz.getById,
-    isCustom ? 'skip' : { id: quizId as Id<'presetQuizzes'> },
+    api.quiz.getQuizDataForResults,
+    isCustom ? 'skip' : { quizId: quizId as Id<'presetQuizzes'> },
   );
 
   const customQuizResult = useQuery(
-    api.customQuizzes.getById,
+    api.customQuizzes.getByIdForResults,
     isCustom ? { id: quizId as Id<'customQuizzes'> } : 'skip',
   );
 
@@ -158,14 +158,7 @@ export default function UniversalQuizResultsPage() {
           Questão {currentQuestionIndex + 1}
         </h3>
 
-        <QuestionContent
-          stringContent={
-            question.questionTextString ||
-            (question.questionText
-              ? JSON.stringify(question.questionText)
-              : undefined)
-          }
-        />
+        <QuestionContent stringContent={question.questionTextString} />
 
         <div className="mt-4 space-y-2">
           {question.alternatives.map((alternative, i) => {
