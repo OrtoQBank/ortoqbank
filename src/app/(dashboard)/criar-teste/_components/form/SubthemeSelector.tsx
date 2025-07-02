@@ -6,6 +6,8 @@ import { useCallback, useMemo, useState } from 'react';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
 
+import { QuestionCountDisplay } from './QuestionCountDisplay';
+
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };
 type Group = { _id: string; name: string; subthemeId: string };
@@ -20,6 +22,10 @@ type SubthemeSelectorProps = {
   onToggleSubtheme: (subthemeId: string) => void;
   onToggleGroup: (groupId: string) => void;
   onToggleMultipleGroups?: (groupIds: string[]) => void;
+  // New props for question counts
+  getSubthemeCount?: (subthemeId: string) => number;
+  getGroupCount?: (groupId: string) => number;
+  isCountLoading?: boolean;
 };
 
 export function SubthemeSelector({
@@ -32,6 +38,9 @@ export function SubthemeSelector({
   onToggleSubtheme,
   onToggleGroup,
   onToggleMultipleGroups,
+  getSubthemeCount,
+  getGroupCount,
+  isCountLoading = false,
 }: SubthemeSelectorProps) {
   const [expandedSubthemes, setExpandedSubthemes] = useState<string[]>([]);
 
@@ -143,13 +152,20 @@ export function SubthemeSelector({
               onCheckedChange={() => handleSubthemeToggle(subtheme)}
               className="mt-0.5 flex-shrink-0"
             />
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-1 items-center justify-between">
               <Label
                 htmlFor={subtheme._id}
                 className="text-sm font-medium hyphens-auto"
               >
                 {subtheme.name}
               </Label>
+              {getSubthemeCount && (
+                <QuestionCountDisplay
+                  count={getSubthemeCount(subtheme._id)}
+                  isLoading={isCountLoading}
+                  className="ml-2 flex-shrink-0"
+                />
+              )}
             </div>
             {hasGroups && (
               <button
@@ -177,12 +193,21 @@ export function SubthemeSelector({
                     onCheckedChange={() => onToggleGroup(group._id)}
                     className="mt-0.5 flex-shrink-0"
                   />
-                  <Label
-                    htmlFor={group._id}
-                    className="min-w-0 flex-1 text-sm hyphens-auto"
-                  >
-                    {group.name}
-                  </Label>
+                  <div className="flex min-w-0 flex-1 items-center justify-between">
+                    <Label
+                      htmlFor={group._id}
+                      className="min-w-0 flex-1 text-sm hyphens-auto"
+                    >
+                      {group.name}
+                    </Label>
+                    {getGroupCount && (
+                      <QuestionCountDisplay
+                        count={getGroupCount(group._id)}
+                        isLoading={isCountLoading}
+                        className="ml-2 flex-shrink-0"
+                      />
+                    )}
+                  </div>
                 </div>
               ))}
             </div>

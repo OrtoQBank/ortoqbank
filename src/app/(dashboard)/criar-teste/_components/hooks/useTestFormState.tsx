@@ -7,6 +7,8 @@ import { GenericQueryCtx } from 'convex/server';
 import { useEffect, useState } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { useQuestionCounts } from '@/hooks/useQuestionCounts';
+
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { type TestFormData, testFormSchema } from '../schema';
@@ -33,10 +35,6 @@ export const mapQuestionMode = (
 
 export function useTestFormState() {
   const { isLoaded, isSignedIn } = useUser();
-  const [availableQuestionCount, setAvailableQuestionCount] = useState<
-    number | undefined
-  >();
-  const [isCountLoading, setIsCountLoading] = useState(false);
 
   const form = useForm<TestFormData>({
     resolver: zodResolver(testFormSchema),
@@ -63,19 +61,48 @@ export function useTestFormState() {
   // Only query when user is authenticated
   const isAuthenticated = isLoaded && isSignedIn;
 
-  // Query the count of available questions based on current selection (legacy system)
-  const countQuestions = useQuery(
-    api.countFunctions.getQuestionCountByFilter,
-    isAuthenticated
-      ? { filter: mapQuestionMode(questionMode || 'all') }
-      : 'skip',
-  );
-
   // Fetch hierarchical data only when authenticated
   const hierarchicalData = useQuery(
     api.themes.getHierarchicalData,
     isAuthenticated ? {} : 'skip',
   );
+
+  // Use the new MotherDuck-powered counting system
+  const questionCounts = useQuestionCounts({
+    questionMode: mapQuestionMode(questionMode || 'all'),
+    selectedThemes: selectedThemes || [],
+    selectedSubthemes: selectedSubthemes || [],
+    selectedGroups: selectedGroups || [],
+  });
+
+  // Get counts for all question modes (for question mode selector display)
+  const allQuestionCounts = useQuestionCounts({
+    questionMode: 'all',
+    selectedThemes: selectedThemes || [],
+    selectedSubthemes: selectedSubthemes || [],
+    selectedGroups: selectedGroups || [],
+  });
+
+  const unansweredQuestionCounts = useQuestionCounts({
+    questionMode: 'unanswered',
+    selectedThemes: selectedThemes || [],
+    selectedSubthemes: selectedSubthemes || [],
+    selectedGroups: selectedGroups || [],
+  });
+
+  const incorrectQuestionCounts = useQuestionCounts({
+    questionMode: 'incorrect',
+    selectedThemes: selectedThemes || [],
+    selectedSubthemes: selectedSubthemes || [],
+    selectedGroups: selectedGroups || [],
+  });
+
+  const bookmarkedQuestionCounts = useQuestionCounts({
+    questionMode: 'bookmarked',
+    selectedThemes: selectedThemes || [],
+    selectedSubthemes: selectedSubthemes || [],
+    selectedGroups: selectedGroups || [],
+  });
 
   return {
     form,
@@ -86,8 +113,29 @@ export function useTestFormState() {
     selectedThemes,
     selectedSubthemes,
     selectedGroups,
-    availableQuestionCount: countQuestions ?? 0,
-    isCountLoading: countQuestions === undefined && isAuthenticated,
+
+    // New counting system
+    availableQuestionCount: questionCounts.totalFilteredCount,
+    isCountLoading: questionCounts.isLoading,
+
+    // Individual counts for UI display
+    themesCounts: questionCounts.themesCounts,
+    subthemesCounts: questionCounts.subthemesCounts,
+    groupsCounts: questionCounts.groupsCounts,
+
+    // Helper functions
+    getThemeCount: questionCounts.getThemeCount,
+    getSubthemeCount: questionCounts.getSubthemeCount,
+    getGroupCount: questionCounts.getGroupCount,
+
+    // Question mode counts for display
+    questionModeCounts: {
+      all: allQuestionCounts.totalFilteredCount,
+      unanswered: unansweredQuestionCounts.totalFilteredCount,
+      incorrect: incorrectQuestionCounts.totalFilteredCount,
+      bookmarked: bookmarkedQuestionCounts.totalFilteredCount,
+    },
+
     hierarchicalData,
     mapQuestionMode,
     isAuthenticated,

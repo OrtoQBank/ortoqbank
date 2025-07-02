@@ -1,3 +1,5 @@
+import { MotherDuckClientProvider } from '@/lib/motherduck/context/motherduckClientContext';
+
 import TestForm from './_components/form/form';
 
 export default function CriarTestePage() {
@@ -7,7 +9,9 @@ export default function CriarTestePage() {
         Criar Teste
       </h1>
 
-      <TestForm />
+      <MotherDuckClientProvider>
+        <TestForm />
+      </MotherDuckClientProvider>
     </div>
   );
 }

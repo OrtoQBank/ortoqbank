@@ -14,6 +14,10 @@ import { AvailableQuestionsInfo } from './AvailableQuestionsInfo';
 import { DebugPanel } from './DebugPanel';
 import { FeedbackModal } from './modals/FeedbackModal';
 import { NameModal } from './modals/NameModal';
+import {
+  QuestionCountDisplay,
+  QuestionModeCounts,
+} from './QuestionCountDisplay';
 import { QuestionCountSelector } from './QuestionCountSelector';
 import { QuestionModeSelector } from './QuestionModeSelector';
 import { SubthemeSelector } from './SubthemeSelector';
@@ -53,6 +57,11 @@ export default function TestForm() {
     hierarchicalData,
     mapQuestionMode,
     isAuthenticated,
+    // New counting system
+    getThemeCount,
+    getSubthemeCount,
+    getGroupCount,
+    questionModeCounts,
   } = useTestFormState();
 
   // Show loading state while authentication is being checked
@@ -214,14 +223,32 @@ export default function TestForm() {
           }
         />
 
-        {/* Question Mode Section */}
-        <QuestionModeSelector
-          value={questionMode}
-          onChange={value =>
-            form.setValue('questionMode', value, { shouldValidate: true })
-          }
-          error={form.formState.errors.questionMode?.message}
-        />
+        {/* Question Mode Section with Counts */}
+        <div className="space-y-4">
+          <QuestionModeSelector
+            value={questionMode}
+            onChange={value =>
+              form.setValue('questionMode', value, { shouldValidate: true })
+            }
+            error={form.formState.errors.questionMode?.message}
+          />
+
+          {/* Question Mode Counts Display */}
+          {questionModeCounts && (
+            <div className="rounded-lg bg-gray-50 p-4">
+              <h4 className="mb-3 text-sm font-medium text-gray-700">
+                Questões disponíveis por modo:
+              </h4>
+              <QuestionModeCounts
+                allCount={questionModeCounts.all}
+                unansweredCount={questionModeCounts.unanswered}
+                incorrectCount={questionModeCounts.incorrect}
+                bookmarkedCount={questionModeCounts.bookmarked}
+                isLoading={isCountLoading}
+              />
+            </div>
+          )}
+        </div>
 
         {/* Themes Section */}
         <ThemeSelector
@@ -240,6 +267,8 @@ export default function TestForm() {
             );
           }}
           error={form.formState.errors.selectedThemes?.message}
+          getThemeCount={getThemeCount}
+          isCountLoading={isCountLoading}
         />
 
         {/* Subthemes Section - only if themes are selected */}
@@ -296,6 +325,9 @@ export default function TestForm() {
                 shouldValidate: true,
               });
             }}
+            getSubthemeCount={getSubthemeCount}
+            getGroupCount={getGroupCount}
+            isCountLoading={isCountLoading}
           />
         )}
 

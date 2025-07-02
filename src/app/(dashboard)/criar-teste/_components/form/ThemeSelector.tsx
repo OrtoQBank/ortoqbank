@@ -9,6 +9,8 @@ import {
   PopoverTrigger,
 } from '@/components/ui/popover';
 
+import { QuestionCountDisplay } from './QuestionCountDisplay';
+
 type Theme = { _id: string; name: string };
 
 type ThemeSelectorProps = {
@@ -16,6 +18,9 @@ type ThemeSelectorProps = {
   selectedThemes: string[];
   onToggleTheme: (themeId: string) => void;
   error?: string;
+  // New props for question counts
+  getThemeCount?: (themeId: string) => number;
+  isCountLoading?: boolean;
 };
 
 export function ThemeSelector({
@@ -23,6 +28,8 @@ export function ThemeSelector({
   selectedThemes,
   onToggleTheme,
   error,
+  getThemeCount,
+  isCountLoading = false,
 }: ThemeSelectorProps) {
   return (
     <div className="space-y-2">
@@ -42,6 +49,8 @@ export function ThemeSelector({
       </div>
       <div className="xs:grid-cols-2 grid grid-cols-1 gap-2 sm:grid-cols-3">
         {themes?.map(theme => {
+          const count = getThemeCount ? getThemeCount(theme._id) : 0;
+
           return (
             <Button
               key={theme._id}
@@ -50,9 +59,16 @@ export function ThemeSelector({
               variant={
                 selectedThemes.includes(theme._id) ? 'default' : 'outline'
               }
-              className="h-auto w-full justify-start py-2 text-left"
+              className="h-auto w-full justify-between py-2 text-left"
             >
               <span className="flex-1 truncate text-sm">{theme.name}</span>
+              {getThemeCount && (
+                <QuestionCountDisplay
+                  count={count}
+                  isLoading={isCountLoading}
+                  className="ml-2 flex-shrink-0"
+                />
+              )}
             </Button>
           );
         })}
