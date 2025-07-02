@@ -1,7 +1,12 @@
 import { v } from 'convex/values';
 
 import { Doc, Id } from './_generated/dataModel';
-import { mutation, query } from './_generated/server';
+import {
+  mutation,
+  type MutationCtx,
+  query,
+  type QueryCtx,
+} from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
 
 type QuestionMode = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
@@ -27,7 +32,7 @@ function shuffleArray<T>(array: T[]): T[] {
  * Step 2: Filter that pool by taxonomical criteria (themes/subthemes/groups)
  */
 async function collectQuestionsOptimized(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
   questionMode: QuestionMode,
   selectedThemes: Id<'themes'>[],
@@ -93,7 +98,7 @@ async function collectQuestionsOptimized(
  * Get base pool of questions based on question mode (Step 1 of filtering)
  */
 async function getQuestionsByMode(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
   questionMode: QuestionMode,
   maxQuestions: number,
@@ -124,7 +129,9 @@ async function getQuestionsByMode(
       );
 
       // Filter out any null results (deleted questions)
-      const validQuestions = questions.filter(q => q !== null);
+      const validQuestions = questions.filter(
+        (q): q is Doc<'questions'> => q !== null,
+      );
       console.log(
         `🔥 DEBUG: Retrieved ${validQuestions.length} valid incorrect questions`,
       );
@@ -177,7 +184,9 @@ async function getQuestionsByMode(
       );
 
       // Filter out any null results (deleted questions)
-      const validQuestions = questions.filter(q => q !== null);
+      const validQuestions = questions.filter(
+        (q): q is Doc<'questions'> => q !== null,
+      );
       console.log(
         `🔥 DEBUG: Retrieved ${validQuestions.length} valid bookmarked questions`,
       );
@@ -195,7 +204,7 @@ async function getQuestionsByMode(
  * Apply taxonomical filters to a base pool of questions (Step 2 of filtering)
  */
 async function applyTaxonomicalFilters(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   baseQuestions: Doc<'questions'>[],
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
@@ -230,25 +239,39 @@ async function applyTaxonomicalFilters(
     const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
     const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
 
-    // Get subtheme-theme relationships for selected subthemes
-    for (const subthemeId of selectedSubthemes) {
-      const subtheme = await ctx.db.get(subthemeId);
+    // Batch fetch all subthemes for selected subthemes
+    const subthemes = await Promise.all(
+      selectedSubthemes.map(id => ctx.db.get(id)),
+    );
+    subthemes.forEach((subtheme, idx) => {
       if (subtheme?.themeId) {
-        subthemeToTheme.set(subthemeId, subtheme.themeId);
+        subthemeToTheme.set(selectedSubthemes[idx], subtheme.themeId);
       }
-    }
+    });
 
-    // Get group-subtheme relationships for selected groups
-    for (const groupId of selectedGroups) {
-      const group = await ctx.db.get(groupId);
+    // Batch fetch all groups
+    const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
+    const subthemeIdsToFetch = new Set<Id<'subthemes'>>();
+    groups.forEach((group, idx) => {
       if (group?.subthemeId) {
-        groupToSubtheme.set(groupId, group.subthemeId);
-        // Also get the theme for this group's subtheme
-        const subtheme = await ctx.db.get(group.subthemeId);
-        if (subtheme?.themeId && !subthemeToTheme.has(group.subthemeId)) {
-          subthemeToTheme.set(group.subthemeId, subtheme.themeId);
+        groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
+        if (!subthemeToTheme.has(group.subthemeId)) {
+          subthemeIdsToFetch.add(group.subthemeId);
         }
       }
+    });
+
+    // Batch fetch remaining subthemes for groups (avoid duplicates)
+    if (subthemeIdsToFetch.size > 0) {
+      const additionalSubthemes = await Promise.all(
+        [...subthemeIdsToFetch].map(id => ctx.db.get(id)),
+      );
+      additionalSubthemes.forEach((subtheme, idx) => {
+        if (subtheme?.themeId) {
+          const subthemeId = [...subthemeIdsToFetch][idx];
+          subthemeToTheme.set(subthemeId, subtheme.themeId);
+        }
+      });
     }
 
     // Process each question in the base pool
@@ -333,7 +356,7 @@ async function applyTaxonomicalFilters(
  * Hierarchy restriction logic - subthemes override themes, groups override subthemes
  */
 async function collectQuestionsWithHierarchyRestriction(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -356,22 +379,28 @@ async function collectQuestionsWithHierarchyRestriction(
   console.log(`🔍 DEBUG: Input - Subthemes:`, selectedSubthemes);
   console.log(`🔍 DEBUG: Input - Groups:`, selectedGroups);
 
-  // Step 1: Get subtheme-to-theme relationships
+  // Step 1: Batch fetch subtheme-to-theme relationships
   const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
-  for (const subthemeId of selectedSubthemes) {
-    const subtheme = await ctx.db.get(subthemeId);
-    if (subtheme?.themeId) {
-      subthemeToTheme.set(subthemeId, subtheme.themeId);
-    }
+  if (selectedSubthemes.length > 0) {
+    const subthemes = await Promise.all(
+      selectedSubthemes.map(id => ctx.db.get(id)),
+    );
+    subthemes.forEach((subtheme, idx) => {
+      if (subtheme?.themeId) {
+        subthemeToTheme.set(selectedSubthemes[idx], subtheme.themeId);
+      }
+    });
   }
 
-  // Step 2: Get group-to-subtheme relationships
+  // Step 2: Batch fetch group-to-subtheme relationships
   const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
-  for (const groupId of selectedGroups) {
-    const group = await ctx.db.get(groupId);
-    if (group?.subthemeId) {
-      groupToSubtheme.set(groupId, group.subthemeId);
-    }
+  if (selectedGroups.length > 0) {
+    const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
+    groups.forEach((group, idx) => {
+      if (group?.subthemeId) {
+        groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
+      }
+    });
   }
 
   // Step 3: Group selected groups by their subtheme
@@ -405,20 +434,33 @@ async function collectQuestionsWithHierarchyRestriction(
   // we need to process the implied subthemes that contain those groups
   const subthemesToProcess = new Set(selectedSubthemes);
   if (hasAnyGroupsSelected) {
+    const impliedSubthemeIds: Id<'subthemes'>[] = [];
     for (const [subthemeId] of groupsBySubtheme) {
       subthemesToProcess.add(subthemeId);
       console.log(
         `🔍 DEBUG: Adding implied subtheme ${subthemeId} because it contains selected groups`,
       );
 
-      // Also add this implied subtheme to the theme override mapping
-      const subtheme = await ctx.db.get(subthemeId);
-      if (subtheme?.themeId) {
-        subthemeToTheme.set(subthemeId, subtheme.themeId);
-        console.log(
-          `🔍 DEBUG: Marking theme ${subtheme.themeId} as overridden by implied subtheme ${subthemeId}`,
-        );
+      // Collect subtheme IDs that need theme mapping
+      if (!subthemeToTheme.has(subthemeId)) {
+        impliedSubthemeIds.push(subthemeId);
       }
+    }
+
+    // Batch fetch implied subthemes for theme override mapping
+    if (impliedSubthemeIds.length > 0) {
+      const impliedSubthemes = await Promise.all(
+        impliedSubthemeIds.map(id => ctx.db.get(id)),
+      );
+      impliedSubthemes.forEach((subtheme, idx) => {
+        if (subtheme?.themeId) {
+          const subthemeId = impliedSubthemeIds[idx];
+          subthemeToTheme.set(subthemeId, subtheme.themeId);
+          console.log(
+            `🔍 DEBUG: Marking theme ${subtheme.themeId} as overridden by implied subtheme ${subthemeId}`,
+          );
+        }
+      });
     }
   }
 
@@ -573,7 +615,7 @@ async function collectQuestionsWithHierarchyRestriction(
  * Optimized user stats filtering
  */
 async function applyUserStatsFilter(
-  ctx: any,
+  ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
   questions: Doc<'questions'>[],
   questionMode: QuestionMode,
