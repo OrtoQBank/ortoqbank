@@ -55,184 +55,73 @@ export class QuestionCountService {
   ) {}
 
   /**
-   * Fetch all question counts efficiently in a single query
-   * This will be the main method to get baseline counts for all taxonomies
+   * Fetch all question counts - just basic count for now
    */
   async fetchAllBaseCounts(userId: string): Promise<QuestionCounts> {
-    const query = `
-      WITH base_questions AS (
-        SELECT 
-          q._id as question_id,
-          q.TaxThemeId as theme_id,
-          q.TaxSubthemeId as subtheme_id, 
-          q.TaxGroupId as group_id
-        FROM questions q
-      ),
-      user_stats AS (
-        SELECT 
-          uqs.questionId as question_id,
-          CASE WHEN uqs.userId = '${userId}' THEN 1 ELSE 0 END as is_answered,
-          CASE WHEN uqs.userId = '${userId}' AND uqs.isCorrect = false THEN 1 ELSE 0 END as is_incorrect
-        FROM userQuestionStats uqs
-        WHERE uqs.userId = '${userId}'
-      ),
-      user_bookmarks AS (
-        SELECT 
-          ub.questionId as question_id,
-          CASE WHEN ub.userId = '${userId}' THEN 1 ELSE 0 END as is_bookmarked
-        FROM userBookmarks ub  
-        WHERE ub.userId = '${userId}'
-      ),
-      enriched_questions AS (
-        SELECT 
-          bq.*,
-          COALESCE(us.is_answered, 0) as is_answered,
-          COALESCE(us.is_incorrect, 0) as is_incorrect,
-          COALESCE(ub.is_bookmarked, 0) as is_bookmarked
-        FROM base_questions bq
-        LEFT JOIN user_stats us ON bq.question_id = us.question_id
-        LEFT JOIN user_bookmarks ub ON bq.question_id = ub.question_id
-      )
-      
-      -- Get counts by theme
-      SELECT 
-        'theme' as type,
-        theme_id as taxonomy_id,
-        COUNT(*) as all_count,
-        COUNT(*) - SUM(is_answered) as unanswered_count,
-        SUM(is_incorrect) as incorrect_count,
-        SUM(is_bookmarked) as bookmarked_count
-      FROM enriched_questions 
-      WHERE theme_id IS NOT NULL
-      GROUP BY theme_id
-      
-      UNION ALL
-      
-      -- Get counts by subtheme  
-      SELECT 
-        'subtheme' as type,
-        subtheme_id as taxonomy_id,
-        COUNT(*) as all_count,
-        COUNT(*) - SUM(is_answered) as unanswered_count,
-        SUM(is_incorrect) as incorrect_count,
-        SUM(is_bookmarked) as bookmarked_count
-      FROM enriched_questions 
-      WHERE subtheme_id IS NOT NULL
-      GROUP BY subtheme_id
-      
-      UNION ALL
-      
-      -- Get counts by group
-      SELECT 
-        'group' as type,
-        group_id as taxonomy_id,
-        COUNT(*) as all_count,
-        COUNT(*) - SUM(is_answered) as unanswered_count,
-        SUM(is_incorrect) as incorrect_count,
-        SUM(is_bookmarked) as bookmarked_count
-      FROM enriched_questions 
-      WHERE group_id IS NOT NULL  
-      GROUP BY group_id
-      
-      UNION ALL
-      
-      -- Get total count
-      SELECT 
-        'total' as type,
-        'all' as taxonomy_id,
-        COUNT(*) as all_count,
-        COUNT(*) - SUM(is_answered) as unanswered_count,
-        SUM(is_incorrect) as incorrect_count,
-        SUM(is_bookmarked) as bookmarked_count
-      FROM enriched_questions
-    `;
+    const query = `SELECT COUNT(*) AS total_questions FROM my_db.questions`;
 
     const result = await this.evaluateQuery(query);
-    return this.parseCountResults(result);
+
+    // Access Arrow/RecordBatch data structure
+    let totalCount = 0;
+    const data = result.data as any;
+
+    try {
+      // MotherDuck returns Arrow format with batches containing RecordBatch objects
+      if (data?.batches && data.batches.length > 0) {
+        const batch = data.batches[0];
+        const recordBatch = batch.recordBatch;
+
+        // Access the first column (COUNT(*)) from the first row
+        if (recordBatch && recordBatch.numRows > 0) {
+          // Get the first column (our COUNT result)
+          const countColumn = recordBatch.getChildAt(0);
+          if (countColumn && countColumn.length > 0) {
+            totalCount = Number(countColumn.get(0));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing Arrow result:', error);
+    }
+
+    return {
+      totalQuestions: totalCount,
+      themesCounts: {},
+      subthemesCounts: {},
+      groupsCounts: {},
+    };
   }
 
   /**
-   * Get filtered count based on current selection
-   * This is for the final count when user has made selections
+   * Get filtered count - just returns total count for now
    */
   async getFilteredQuestionCount(params: CountQueryParams): Promise<number> {
-    const {
-      userId,
-      questionMode,
-      selectedThemes = [],
-      selectedSubthemes = [],
-      selectedGroups = [],
-    } = params;
-
-    // Build WHERE conditions based on selections
-    const conditions: string[] = [];
-
-    if (selectedThemes.length > 0) {
-      conditions.push(
-        `q.TaxThemeId IN (${selectedThemes.map(id => `'${id}'`).join(', ')})`,
-      );
-    }
-
-    if (selectedSubthemes.length > 0) {
-      conditions.push(
-        `q.TaxSubthemeId IN (${selectedSubthemes.map(id => `'${id}'`).join(', ')})`,
-      );
-    }
-
-    if (selectedGroups.length > 0) {
-      conditions.push(
-        `q.TaxGroupId IN (${selectedGroups.map(id => `'${id}'`).join(', ')})`,
-      );
-    }
-
-    const whereClause =
-      conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
-
-    let query = '';
-
-    switch (questionMode) {
-      case 'all': {
-        query = `
-          SELECT COUNT(*) as count
-          FROM questions q
-          ${whereClause}
-        `;
-        break;
-      }
-
-      case 'unanswered': {
-        query = `
-          SELECT COUNT(*) as count
-          FROM questions q
-          LEFT JOIN userQuestionStats uqs ON q._id = uqs.questionId AND uqs.userId = '${userId}'
-          ${whereClause}${whereClause ? ' AND' : 'WHERE'} uqs.questionId IS NULL
-        `;
-        break;
-      }
-
-      case 'incorrect': {
-        query = `
-          SELECT COUNT(*) as count
-          FROM questions q
-          INNER JOIN userQuestionStats uqs ON q._id = uqs.questionId 
-          ${whereClause}${whereClause ? ' AND' : 'WHERE'} uqs.userId = '${userId}' AND uqs.isCorrect = false
-        `;
-        break;
-      }
-
-      case 'bookmarked': {
-        query = `
-          SELECT COUNT(*) as count
-          FROM questions q
-          INNER JOIN userBookmarks ub ON q._id = ub.questionId
-          ${whereClause}${whereClause ? ' AND' : 'WHERE'} ub.userId = '${userId}'
-        `;
-        break;
-      }
-    }
+    const query = `SELECT COUNT(*) AS total_questions FROM my_db.questions`;
 
     const result = await this.evaluateQuery(query);
-    return result.data.length > 0 ? Number(result.data[0].count) : 0;
+
+    // Use the same Arrow data access logic as fetchAllBaseCounts
+    let totalCount = 0;
+    const data = result.data as any;
+
+    try {
+      if (data?.batches && data.batches.length > 0) {
+        const batch = data.batches[0];
+        const recordBatch = batch.recordBatch;
+
+        if (recordBatch && recordBatch.numRows > 0) {
+          const countColumn = recordBatch.getChildAt(0);
+          if (countColumn && countColumn.length > 0) {
+            totalCount = Number(countColumn.get(0));
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Error parsing filtered count result:', error);
+    }
+
+    return totalCount;
   }
 
   private parseCountResults(result: MaterializedQueryResult): QuestionCounts {
@@ -243,7 +132,9 @@ export class QuestionCountService {
       groupsCounts: {},
     };
 
-    result.data.forEach((row: any) => {
+    // Convert MotherDuck result to array format
+    const rows = [...(result.data as any)];
+    rows.forEach((row: any) => {
       const {
         type,
         taxonomy_id,

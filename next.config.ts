@@ -14,6 +14,25 @@ const nextConfig: NextConfig = {
       },
     ],
   },
+  async headers() {
+    return [
+      {
+        // Apply COOP and COEP headers only to the main criar-teste page (for MotherDuck)
+        // NOT to /criar-teste/[id] or other sub-routes
+        source: '/criar-teste',
+        headers: [
+          {
+            key: 'Cross-Origin-Opener-Policy',
+            value: 'same-origin',
+          },
+          {
+            key: 'Cross-Origin-Embedder-Policy',
+            value: 'require-corp',
+          },
+        ],
+      },
+    ];
+  },
   async rewrites() {
     return [
       {
