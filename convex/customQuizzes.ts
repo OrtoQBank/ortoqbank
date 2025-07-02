@@ -22,74 +22,311 @@ function shuffleArray<T>(array: T[]): T[] {
 }
 
 /**
- * Optimized question collection that chooses the most efficient query path
+ * Two-step question collection: Question Mode → Taxonomical Filters
+ * Step 1: Get base pool of questions based on question mode (incorrect, unanswered, bookmarked, all)
+ * Step 2: Filter that pool by taxonomical criteria (themes/subthemes/groups)
  */
 async function collectQuestionsOptimized(
   ctx: any,
+  userId: Id<'users'>,
+  questionMode: QuestionMode,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
 ): Promise<Doc<'questions'>[]> {
-  console.log(`🚀 DEBUG: collectQuestionsOptimized called with:`, {
+  console.log(`🚀 DEBUG: collectQuestionsOptimized - Two-step filtering:`, {
+    questionMode,
     themes: selectedThemes.length,
     subthemes: selectedSubthemes.length,
     groups: selectedGroups.length,
+    maxQuestions,
   });
 
-  // Scenario 1: No filters - get all questions directly
-  if (
-    selectedThemes.length === 0 &&
-    selectedSubthemes.length === 0 &&
-    selectedGroups.length === 0
-  ) {
-    console.log(`🚀 DEBUG: Taking path 1: No filters`);
-    return await ctx.db.query('questions').take(maxQuestions * 2);
+  // STEP 1: Get base pool based on question mode
+  console.log(
+    `🚀 DEBUG: STEP 1 - Applying question mode filter: ${questionMode}`,
+  );
+  const baseQuestionPool = await getQuestionsByMode(
+    ctx,
+    userId,
+    questionMode,
+    maxQuestions,
+  );
+  console.log(`🚀 DEBUG: STEP 1 - Base pool size: ${baseQuestionPool.length}`);
+
+  // If no base questions, return empty
+  if (baseQuestionPool.length === 0) {
+    console.log(`🚀 DEBUG: No questions in base pool, returning empty`);
+    return [];
   }
 
-  // Special case: Theme-only selection means "get ALL questions from these themes"
+  // STEP 2: Apply taxonomical filters to the base pool
+  const hasTaxonomicalFilters =
+    selectedThemes.length > 0 ||
+    selectedSubthemes.length > 0 ||
+    selectedGroups.length > 0;
+
+  if (!hasTaxonomicalFilters) {
+    console.log(
+      `🚀 DEBUG: STEP 2 - No taxonomical filters, returning base pool`,
+    );
+    return baseQuestionPool;
+  }
+
+  console.log(`🚀 DEBUG: STEP 2 - Applying taxonomical filters to base pool`);
+  const filteredQuestions = await applyTaxonomicalFilters(
+    ctx,
+    baseQuestionPool,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+  );
+
+  console.log(
+    `🚀 DEBUG: STEP 2 - Final filtered size: ${filteredQuestions.length}`,
+  );
+  return filteredQuestions;
+}
+
+/**
+ * Get base pool of questions based on question mode (Step 1 of filtering)
+ */
+async function getQuestionsByMode(
+  ctx: any,
+  userId: Id<'users'>,
+  questionMode: QuestionMode,
+  maxQuestions: number,
+): Promise<Doc<'questions'>[]> {
+  console.log(
+    `🔥 DEBUG: collectQuestionsByMode called with mode: ${questionMode}, maxQuestions: ${maxQuestions}`,
+  );
+
+  switch (questionMode) {
+    case 'incorrect': {
+      console.log(
+        `🔥 DEBUG: Getting incorrect questions directly from userQuestionStats`,
+      );
+      const incorrectStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user_incorrect', (q: any) =>
+          q.eq('userId', userId).eq('isIncorrect', true),
+        )
+        .take(maxQuestions); // Take only what we need
+
+      console.log(
+        `🔥 DEBUG: Found ${incorrectStats.length} incorrect question stats`,
+      );
+
+      // Get the actual question documents
+      const questions = await Promise.all(
+        incorrectStats.map((stat: any) => ctx.db.get(stat.questionId)),
+      );
+
+      // Filter out any null results (deleted questions)
+      const validQuestions = questions.filter(q => q !== null);
+      console.log(
+        `🔥 DEBUG: Retrieved ${validQuestions.length} valid incorrect questions`,
+      );
+      return validQuestions;
+    }
+
+    case 'unanswered': {
+      console.log(
+        `🔥 DEBUG: Getting unanswered questions by checking answered stats`,
+      );
+      // For unanswered, we need to get all questions and exclude answered ones
+      // This is less efficient but necessary for this mode
+      const allQuestions = await ctx.db
+        .query('questions')
+        .take(maxQuestions * 3);
+
+      const answeredStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .collect();
+
+      const answeredQuestionIds = new Set(
+        answeredStats.map((s: any) => s.questionId),
+      );
+
+      const unansweredQuestions = allQuestions
+        .filter((q: any) => !answeredQuestionIds.has(q._id))
+        .slice(0, maxQuestions);
+
+      console.log(
+        `🔥 DEBUG: Found ${unansweredQuestions.length} unanswered questions`,
+      );
+      return unansweredQuestions;
+    }
+
+    case 'bookmarked': {
+      console.log(
+        `🔥 DEBUG: Getting bookmarked questions directly from userBookmarks`,
+      );
+      const bookmarks = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .take(maxQuestions); // Take only what we need
+
+      console.log(`🔥 DEBUG: Found ${bookmarks.length} bookmarked questions`);
+
+      // Get the actual question documents
+      const questions = await Promise.all(
+        bookmarks.map((bookmark: any) => ctx.db.get(bookmark.questionId)),
+      );
+
+      // Filter out any null results (deleted questions)
+      const validQuestions = questions.filter(q => q !== null);
+      console.log(
+        `🔥 DEBUG: Retrieved ${validQuestions.length} valid bookmarked questions`,
+      );
+      return validQuestions;
+    }
+
+    default: {
+      console.log(`🔥 DEBUG: Getting all questions (fallback)`);
+      return await ctx.db.query('questions').take(maxQuestions * 2);
+    }
+  }
+}
+
+/**
+ * Apply taxonomical filters to a base pool of questions (Step 2 of filtering)
+ */
+async function applyTaxonomicalFilters(
+  ctx: any,
+  baseQuestions: Doc<'questions'>[],
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+): Promise<Doc<'questions'>[]> {
+  console.log(
+    `🔧 DEBUG: applyTaxonomicalFilters - filtering ${baseQuestions.length} questions`,
+  );
+
+  // Create a Set of valid question IDs based on taxonomical criteria
+  const validQuestionIds = new Set<Id<'questions'>>();
+
+  // If themes are selected but no subthemes/groups, include ALL questions from those themes
   if (
     selectedThemes.length > 0 &&
     selectedSubthemes.length === 0 &&
     selectedGroups.length === 0
   ) {
-    console.log(`🚀 DEBUG: Taking path 2: Theme-only selection`);
-    const allQuestions: Doc<'questions'>[] = [];
-    const processedQuestionIds = new Set<Id<'questions'>>();
+    console.log(`🔧 DEBUG: Theme-only filtering`);
+    baseQuestions.forEach(q => {
+      if (selectedThemes.includes(q.themeId)) {
+        validQuestionIds.add(q._id);
+      }
+    });
+  } else {
+    // Complex hierarchical filtering
+    console.log(
+      `🔧 DEBUG: Hierarchical filtering with themes/subthemes/groups`,
+    );
 
-    const addQuestions = (questions: Doc<'questions'>[]) => {
-      questions.forEach((q: any) => {
-        if (!processedQuestionIds.has(q._id)) {
-          processedQuestionIds.add(q._id);
-          allQuestions.push(q);
-        }
-      });
-    };
+    // Build hierarchy maps
+    const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
+    const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
 
-    // Get ALL questions from selected themes (including all subthemes and groups)
-    for (const themeId of selectedThemes) {
-      const themeQuestions = await ctx.db
-        .query('questions')
-        .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
-        .take(maxQuestions * 2);
-      addQuestions(themeQuestions);
+    // Get subtheme-theme relationships for selected subthemes
+    for (const subthemeId of selectedSubthemes) {
+      const subtheme = await ctx.db.get(subthemeId);
+      if (subtheme?.themeId) {
+        subthemeToTheme.set(subthemeId, subtheme.themeId);
+      }
     }
 
-    console.log(
-      `🚀 DEBUG: Theme-only path returned ${allQuestions.length} questions`,
-    );
-    return allQuestions;
+    // Get group-subtheme relationships for selected groups
+    for (const groupId of selectedGroups) {
+      const group = await ctx.db.get(groupId);
+      if (group?.subthemeId) {
+        groupToSubtheme.set(groupId, group.subthemeId);
+        // Also get the theme for this group's subtheme
+        const subtheme = await ctx.db.get(group.subthemeId);
+        if (subtheme?.themeId && !subthemeToTheme.has(group.subthemeId)) {
+          subthemeToTheme.set(group.subthemeId, subtheme.themeId);
+        }
+      }
+    }
+
+    // Process each question in the base pool
+    for (const question of baseQuestions) {
+      let shouldInclude = false;
+
+      // Check if question matches selected groups (highest priority)
+      if (
+        selectedGroups.length > 0 &&
+        question.groupId &&
+        selectedGroups.includes(question.groupId)
+      ) {
+        shouldInclude = true;
+        console.log(
+          `🔧 DEBUG: Question ${question._id} included by group ${question.groupId}`,
+        );
+      }
+      // Check if question matches selected subthemes
+      else if (
+        selectedSubthemes.length > 0 &&
+        question.subthemeId &&
+        selectedSubthemes.includes(question.subthemeId)
+      ) {
+        // Only include if no groups are selected for this subtheme, or the question has no group
+        const groupsInThisSubtheme = selectedGroups.filter(groupId => {
+          const subthemeId = groupToSubtheme.get(groupId);
+          return subthemeId === question.subthemeId;
+        });
+
+        if (groupsInThisSubtheme.length === 0 || !question.groupId) {
+          shouldInclude = true;
+          console.log(
+            `🔧 DEBUG: Question ${question._id} included by subtheme ${question.subthemeId}`,
+          );
+        }
+      }
+      // Check if question matches selected themes
+      else if (
+        selectedThemes.length > 0 &&
+        selectedThemes.includes(question.themeId)
+      ) {
+        // Only include if no subthemes/groups are selected for this theme, or the question has no subtheme/group
+        const subthemesInThisTheme = selectedSubthemes.filter(subthemeId => {
+          return subthemeToTheme.get(subthemeId) === question.themeId;
+        });
+        const groupsInThisTheme = selectedGroups.filter(groupId => {
+          const subthemeId = groupToSubtheme.get(groupId);
+          return (
+            subthemeId && subthemeToTheme.get(subthemeId) === question.themeId
+          );
+        });
+
+        if (
+          (subthemesInThisTheme.length === 0 &&
+            groupsInThisTheme.length === 0) ||
+          (!question.subthemeId && !question.groupId)
+        ) {
+          shouldInclude = true;
+          console.log(
+            `🔧 DEBUG: Question ${question._id} included by theme ${question.themeId}`,
+          );
+        }
+      }
+
+      if (shouldInclude) {
+        validQuestionIds.add(question._id);
+      }
+    }
   }
 
-  // For all other cases, use the hierarchy restriction logic
-  console.log(`🚀 DEBUG: Taking path 3: Hierarchy restriction logic`);
-  return await collectQuestionsWithHierarchyRestriction(
-    ctx,
-    selectedThemes,
-    selectedSubthemes,
-    selectedGroups,
-    maxQuestions,
+  const filteredQuestions = baseQuestions.filter(q =>
+    validQuestionIds.has(q._id),
   );
+  console.log(
+    `🔧 DEBUG: Filtered from ${baseQuestions.length} to ${filteredQuestions.length} questions`,
+  );
+
+  return filteredQuestions;
 }
 
 /**
@@ -438,6 +675,8 @@ export const create = mutation({
 
     const allQuestions = await collectQuestionsOptimized(
       ctx,
+      userId._id,
+      args.questionMode,
       selectedThemes,
       selectedSubthemes,
       selectedGroups,
@@ -459,12 +698,11 @@ export const create = mutation({
       };
     }
 
-    // Apply optimized user stats filtering
-    let uniqueQuestionIds = await applyUserStatsFilter(
-      ctx,
-      userId._id,
-      allQuestions,
-      args.questionMode,
+    // Extract question IDs from the fully filtered results
+    // The new two-step approach already handles both question mode and taxonomical filtering
+    let uniqueQuestionIds = allQuestions.map(q => q._id);
+    console.log(
+      `🚀 DEBUG: Final question count after two-step filtering: ${uniqueQuestionIds.length}`,
     );
 
     // Check if we have any questions after filtering
@@ -891,8 +1129,19 @@ export const debugQuestionCollection = mutation({
       ];
     }
 
-    // Step 3: Collect questions using the intersection logic
-    const allQuestions: Doc<'questions'>[] = [];
+    // Step 3: Use the optimized collection logic
+    const allQuestions = await collectQuestionsOptimized(
+      ctx,
+      userId._id,
+      args.questionMode,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      requestedQuestions,
+    );
+
+    // For debug purposes, we'll also collect questions using the old intersection logic
+    const legacyQuestions: Doc<'questions'>[] = [];
     const processedQuestionIds = new Set<Id<'questions'>>();
 
     // Helper function to add questions without duplicates
