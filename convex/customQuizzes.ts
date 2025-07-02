@@ -55,7 +55,7 @@ async function collectQuestionsOptimized(
   );
   console.log(`🚀 DEBUG: STEP 1 - Base pool size: ${baseQuestionPool.length}`);
 
-  // If no base questions, return empty
+  // If no base questions, return empty (let the main function handle the error)
   if (baseQuestionPool.length === 0) {
     console.log(`🚀 DEBUG: No questions in base pool, returning empty`);
     return [];
@@ -690,12 +690,26 @@ export const create = mutation({
       console.log('selectedSubthemes', args.selectedSubthemes);
       console.log('selectedGroups', args.selectedGroups);
 
-      return {
-        success: false as const,
-        error: 'NO_QUESTIONS_FOUND',
-        message:
-          'Nenhuma questão encontrada com os critérios selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
-      };
+      // Determine the appropriate error code based on context:
+      // - If question mode is "all" and we have taxonomy filters but no questions, it's a theme/taxonomy issue
+      // - If question mode is specific (incorrect/bookmarked/unanswered), it's a filtering issue
+      const isQuestionModeFiltering = args.questionMode !== 'all';
+
+      const errorResponse = isQuestionModeFiltering
+        ? {
+            success: false as const,
+            error: 'NO_QUESTIONS_FOUND_AFTER_FILTER' as const,
+            message:
+              'Nenhuma questão encontrada com os filtros selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
+          }
+        : {
+            success: false as const,
+            error: 'NO_QUESTIONS_FOUND' as const,
+            message:
+              'Nenhuma questão encontrada com os critérios selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
+          };
+
+      return errorResponse;
     }
 
     // Extract question IDs from the fully filtered results
