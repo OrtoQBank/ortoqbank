@@ -57,6 +57,9 @@ async function collectQuestionsOptimized(
     userId,
     questionMode,
     maxQuestions,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
   );
   console.log(`🚀 DEBUG: STEP 1 - Base pool size: ${baseQuestionPool.length}`);
 
@@ -75,6 +78,14 @@ async function collectQuestionsOptimized(
   if (!hasTaxonomicalFilters) {
     console.log(
       `🚀 DEBUG: STEP 2 - No taxonomical filters, returning base pool`,
+    );
+    return baseQuestionPool;
+  }
+
+  // For 'all' mode, we already applied taxonomical filters in Step 1, so skip Step 2
+  if (questionMode === 'all') {
+    console.log(
+      `🚀 DEBUG: STEP 2 - Skipping taxonomical filtering for 'all' mode (already applied in Step 1)`,
     );
     return baseQuestionPool;
   }
@@ -102,6 +113,9 @@ async function getQuestionsByMode(
   userId: Id<'users'>,
   questionMode: QuestionMode,
   maxQuestions: number,
+  selectedThemes?: Id<'themes'>[],
+  selectedSubthemes?: Id<'subthemes'>[],
+  selectedGroups?: Id<'groups'>[],
 ): Promise<Doc<'questions'>[]> {
   console.log(
     `🔥 DEBUG: collectQuestionsByMode called with mode: ${questionMode}, maxQuestions: ${maxQuestions}`,
@@ -109,15 +123,14 @@ async function getQuestionsByMode(
 
   switch (questionMode) {
     case 'incorrect': {
-      console.log(
-        `🔥 DEBUG: Getting incorrect questions directly from userQuestionStats`,
-      );
+      console.log(`🔥 DEBUG: Getting ALL incorrect questions for user`);
+      // Get ALL incorrect questions for this user (no limit)
       const incorrectStats = await ctx.db
         .query('userQuestionStats')
         .withIndex('by_user_incorrect', (q: any) =>
           q.eq('userId', userId).eq('isIncorrect', true),
         )
-        .take(maxQuestions); // Take only what we need
+        .collect(); // Get all, not just a sample
 
       console.log(
         `🔥 DEBUG: Found ${incorrectStats.length} incorrect question stats`,
@@ -140,13 +153,10 @@ async function getQuestionsByMode(
 
     case 'unanswered': {
       console.log(
-        `🔥 DEBUG: Getting unanswered questions by checking answered stats`,
+        `🔥 DEBUG: Getting ALL unanswered questions by checking answered stats`,
       );
-      // For unanswered, we need to get all questions and exclude answered ones
-      // This is less efficient but necessary for this mode
-      const allQuestions = await ctx.db
-        .query('questions')
-        .take(maxQuestions * 3);
+      // For unanswered, we need to get ALL questions and exclude answered ones
+      const allQuestions = await ctx.db.query('questions').collect(); // Get ALL questions
 
       const answeredStats = await ctx.db
         .query('userQuestionStats')
@@ -157,24 +167,23 @@ async function getQuestionsByMode(
         answeredStats.map((s: any) => s.questionId),
       );
 
-      const unansweredQuestions = allQuestions
-        .filter((q: any) => !answeredQuestionIds.has(q._id))
-        .slice(0, maxQuestions);
+      const unansweredQuestions = allQuestions.filter(
+        (q: any) => !answeredQuestionIds.has(q._id),
+      );
 
       console.log(
-        `🔥 DEBUG: Found ${unansweredQuestions.length} unanswered questions`,
+        `🔥 DEBUG: Found ${unansweredQuestions.length} unanswered questions from ${allQuestions.length} total questions`,
       );
       return unansweredQuestions;
     }
 
     case 'bookmarked': {
-      console.log(
-        `🔥 DEBUG: Getting bookmarked questions directly from userBookmarks`,
-      );
+      console.log(`🔥 DEBUG: Getting ALL bookmarked questions for user`);
+      // Get ALL bookmarked questions for this user (no limit)
       const bookmarks = await ctx.db
         .query('userBookmarks')
         .withIndex('by_user', (q: any) => q.eq('userId', userId))
-        .take(maxQuestions); // Take only what we need
+        .collect(); // Get all, not just a sample
 
       console.log(`🔥 DEBUG: Found ${bookmarks.length} bookmarked questions`);
 
@@ -191,6 +200,74 @@ async function getQuestionsByMode(
         `🔥 DEBUG: Retrieved ${validQuestions.length} valid bookmarked questions`,
       );
       return validQuestions;
+    }
+
+    case 'all': {
+      // For 'all' mode, we can optimize by directly querying with taxonomical filters
+      const hasTaxonomicalFilters =
+        (selectedThemes && selectedThemes.length > 0) ||
+        (selectedSubthemes && selectedSubthemes.length > 0) ||
+        (selectedGroups && selectedGroups.length > 0);
+
+      if (hasTaxonomicalFilters) {
+        console.log(`🔥 DEBUG: Getting questions with taxonomical filters`);
+        const allQuestions: Doc<'questions'>[] = [];
+        const processedQuestionIds = new Set<Id<'questions'>>();
+
+        // Helper to add questions without duplicates
+        const addUniqueQuestions = (questions: Doc<'questions'>[]) => {
+          questions.forEach(q => {
+            if (!processedQuestionIds.has(q._id)) {
+              processedQuestionIds.add(q._id);
+              allQuestions.push(q);
+            }
+          });
+        };
+
+        // Priority order: groups > subthemes > themes
+        if (selectedGroups && selectedGroups.length > 0) {
+          console.log(`🔥 DEBUG: Querying questions by groups`);
+          for (const groupId of selectedGroups) {
+            const groupQuestions = await ctx.db
+              .query('questions')
+              .withIndex('by_group', (q: any) => q.eq('groupId', groupId))
+              .take(maxQuestions * 2);
+            addUniqueQuestions(groupQuestions);
+          }
+        }
+
+        if (selectedSubthemes && selectedSubthemes.length > 0) {
+          console.log(`🔥 DEBUG: Querying questions by subthemes`);
+          for (const subthemeId of selectedSubthemes) {
+            const subthemeQuestions = await ctx.db
+              .query('questions')
+              .withIndex('by_subtheme', (q: any) =>
+                q.eq('subthemeId', subthemeId),
+              )
+              .take(maxQuestions * 2);
+            addUniqueQuestions(subthemeQuestions);
+          }
+        }
+
+        if (selectedThemes && selectedThemes.length > 0) {
+          console.log(`🔥 DEBUG: Querying questions by themes`);
+          for (const themeId of selectedThemes) {
+            const themeQuestions = await ctx.db
+              .query('questions')
+              .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
+              .take(maxQuestions * 2);
+            addUniqueQuestions(themeQuestions);
+          }
+        }
+
+        console.log(
+          `🔥 DEBUG: Retrieved ${allQuestions.length} questions with taxonomical filters`,
+        );
+        return allQuestions;
+      } else {
+        console.log(`🔥 DEBUG: Getting all questions (no filters)`);
+        return await ctx.db.query('questions').take(maxQuestions * 2);
+      }
     }
 
     default: {
