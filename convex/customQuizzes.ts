@@ -203,67 +203,24 @@ async function getQuestionsByMode(
     }
 
     case 'all': {
-      // For 'all' mode, we can optimize by directly querying with taxonomical filters
+      // For 'all' mode, use proper hierarchical logic with direct database queries
       const hasTaxonomicalFilters =
         (selectedThemes && selectedThemes.length > 0) ||
         (selectedSubthemes && selectedSubthemes.length > 0) ||
         (selectedGroups && selectedGroups.length > 0);
 
       if (hasTaxonomicalFilters) {
-        console.log(`🔥 DEBUG: Getting questions with taxonomical filters`);
-        const allQuestions: Doc<'questions'>[] = [];
-        const processedQuestionIds = new Set<Id<'questions'>>();
-
-        // Helper to add questions without duplicates
-        const addUniqueQuestions = (questions: Doc<'questions'>[]) => {
-          questions.forEach(q => {
-            if (!processedQuestionIds.has(q._id)) {
-              processedQuestionIds.add(q._id);
-              allQuestions.push(q);
-            }
-          });
-        };
-
-        // Priority order: groups > subthemes > themes
-        if (selectedGroups && selectedGroups.length > 0) {
-          console.log(`🔥 DEBUG: Querying questions by groups`);
-          for (const groupId of selectedGroups) {
-            const groupQuestions = await ctx.db
-              .query('questions')
-              .withIndex('by_group', (q: any) => q.eq('groupId', groupId))
-              .take(maxQuestions * 2);
-            addUniqueQuestions(groupQuestions);
-          }
-        }
-
-        if (selectedSubthemes && selectedSubthemes.length > 0) {
-          console.log(`🔥 DEBUG: Querying questions by subthemes`);
-          for (const subthemeId of selectedSubthemes) {
-            const subthemeQuestions = await ctx.db
-              .query('questions')
-              .withIndex('by_subtheme', (q: any) =>
-                q.eq('subthemeId', subthemeId),
-              )
-              .take(maxQuestions * 2);
-            addUniqueQuestions(subthemeQuestions);
-          }
-        }
-
-        if (selectedThemes && selectedThemes.length > 0) {
-          console.log(`🔥 DEBUG: Querying questions by themes`);
-          for (const themeId of selectedThemes) {
-            const themeQuestions = await ctx.db
-              .query('questions')
-              .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
-              .take(maxQuestions * 2);
-            addUniqueQuestions(themeQuestions);
-          }
-        }
-
         console.log(
-          `🔥 DEBUG: Retrieved ${allQuestions.length} questions with taxonomical filters`,
+          `🔥 DEBUG: Getting questions with hierarchical taxonomical filtering`,
         );
-        return allQuestions;
+        // Use the proper hierarchical collection logic
+        return await collectQuestionsWithHierarchyRestriction(
+          ctx,
+          selectedThemes || [],
+          selectedSubthemes || [],
+          selectedGroups || [],
+          maxQuestions,
+        );
       } else {
         console.log(`🔥 DEBUG: Getting all questions (no filters)`);
         return await ctx.db.query('questions').take(maxQuestions * 2);
@@ -288,136 +245,31 @@ async function applyTaxonomicalFilters(
   selectedGroups: Id<'groups'>[],
 ): Promise<Doc<'questions'>[]> {
   console.log(
-    `🔧 DEBUG: applyTaxonomicalFilters - filtering ${baseQuestions.length} questions`,
+    `🔧 DEBUG: Applying taxonomical filters to ${baseQuestions.length} questions from user-specific mode`,
   );
 
-  // Create a Set of valid question IDs based on taxonomical criteria
   const validQuestionIds = new Set<Id<'questions'>>();
 
-  // If themes are selected but no subthemes/groups, include ALL questions from those themes
-  if (
-    selectedThemes.length > 0 &&
-    selectedSubthemes.length === 0 &&
-    selectedGroups.length === 0
-  ) {
-    console.log(`🔧 DEBUG: Theme-only filtering`);
-    baseQuestions.forEach(q => {
-      if (selectedThemes.includes(q.themeId)) {
-        validQuestionIds.add(q._id);
-      }
-    });
-  } else {
-    // Complex hierarchical filtering
-    console.log(
-      `🔧 DEBUG: Hierarchical filtering with themes/subthemes/groups`,
-    );
+  // Simple "OR" logic: Include questions that match ANY of the selected taxonomies.
+  baseQuestions.forEach(question => {
+    let shouldInclude = false;
 
-    // Build hierarchy maps
-    const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
-    const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
-
-    // Batch fetch all subthemes for selected subthemes
-    const subthemes = await Promise.all(
-      selectedSubthemes.map(id => ctx.db.get(id)),
-    );
-    subthemes.forEach((subtheme, idx) => {
-      if (subtheme?.themeId) {
-        subthemeToTheme.set(selectedSubthemes[idx], subtheme.themeId);
-      }
-    });
-
-    // Batch fetch all groups
-    const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
-    const subthemeIdsToFetch = new Set<Id<'subthemes'>>();
-    groups.forEach((group, idx) => {
-      if (group?.subthemeId) {
-        groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
-        if (!subthemeToTheme.has(group.subthemeId)) {
-          subthemeIdsToFetch.add(group.subthemeId);
-        }
-      }
-    });
-
-    // Batch fetch remaining subthemes for groups (avoid duplicates)
-    if (subthemeIdsToFetch.size > 0) {
-      const additionalSubthemes = await Promise.all(
-        [...subthemeIdsToFetch].map(id => ctx.db.get(id)),
-      );
-      additionalSubthemes.forEach((subtheme, idx) => {
-        if (subtheme?.themeId) {
-          const subthemeId = [...subthemeIdsToFetch][idx];
-          subthemeToTheme.set(subthemeId, subtheme.themeId);
-        }
-      });
+    // We don't need to check for empty arrays, as .includes() will just return false.
+    if (question.groupId && selectedGroups.includes(question.groupId)) {
+      shouldInclude = true;
+    } else if (
+      question.subthemeId &&
+      selectedSubthemes.includes(question.subthemeId)
+    ) {
+      shouldInclude = true;
+    } else if (selectedThemes.includes(question.themeId)) {
+      shouldInclude = true;
     }
 
-    // Process each question in the base pool
-    for (const question of baseQuestions) {
-      let shouldInclude = false;
-
-      // Check if question matches selected groups (highest priority)
-      if (
-        selectedGroups.length > 0 &&
-        question.groupId &&
-        selectedGroups.includes(question.groupId)
-      ) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by group ${question.groupId}`,
-        );
-      }
-      // Check if question matches selected subthemes
-      else if (
-        selectedSubthemes.length > 0 &&
-        question.subthemeId &&
-        selectedSubthemes.includes(question.subthemeId)
-      ) {
-        // Only include if no groups are selected for this subtheme, or the question has no group
-        const groupsInThisSubtheme = selectedGroups.filter(groupId => {
-          const subthemeId = groupToSubtheme.get(groupId);
-          return subthemeId === question.subthemeId;
-        });
-
-        if (groupsInThisSubtheme.length === 0 || !question.groupId) {
-          shouldInclude = true;
-          console.log(
-            `🔧 DEBUG: Question ${question._id} included by subtheme ${question.subthemeId}`,
-          );
-        }
-      }
-      // Check if question matches selected themes
-      else if (
-        selectedThemes.length > 0 &&
-        selectedThemes.includes(question.themeId)
-      ) {
-        // Only include if no subthemes/groups are selected for this theme, or the question has no subtheme/group
-        const subthemesInThisTheme = selectedSubthemes.filter(subthemeId => {
-          return subthemeToTheme.get(subthemeId) === question.themeId;
-        });
-        const groupsInThisTheme = selectedGroups.filter(groupId => {
-          const subthemeId = groupToSubtheme.get(groupId);
-          return (
-            subthemeId && subthemeToTheme.get(subthemeId) === question.themeId
-          );
-        });
-
-        if (
-          (subthemesInThisTheme.length === 0 &&
-            groupsInThisTheme.length === 0) ||
-          (!question.subthemeId && !question.groupId)
-        ) {
-          shouldInclude = true;
-          console.log(
-            `🔧 DEBUG: Question ${question._id} included by theme ${question.themeId}`,
-          );
-        }
-      }
-
-      if (shouldInclude) {
-        validQuestionIds.add(question._id);
-      }
+    if (shouldInclude) {
+      validQuestionIds.add(question._id);
     }
-  }
+  });
 
   const filteredQuestions = baseQuestions.filter(q =>
     validQuestionIds.has(q._id),
