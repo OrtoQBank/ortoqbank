@@ -245,101 +245,25 @@ async function applyTaxonomicalFilters(
   selectedGroups: Id<'groups'>[],
 ): Promise<Doc<'questions'>[]> {
   console.log(
-    `🔧 DEBUG: applyTaxonomicalFilters - filtering ${baseQuestions.length} questions`,
+    `🔧 DEBUG: Applying taxonomical filters to ${baseQuestions.length} questions from user-specific mode`,
   );
 
-  // Create a Set of valid question IDs based on taxonomical criteria
   const validQuestionIds = new Set<Id<'questions'>>();
 
-  // Simple filtering logic: check each question against the selected criteria
+  // Simple "OR" logic: Include questions that match ANY of the selected taxonomies.
   baseQuestions.forEach(question => {
     let shouldInclude = false;
 
-    // If only groups are selected, include questions that match any selected group
-    if (
-      selectedGroups.length > 0 &&
-      selectedSubthemes.length === 0 &&
-      selectedThemes.length === 0
+    // We don't need to check for empty arrays, as .includes() will just return false.
+    if (question.groupId && selectedGroups.includes(question.groupId)) {
+      shouldInclude = true;
+    } else if (
+      question.subthemeId &&
+      selectedSubthemes.includes(question.subthemeId)
     ) {
-      console.log(`🔧 DEBUG: Group-only filtering`);
-      if (question.groupId && selectedGroups.includes(question.groupId)) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by group ${question.groupId}`,
-        );
-      }
-    }
-    // If only subthemes are selected, include questions that match any selected subtheme
-    else if (
-      selectedSubthemes.length > 0 &&
-      selectedGroups.length === 0 &&
-      selectedThemes.length === 0
-    ) {
-      console.log(`🔧 DEBUG: Subtheme-only filtering`);
-      if (
-        question.subthemeId &&
-        selectedSubthemes.includes(question.subthemeId)
-      ) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by subtheme ${question.subthemeId}`,
-        );
-      }
-    }
-    // If only themes are selected, include questions that match any selected theme
-    else if (
-      selectedThemes.length > 0 &&
-      selectedSubthemes.length === 0 &&
-      selectedGroups.length === 0
-    ) {
-      console.log(`🔧 DEBUG: Theme-only filtering`);
-      if (selectedThemes.includes(question.themeId)) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by theme ${question.themeId}`,
-        );
-      }
-    }
-    // Mixed selection: include questions that match ANY of the selected criteria
-    else if (
-      selectedGroups.length > 0 ||
-      selectedSubthemes.length > 0 ||
-      selectedThemes.length > 0
-    ) {
-      console.log(`🔧 DEBUG: Mixed taxonomical filtering`);
-
-      // Check groups first (highest priority)
-      if (
-        selectedGroups.length > 0 &&
-        question.groupId &&
-        selectedGroups.includes(question.groupId)
-      ) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by group ${question.groupId}`,
-        );
-      }
-      // Check subthemes
-      else if (
-        selectedSubthemes.length > 0 &&
-        question.subthemeId &&
-        selectedSubthemes.includes(question.subthemeId)
-      ) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by subtheme ${question.subthemeId}`,
-        );
-      }
-      // Check themes
-      else if (
-        selectedThemes.length > 0 &&
-        selectedThemes.includes(question.themeId)
-      ) {
-        shouldInclude = true;
-        console.log(
-          `🔧 DEBUG: Question ${question._id} included by theme ${question.themeId}`,
-        );
-      }
+      shouldInclude = true;
+    } else if (selectedThemes.includes(question.themeId)) {
+      shouldInclude = true;
     }
 
     if (shouldInclude) {
