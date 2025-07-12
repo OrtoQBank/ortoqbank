@@ -524,26 +524,9 @@ async function applyHierarchicalTaxonomicalFilters(
     }
   }
 
-  let filteredQuestions = baseQuestions.filter(q =>
+  const filteredQuestions = baseQuestions.filter(q =>
     validQuestionIds.has(q._id),
   );
-
-  // SAFEGUARD: If groups are selected but we got too many questions,
-  // it means the group filtering failed. Apply direct group filtering as backup.
-  if (selectedGroups.length > 0 && filteredQuestions.length > 50) {
-    console.log(
-      `🔧 DEBUG: ⚠️  Group filtering seems to have failed (${filteredQuestions.length} questions returned)`,
-    );
-    console.log(`🔧 DEBUG: Applying direct group filtering as backup`);
-
-    filteredQuestions = baseQuestions.filter(
-      question => question.groupId && selectedGroups.includes(question.groupId),
-    );
-
-    console.log(
-      `🔧 DEBUG: After direct group filtering: ${filteredQuestions.length} questions`,
-    );
-  }
 
   console.log(`🔧 DEBUG: ===== FILTERING SUMMARY =====`);
   console.log(`🔧 DEBUG: Base questions: ${baseQuestions.length}`);
