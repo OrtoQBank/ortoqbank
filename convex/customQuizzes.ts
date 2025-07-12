@@ -63,6 +63,33 @@ async function collectQuestionsOptimized(
     );
   }
 
+  // Performance optimization: For user-specific modes with taxonomical filters,
+  // use the efficient approach (taxonomical filtering first) to avoid loading entire database
+  const hasFilters =
+    selectedThemes.length > 0 ||
+    selectedSubthemes.length > 0 ||
+    selectedGroups.length > 0;
+
+  if (
+    hasFilters &&
+    (questionMode === 'unanswered' ||
+      questionMode === 'incorrect' ||
+      questionMode === 'bookmarked')
+  ) {
+    console.log(
+      `🚀 DEBUG: Using efficient approach for ${questionMode} mode with taxonomical filters`,
+    );
+    return await collectQuestionsWithTaxonomyThenUserFilter(
+      ctx,
+      userId,
+      questionMode,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      maxQuestions,
+    );
+  }
+
   // For user-specific modes: Question mode first, then taxonomical filtering
   console.log(
     `🚀 DEBUG: STEP 1 - Applying question mode filter: ${questionMode}`,
@@ -107,6 +134,106 @@ async function collectQuestionsOptimized(
     `🚀 DEBUG: STEP 2 - Final filtered size: ${filteredQuestions.length}`,
   );
   return filteredQuestions;
+}
+
+/**
+ * Efficient approach: Apply taxonomical filtering first, then user mode filtering
+ * This avoids loading the entire database when there are many unanswered questions
+ */
+async function collectQuestionsWithTaxonomyThenUserFilter(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<'users'>,
+  questionMode: QuestionMode,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+): Promise<Doc<'questions'>[]> {
+  console.log(
+    `🚀 DEBUG: Using efficient approach: taxonomy first, then ${questionMode} filtering`,
+  );
+
+  // Step 1: Get taxonomically filtered questions (like 'all' mode)
+  const taxonomicallyFilteredQuestions =
+    await collectQuestionsWithHierarchyRestriction(
+      ctx,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      maxQuestions * 3, // Get more to account for filtering
+    );
+
+  console.log(
+    `🚀 DEBUG: After taxonomical filtering: ${taxonomicallyFilteredQuestions.length} questions`,
+  );
+
+  // Step 2: Apply user mode filtering to the smaller set
+  let finalQuestions: Doc<'questions'>[] = [];
+
+  switch (questionMode) {
+    case 'unanswered': {
+      // Get user's answered questions
+      const answeredStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .collect();
+
+      const answeredQuestionIds = new Set(
+        answeredStats.map((s: any) => s.questionId),
+      );
+
+      finalQuestions = taxonomicallyFilteredQuestions.filter(
+        (q: any) => !answeredQuestionIds.has(q._id),
+      );
+      break;
+    }
+
+    case 'incorrect': {
+      // Get user's incorrect questions
+      const incorrectStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user_incorrect', (q: any) =>
+          q.eq('userId', userId).eq('isIncorrect', true),
+        )
+        .collect();
+
+      const incorrectQuestionIds = new Set(
+        incorrectStats.map((s: any) => s.questionId),
+      );
+
+      finalQuestions = taxonomicallyFilteredQuestions.filter((q: any) =>
+        incorrectQuestionIds.has(q._id),
+      );
+      break;
+    }
+
+    case 'bookmarked': {
+      // Get user's bookmarked questions
+      const bookmarks = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', (q: any) => q.eq('userId', userId))
+        .collect();
+
+      const bookmarkedQuestionIds = new Set(
+        bookmarks.map((b: any) => b.questionId),
+      );
+
+      finalQuestions = taxonomicallyFilteredQuestions.filter((q: any) =>
+        bookmarkedQuestionIds.has(q._id),
+      );
+      break;
+    }
+
+    default: {
+      finalQuestions = taxonomicallyFilteredQuestions;
+      break;
+    }
+  }
+
+  console.log(
+    `🚀 DEBUG: After ${questionMode} filtering: ${finalQuestions.length} questions`,
+  );
+  return finalQuestions;
 }
 
 /**
@@ -212,6 +339,9 @@ async function applyHierarchicalTaxonomicalFilters(
   console.log(
     `🔧 DEBUG: Applying hierarchical taxonomical filters to ${baseQuestions.length} questions`,
   );
+  console.log(
+    `🔧 DEBUG: Filters - themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
+  );
 
   // Use the same hierarchical logic as collectQuestionsWithHierarchyRestriction
   // but apply it to the baseline pool instead of querying the database directly
@@ -234,10 +364,29 @@ async function applyHierarchicalTaxonomicalFilters(
   // Step 2: Batch fetch group-to-subtheme relationships
   const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
   if (selectedGroups.length > 0) {
+    console.log(
+      `🔧 DEBUG: Looking up ${selectedGroups.length} groups:`,
+      selectedGroups,
+    );
     const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
+    console.log(
+      `🔧 DEBUG: Found groups:`,
+      groups.map((g, idx) => ({
+        groupId: selectedGroups[idx],
+        exists: !!g,
+        subthemeId: g?.subthemeId,
+      })),
+    );
     groups.forEach((group, idx) => {
       if (group?.subthemeId) {
         groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
+        console.log(
+          `🔧 DEBUG: Mapped group ${selectedGroups[idx]} to subtheme ${group.subthemeId}`,
+        );
+      } else {
+        console.log(
+          `🔧 DEBUG: Group ${selectedGroups[idx]} has no subthemeId or doesn't exist`,
+        );
       }
     });
   }
@@ -251,29 +400,53 @@ async function applyHierarchicalTaxonomicalFilters(
         groupsBySubtheme.set(subthemeId, []);
       }
       groupsBySubtheme.get(subthemeId)!.push(groupId);
+      console.log(`🔧 DEBUG: Added group ${groupId} to subtheme ${subthemeId}`);
+    } else {
+      console.log(
+        `🔧 DEBUG: Group ${groupId} has no subthemeId mapping, skipping`,
+      );
     }
   }
+  console.log(
+    `🔧 DEBUG: Groups by subtheme:`,
+    Object.fromEntries(groupsBySubtheme),
+  );
 
   // Step 4: Process subthemes (they override groups and may override themes)
   const processedSubthemes = new Set<Id<'subthemes'>>();
   const hasAnyGroupsSelected = selectedGroups.length > 0;
+  console.log(`🔧 DEBUG: hasAnyGroupsSelected: ${hasAnyGroupsSelected}`);
 
   // If groups are selected but no subthemes are explicitly selected,
   // we need to process the implied subthemes that contain those groups
   const subthemesToProcess = new Set(selectedSubthemes);
+  console.log(`🔧 DEBUG: Initial subthemesToProcess (explicit):`, [
+    ...subthemesToProcess,
+  ]);
   if (hasAnyGroupsSelected) {
     for (const [subthemeId] of groupsBySubtheme) {
       subthemesToProcess.add(subthemeId);
+      console.log(`🔧 DEBUG: Added implied subtheme: ${subthemeId}`);
     }
   }
 
-  console.log(`🔧 DEBUG: Processing subthemes:`, [...subthemesToProcess]);
+  console.log(`🔧 DEBUG: Final subthemesToProcess:`, [...subthemesToProcess]);
 
   for (const subthemeId of subthemesToProcess) {
     const groupsForThisSubtheme = groupsBySubtheme.get(subthemeId);
     const isExplicitlySelected = selectedSubthemes.includes(subthemeId);
 
+    console.log(`🔧 DEBUG: Processing subtheme ${subthemeId}:`);
+    console.log(`🔧 DEBUG: - groupsForThisSubtheme:`, groupsForThisSubtheme);
+    console.log(`🔧 DEBUG: - isExplicitlySelected:`, isExplicitlySelected);
+
     if (groupsForThisSubtheme && groupsForThisSubtheme.length > 0) {
+      console.log(
+        `🔧 DEBUG: Filtering ${baseQuestions.length} base questions for groups:`,
+        groupsForThisSubtheme,
+      );
+      let matchedQuestions = 0;
+
       // Add questions from selected groups in this subtheme
       baseQuestions.forEach(question => {
         if (
@@ -281,8 +454,17 @@ async function applyHierarchicalTaxonomicalFilters(
           groupsForThisSubtheme.includes(question.groupId)
         ) {
           validQuestionIds.add(question._id);
+          matchedQuestions++;
         }
       });
+
+      console.log(
+        `🔧 DEBUG: Found ${matchedQuestions} questions matching the selected groups`,
+      );
+      console.log(
+        `🔧 DEBUG: Sample question groupIds from base pool:`,
+        baseQuestions.slice(0, 5).map(q => ({ id: q._id, groupId: q.groupId })),
+      );
 
       // Only add subtheme non-group questions if the subtheme was explicitly selected
       if (isExplicitlySelected) {
@@ -296,7 +478,9 @@ async function applyHierarchicalTaxonomicalFilters(
         });
       }
     } else {
-      // This subtheme has no groups selected
+      // This subtheme has no groups selected in our mapping
+      // If groups are selected globally, DO NOT add any questions from this subtheme
+      // unless the subtheme was explicitly selected
       if (hasAnyGroupsSelected) {
         if (isExplicitlySelected) {
           // Add questions from this subtheme that don't belong to any group
@@ -309,8 +493,10 @@ async function applyHierarchicalTaxonomicalFilters(
             }
           });
         }
+        // If groups are selected but this subtheme wasn't explicitly selected,
+        // DO NOT add any questions from this subtheme to avoid the bug
       } else {
-        // Add all questions from this subtheme
+        // Add all questions from this subtheme ONLY if no groups are selected anywhere
         baseQuestions.forEach(question => {
           if (question.subthemeId === subthemeId) {
             validQuestionIds.add(question._id);
@@ -341,9 +527,27 @@ async function applyHierarchicalTaxonomicalFilters(
   const filteredQuestions = baseQuestions.filter(q =>
     validQuestionIds.has(q._id),
   );
+
+  console.log(`🔧 DEBUG: ===== FILTERING SUMMARY =====`);
+  console.log(`🔧 DEBUG: Base questions: ${baseQuestions.length}`);
   console.log(
-    `🔧 DEBUG: Filtered from ${baseQuestions.length} to ${filteredQuestions.length} questions`,
+    `🔧 DEBUG: Valid question IDs collected: ${validQuestionIds.size}`,
   );
+  console.log(
+    `🔧 DEBUG: Final filtered questions: ${filteredQuestions.length}`,
+  );
+  if (
+    filteredQuestions.length === 0 &&
+    baseQuestions.length > 0 &&
+    selectedGroups.length > 0
+  ) {
+    console.log(`🔧 DEBUG: ⚠️  NO QUESTIONS MATCHED! This likely means:`);
+    console.log(`🔧 DEBUG: - The selected group(s) don't exist, OR`);
+    console.log(`🔧 DEBUG: - The group(s) have no subthemeId, OR`);
+    console.log(
+      `🔧 DEBUG: - None of the base questions belong to the selected group(s)`,
+    );
+  }
 
   return filteredQuestions;
 }
