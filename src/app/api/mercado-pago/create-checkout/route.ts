@@ -16,11 +16,6 @@ const COUPON_CONFIG = {
       value: 10,
       description: '10% de desconto',
     },
-    DESCONTO20: {
-      type: 'percentage',
-      value: 20,
-      description: '20% de desconto',
-    },
     SAVE50: { type: 'fixed', value: 50, description: 'R$ 50 de desconto' },
     ESTUDANTE: {
       type: 'percentage',
