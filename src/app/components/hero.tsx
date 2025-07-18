@@ -16,7 +16,7 @@ export default function HeroSection() {
         <div className="mx-auto max-w-7xl">
           <div className="grid items-center justify-center gap-4 lg:grid-cols-12">
             <div className="flex flex-col justify-center space-y-4 lg:col-span-4">
-              <h1 className="text-center text-3xl font-bold text-blue-600 sm:text-4xl md:text-start md:text-4xl lg:text-5xl">
+              <h1 className="text-center text-3xl font-bold text-[#2096f4] sm:text-4xl md:text-start md:text-4xl lg:text-5xl">
                 A melhor preparação para o seu TEOT 2026
               </h1>
               <ul className="space-y-4 text-base text-gray-700 sm:text-lg md:text-start">
@@ -27,7 +27,7 @@ export default function HeroSection() {
                   'Feedback detalhado de acordo com cada matéria',
                 ].map(text => (
                   <li key={text} className="flex items-center gap-3">
-                    <CircleCheckIcon className="h-6 w-6 flex-shrink-0 text-blue-600" />
+                    <CircleCheckIcon className="h-6 w-6 flex-shrink-0 text-[#2096f4]" />
                     <span className="flex-1">{text}</span>
                   </li>
                 ))}

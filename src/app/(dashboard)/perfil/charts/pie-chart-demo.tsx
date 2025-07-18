@@ -22,7 +22,7 @@ export function PieChartDemo({
 }: PieChartDemoProps) {
   // Now focus on correct vs incorrect answers
   const data = [
-    { name: 'Corretas', value: correctCount, color: '#22c55e' }, // Green
+    { name: 'Corretas', value: correctCount, color: '#22c55b' }, // Green
     { name: 'Incorretas', value: incorrectCount, color: '#ef4444' }, // Red
   ];
 

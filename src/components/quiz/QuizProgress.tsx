@@ -93,20 +93,25 @@ export default function QuizProgress({
             const isNavigable = !isExamMode && questionIndex <= maxAllowedIndex;
 
             // Determine button color based on answer status
-            let buttonColorClass = '';
+            let buttonColorClass =
+              currentIndex === questionIndex
+                ? 'ring-2 ring-offset-1 ring-blue-500 bg-blue-100'
+                : 'bg-gray-100';
 
-            if (currentIndex === questionIndex) {
-              buttonColorClass = 'bg-blue-500 text-white';
-            } else if (mode === 'study' && answerFeedback[questionIndex]) {
-              buttonColorClass = answerFeedback[questionIndex]?.isCorrect
-                ? 'bg-green-500 text-white'
-                : 'bg-red-500 text-white';
-            } else if (mode === 'exam' && answerFeedback[questionIndex]) {
-              buttonColorClass = 'bg-gray-300 text-gray-800';
-            } else if (isNavigable) {
-              buttonColorClass = 'bg-gray-100 text-gray-700 hover:bg-gray-200';
-            } else {
-              buttonColorClass = 'bg-gray-100 text-gray-400'; // Disabled look
+            if (answerFeedback[questionIndex]) {
+              buttonColorClass =
+                currentIndex === questionIndex
+                  ? 'ring-2 ring-offset-1 ring-blue-500 ' +
+                    (answerFeedback[questionIndex]?.isCorrect
+                      ? 'bg-green-100'
+                      : 'bg-red-100')
+                  : answerFeedback[questionIndex]?.isCorrect
+                    ? 'bg-green-100 text-green-800'
+                    : 'bg-red-100 text-red-800';
+            } else if (currentIndex !== questionIndex) {
+              buttonColorClass = isNavigable
+                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                : 'bg-gray-100 text-gray-400'; // Disabled look
             }
 
             return (

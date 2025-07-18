@@ -4,6 +4,7 @@ import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { useState } from 'react';
 import {
   Cell,
+  LabelList,
   Legend,
   Pie,
   PieChart,
@@ -15,7 +16,9 @@ import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { api } from '../../../../convex/_generated/api';
+import { ProgressOverTimeChart } from './charts/progress-over-time-chart';
 import { ThemeBarChart } from './charts/theme-bar-chart';
+import { ThemeRadarChart } from './charts/theme-radar-chart';
 import { StatCard } from './components/stat-card';
 
 // Helper function to safely extract values regardless of stats type
@@ -98,12 +101,12 @@ export default function ProfilePage() {
         {
           name: 'Respondidas',
           value: totalAnswered,
-          color: '#3b82f6', // blue
+          color: '#22c55e', // green
         },
         {
           name: 'Não Respondidas',
           value: totalQuestions - totalAnswered,
-          color: '#f97316', // orange
+          color: '#ef4444', // red
         },
       ]
     : [];
@@ -114,12 +117,12 @@ export default function ProfilePage() {
         {
           name: 'Corretas',
           value: totalCorrect,
-          color: '#3b82f6', // blue
+          color: '#22c55e', // green
         },
         {
           name: 'Incorretas',
           value: totalIncorrect,
-          color: '#f97316', // orange
+          color: '#ef4444', // red
         },
       ]
     : [];
@@ -144,20 +147,20 @@ export default function ProfilePage() {
             title="Questões Respondidas"
             value={totalAnswered}
             description={`${completionPercentage}% do banco de questões (${totalQuestions} total)`}
-            color="white"
+            color="sky"
           />
           <StatCard
             title="Taxa de Acerto"
             value={`${correctPercentage}%`}
             description={`${totalCorrect} respostas corretas`}
-            color="white"
+            color="green"
           />
 
           <StatCard
             title="Questões Salvas"
             value={totalBookmarked}
             description="Questões marcadas para revisão"
-            color="white"
+            color="purple"
           />
         </div>
       ) : undefined}
@@ -188,15 +191,27 @@ export default function ProfilePage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      outerRadius={60}
+                      outerRadius={75}
                       dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name}: ${(percent * 100).toFixed(0)}%`
-                      }
                     >
                       {progressData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
+                      <LabelList
+                        dataKey="value"
+                        position="inside"
+                        className="fill-white font-semibold"
+                        stroke="none"
+                        fontSize={14}
+                        formatter={(value: number, entry: any) => {
+                          const total = progressData.reduce(
+                            (sum, item) => sum + item.value,
+                            0,
+                          );
+                          const percent = ((value / total) * 100).toFixed(0);
+                          return `${percent}%`;
+                        }}
+                      />
                     </Pie>
                     <Tooltip formatter={value => [`${value} questões`, '']} />
                     <Legend />
@@ -221,15 +236,22 @@ export default function ProfilePage() {
                       cx="50%"
                       cy="50%"
                       labelLine={false}
-                      outerRadius={60}
+                      outerRadius={75}
                       dataKey="value"
-                      label={({ name, percent }) =>
-                        `${name}: ${(percent * 100).toFixed(0)}%`
-                      }
                     >
                       {correctnessData.map((entry, index) => (
                         <Cell key={`cell-${index}`} fill={entry.color} />
                       ))}
+                      <LabelList
+                        dataKey="value"
+                        position="inside"
+                        className="fill-white font-semibold"
+                        stroke="none"
+                        fontSize={14}
+                        formatter={(value: number, entry: any) => {
+                          return `${value}`;
+                        }}
+                      />
                     </Pie>
                     <Tooltip formatter={value => [`${value} questões`, '']} />
                     <Legend />
@@ -241,6 +263,13 @@ export default function ProfilePage() {
         ) : undefined}
       </div>
 
+      {/* Progress over time chart */}
+      {!isLoadingSummary && values && (
+        <div className="mb-6">
+          <ProgressOverTimeChart />
+        </div>
+      )}
+
       {/* Theme stats - only show after user requests them */}
       {!isLoadingSummary && !showThemeStats && values && (
         <div className="mt-6 flex justify-center">
@@ -251,17 +280,38 @@ export default function ProfilePage() {
       )}
 
       {showThemeStats && (
-        <div className="mb-6">
+        <div
+          className={`mb-6 grid grid-cols-1 gap-4 ${
+            process.env.NODE_ENV === 'development' ? 'md:grid-cols-2' : ''
+          }`}
+        >
           {isLoadingThemeData ? (
-            <Skeleton className="h-[300px] w-full rounded-lg" />
+            <>
+              <Skeleton className="h-[300px] w-full rounded-lg" />
+              {process.env.NODE_ENV === 'development' && (
+                <Skeleton className="h-[300px] w-full rounded-lg" />
+              )}
+            </>
           ) : hasThemeData && fullStats ? (
-            <ThemeBarChart themeStats={fullStats.byTheme} />
+            <>
+              <ThemeBarChart themeStats={fullStats.byTheme} />
+              {process.env.NODE_ENV === 'development' && <ThemeRadarChart />}
+            </>
           ) : (
-            <div className="bg-card text-card-foreground flex h-[220px] items-center justify-center rounded-lg border p-3 shadow-sm">
-              <p className="text-muted-foreground text-sm">
-                Não há dados suficientes sobre temas para exibir o gráfico.
-              </p>
-            </div>
+            <>
+              <div className="bg-card text-card-foreground flex h-[300px] items-center justify-center rounded-lg border p-3 shadow-sm">
+                <p className="text-muted-foreground text-sm">
+                  Não há dados suficientes sobre temas para exibir o gráfico.
+                </p>
+              </div>
+              {process.env.NODE_ENV === 'development' && (
+                <div className="bg-card text-card-foreground flex h-[300px] items-center justify-center rounded-lg border p-3 shadow-sm">
+                  <p className="text-muted-foreground text-sm">
+                    Não há dados suficientes sobre temas para exibir o radar.
+                  </p>
+                </div>
+              )}
+            </>
           )}
         </div>
       )}

@@ -5,6 +5,7 @@ import {
   BarChart,
   CartesianGrid,
   Cell,
+  LabelList,
   Legend,
   ResponsiveContainer,
   Tooltip,
@@ -23,12 +24,12 @@ interface ThemeStats {
 // Helper function to determine fill color
 const getFillColor = (percentage: number): string => {
   if (percentage > 70) {
-    return '#1d4ed8'; // Dark blue
+    return '#22c55e'; // green-500
   }
   if (percentage > 40) {
-    return '#3b82f6'; // Medium blue
+    return '#3b82f6'; // blue-500 (medium performance)
   }
-  return '#93c5fd'; // Light blue
+  return '#ef4444'; // red-500
 };
 
 interface ThemeBarChartProps {
@@ -41,6 +42,7 @@ export function ThemeBarChart({ themeStats = [] }: ThemeBarChartProps) {
     name: theme.themeName,
     percentage: theme.percentage,
     total: theme.total,
+    fill: getFillColor(theme.percentage),
   }));
 
   return (
@@ -51,11 +53,11 @@ export function ThemeBarChart({ themeStats = [] }: ThemeBarChartProps) {
           Porcentagem de acerto por tema
         </p>
       </div>
-      <div className="h-[220px]">
+      <div className="h-[300px]">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
             data={data}
-            margin={{ top: 10, right: 10, left: 10, bottom: 20 }}
+            margin={{ top: 20, right: 15, left: 15, bottom: 10 }}
           >
             <CartesianGrid strokeDasharray="3 3" vertical={false} />
             <XAxis
@@ -78,18 +80,32 @@ export function ThemeBarChart({ themeStats = [] }: ThemeBarChartProps) {
               }}
               labelFormatter={label => `Tema: ${label}`}
             />
-            <Legend />
-            <Bar
-              name="Taxa de Acerto"
-              dataKey="percentage"
-              radius={[4, 4, 0, 0]}
-            >
+            <Legend
+              payload={[
+                { value: 'Excelente (>70%)', type: 'rect', color: '#22c55e' },
+                { value: 'Bom (40-70%)', type: 'rect', color: '#3b82f6' },
+                {
+                  value: 'Precisa Melhorar (<40%)',
+                  type: 'rect',
+                  color: '#ef4444',
+                },
+              ]}
+            />
+            <Bar dataKey="percentage" radius={[4, 4, 0, 0]}>
               {data.map((entry, index) => (
                 <Cell
                   key={`cell-${index}`}
                   fill={getFillColor(entry.percentage)}
                 />
               ))}
+              <LabelList
+                dataKey="percentage"
+                position="top"
+                className="fill-gray-700 font-semibold"
+                fontSize={10}
+                offset={5}
+                formatter={(value: number) => `${value.toFixed(1)}%`}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>

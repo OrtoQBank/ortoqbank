@@ -214,17 +214,20 @@ export const _updateQuestionStats = internalMutation({
         await ctx.db.patch(existingStat._id, {
           isIncorrect: false,
           answeredAt: now,
+          // Keep the original firstAnsweredAt - don't update it
         });
       } else if (args.isCorrect) {
         // Just update the timestamp
         await ctx.db.patch(existingStat._id, {
           answeredAt: now,
+          // Keep the original firstAnsweredAt - don't update it
         });
       } else {
         // If the answer is incorrect, mark it as incorrect
         await ctx.db.patch(existingStat._id, {
           isIncorrect: true,
           answeredAt: now,
+          // Keep the original firstAnsweredAt - don't update it
         });
       }
 
@@ -237,6 +240,7 @@ export const _updateQuestionStats = internalMutation({
         hasAnswered: true,
         isIncorrect: !args.isCorrect,
         answeredAt: now,
+        // _creationTime will automatically track when this was first answered
       });
 
       return { success: true, action: 'created' };
@@ -335,5 +339,91 @@ export const getQuestionStatus = query({
       isBookmarked: !!bookmark,
       answeredAt: stat ? stat.answeredAt : undefined,
     };
+  },
+});
+
+// Helper function to get week string from timestamp following ISO 8601 standards
+function getWeekString(timestamp: number): string {
+  const date = new Date(timestamp);
+
+  // Adjust to nearest Thursday (ISO week date system)
+  // Thursday is day 4 in ISO (Monday=1, Tuesday=2, ..., Sunday=7)
+  const dayOfWeek = (date.getDay() + 6) % 7; // Convert Sunday=0 to Sunday=6, Monday=0
+  const nearestThursday = new Date(date.getTime());
+  nearestThursday.setDate(date.getDate() - dayOfWeek + 3); // Adjust to Thursday
+
+  // Get the year of the Thursday (this determines the ISO year)
+  const isoYear = nearestThursday.getFullYear();
+
+  // Find the first Thursday of the ISO year (which is in the first ISO week)
+  const jan4 = new Date(isoYear, 0, 4);
+  const firstThursday = new Date(jan4.getTime());
+  const jan4DayOfWeek = (jan4.getDay() + 6) % 7; // Convert to Monday=0 system
+  firstThursday.setDate(4 - jan4DayOfWeek + 3); // Adjust to first Thursday
+
+  // Calculate week number
+  const weekNumber =
+    Math.floor(
+      (nearestThursday.getTime() - firstThursday.getTime()) /
+        (7 * 24 * 60 * 60 * 1000),
+    ) + 1;
+
+  return `${isoYear}-W${weekNumber.toString().padStart(2, '0')}`;
+}
+
+/**
+ * Get user progress over time grouped by weeks
+ */
+export const getUserWeeklyProgress = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      week: v.string(),
+      totalAnswered: v.number(),
+      weeklyAnswered: v.number(),
+    }),
+  ),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Get all answered questions with timestamps
+    const answeredStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user_answered', q =>
+        q.eq('userId', userId._id).eq('hasAnswered', true),
+      )
+      .collect();
+
+    if (answeredStats.length === 0) {
+      return [];
+    }
+
+    // Group by week and calculate cumulative totals
+    const weeklyData = new Map<string, number>();
+
+    // Count questions answered per week (using creation time - when first answered)
+    for (const stat of answeredStats) {
+      // Use _creationTime which tracks when the question was first answered
+      const weekString = getWeekString(stat._creationTime);
+      weeklyData.set(weekString, (weeklyData.get(weekString) || 0) + 1);
+    }
+
+    // Convert to array and sort by week
+    const sortedWeeks = [...weeklyData.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12); // Get last 12 weeks
+
+    // Calculate cumulative totals
+    let cumulativeTotal = 0;
+    const result = sortedWeeks.map(([week, weeklyCount]) => {
+      cumulativeTotal += weeklyCount;
+      return {
+        week,
+        totalAnswered: cumulativeTotal,
+        weeklyAnswered: weeklyCount,
+      };
+    });
+
+    return result;
   },
 });

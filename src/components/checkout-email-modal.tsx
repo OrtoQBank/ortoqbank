@@ -212,8 +212,10 @@ export default function CheckoutEmailModal({
             {/* Coupon Section */}
             <div className="rounded-lg border bg-blue-50 p-4">
               <div className="mb-3 flex items-center gap-2">
-                <TagIcon className="h-5 w-5 text-blue-600" />
-                <h3 className="font-medium text-blue-900">Cupom de Desconto</h3>
+                <TagIcon className="h-5 w-5 text-[#2096f4]" />
+                <h3 className="font-medium text-[#2096f4]">
+                  Cupom de Desconto
+                </h3>
               </div>
               <div className="flex gap-2">
                 <FormField

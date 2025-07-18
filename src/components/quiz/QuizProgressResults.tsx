@@ -19,21 +19,26 @@ export default function QuizProgressResults({
   // State to track the first visible question index
   const [startIndex, setStartIndex] = useState(0);
 
-  // Ensure current question is always visible
+  // Ensure current question is visible initially, but not after user manually navigates
   useEffect(() => {
-    if (currentIndex < startIndex) {
-      // Current question is before visible range
-      setStartIndex(currentIndex);
-    } else if (currentIndex >= startIndex + visibleCount) {
-      // Current question is after visible range
-      setStartIndex(currentIndex - visibleCount + 1);
+    // Only auto-adjust when the current question changes, not when startIndex changes
+    if (
+      currentIndex < startIndex ||
+      currentIndex >= startIndex + visibleCount
+    ) {
+      setStartIndex(
+        Math.max(0, Math.min(currentIndex, totalQuestions - visibleCount)),
+      );
     }
-  }, [currentIndex, startIndex, visibleCount]);
+  }, [currentIndex, totalQuestions, visibleCount]);
 
   // Make sure start index is valid
   const validStartIndex = Math.max(
     0,
-    Math.min(startIndex, totalQuestions - visibleCount),
+    Math.min(
+      startIndex,
+      totalQuestions - Math.min(totalQuestions, visibleCount),
+    ),
   );
 
   // Check if we need navigation arrows
