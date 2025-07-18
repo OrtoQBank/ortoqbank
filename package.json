@@ -78,6 +78,7 @@
     "cmdk": "^1.1.1",
     "convex": "^1.25.4",
     "convex-helpers": "^0.1.99",
+    "date-fns": "^4.1.0",
     "framer-motion": "^12.23.6",
     "html-react-parser": "^5.2.6",
     "imagekit": "^6.0.0",

@@ -1,24 +1,21 @@
+import { format,setISOWeek, setYear, startOfISOWeek } from 'date-fns';
+
 export function formatWeekString(
   weekString: string,
-  format: 'short' | 'long' = 'short',
+  formatType: 'short' | 'long' = 'short',
 ): string {
+  // Parse ISO week string (YYYY-Www format)
   const [year, weekStr] = weekString.split('-W');
+  const yearNum = Number.parseInt(year);
   const weekNum = Number.parseInt(weekStr);
 
-  const startOfYear = new Date(Number.parseInt(year), 0, 1);
-  const daysToAdd = (weekNum - 1) * 7 - startOfYear.getDay();
-  const weekStartDate = new Date(
-    startOfYear.getTime() + daysToAdd * 24 * 60 * 60 * 1000,
-  );
+  // Create a date for the given ISO week
+  // Start with January 1st of the year, then set the ISO week
+  let date = setYear(new Date(), yearNum);
+  date = setISOWeek(date, weekNum);
 
-  const day = weekStartDate.getDate().toString().padStart(2, '0');
-  const month = (weekStartDate.getMonth() + 1).toString().padStart(2, '0');
+  // Get the start of the ISO week (Monday)
+  const weekStartDate = startOfISOWeek(date);
 
-  if (format === 'short') {
-    const yearShort = weekStartDate.getFullYear().toString().slice(-2);
-    return `${day}/${month}/${yearShort}`;
-  } else {
-    const yearFull = weekStartDate.getFullYear();
-    return `Semana de ${day}/${month}/${yearFull}`;
-  }
+  return formatType === 'short' ? format(weekStartDate, 'dd/MM/yy') : `Semana de ${format(weekStartDate, 'dd/MM/yyyy')}`;
 }
