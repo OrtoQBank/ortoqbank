@@ -387,7 +387,7 @@ export function QuizCard({
 
           <div className="mt-4 space-y-4">
             <div className="flex items-start space-x-3">
-              <RotateCcw className="mt-0.5 h-5 w-5 flex-shrink-0 text-blue-600" />
+              <RotateCcw className="mt-0.5 h-5 w-5 flex-shrink-0 text-[#2096f4]" />
               <div>
                 <h4 className="text-sm font-medium">Iniciar novo teste</h4>
                 <p className="text-muted-foreground text-sm">
