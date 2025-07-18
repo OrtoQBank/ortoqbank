@@ -342,16 +342,33 @@ export const getQuestionStatus = query({
   },
 });
 
-// Helper function to get week string from timestamp
+// Helper function to get week string from timestamp following ISO 8601 standards
 function getWeekString(timestamp: number): string {
   const date = new Date(timestamp);
-  const year = date.getFullYear();
-  const startOfYear = new Date(year, 0, 1);
-  const days = Math.floor(
-    (date.getTime() - startOfYear.getTime()) / (24 * 60 * 60 * 1000),
-  );
-  const weekNumber = Math.ceil((days + startOfYear.getDay() + 1) / 7);
-  return `${year}-W${weekNumber.toString().padStart(2, '0')}`;
+
+  // Adjust to nearest Thursday (ISO week date system)
+  // Thursday is day 4 in ISO (Monday=1, Tuesday=2, ..., Sunday=7)
+  const dayOfWeek = (date.getDay() + 6) % 7; // Convert Sunday=0 to Sunday=6, Monday=0
+  const nearestThursday = new Date(date.getTime());
+  nearestThursday.setDate(date.getDate() - dayOfWeek + 3); // Adjust to Thursday
+
+  // Get the year of the Thursday (this determines the ISO year)
+  const isoYear = nearestThursday.getFullYear();
+
+  // Find the first Thursday of the ISO year (which is in the first ISO week)
+  const jan4 = new Date(isoYear, 0, 4);
+  const firstThursday = new Date(jan4.getTime());
+  const jan4DayOfWeek = (jan4.getDay() + 6) % 7; // Convert to Monday=0 system
+  firstThursday.setDate(4 - jan4DayOfWeek + 3); // Adjust to first Thursday
+
+  // Calculate week number
+  const weekNumber =
+    Math.floor(
+      (nearestThursday.getTime() - firstThursday.getTime()) /
+        (7 * 24 * 60 * 60 * 1000),
+    ) + 1;
+
+  return `${isoYear}-W${weekNumber.toString().padStart(2, '0')}`;
 }
 
 /**

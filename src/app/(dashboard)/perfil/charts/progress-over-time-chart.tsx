@@ -13,6 +13,7 @@ import {
 } from 'recharts';
 
 import { Skeleton } from '@/components/ui/skeleton';
+import { formatWeekString } from '@/utils/dateUtils';
 
 import { api } from '../../../../../convex/_generated/api';
 
@@ -74,30 +75,7 @@ export function ProgressOverTimeChart() {
             <XAxis
               dataKey="week"
               tick={{ fontSize: 11 }}
-              tickFormatter={value => {
-                // Format week labels (e.g., "2024-W01" -> "07/03/25")
-                const [year, weekStr] = value.split('-W');
-                const weekNum = Number.parseInt(weekStr);
-
-                // Calculate the date of the first day of that week
-                const startOfYear = new Date(Number.parseInt(year), 0, 1);
-                const daysToAdd = (weekNum - 1) * 7 - startOfYear.getDay();
-                const weekStartDate = new Date(
-                  startOfYear.getTime() + daysToAdd * 24 * 60 * 60 * 1000,
-                );
-
-                // Format as DD/MM/YY
-                const day = weekStartDate.getDate().toString().padStart(2, '0');
-                const month = (weekStartDate.getMonth() + 1)
-                  .toString()
-                  .padStart(2, '0');
-                const yearShort = weekStartDate
-                  .getFullYear()
-                  .toString()
-                  .slice(-2);
-
-                return `${day}/${month}/${yearShort}`;
-              }}
+              tickFormatter={value => formatWeekString(value, 'short')}
             />
             <YAxis
               tick={{ fontSize: 11 }}
@@ -108,26 +86,7 @@ export function ProgressOverTimeChart() {
                 `${value} questões`,
                 name === 'totalAnswered' ? 'Total Acumulado' : 'Esta Semana',
               ]}
-              labelFormatter={label => {
-                const [year, weekStr] = label.split('-W');
-                const weekNum = Number.parseInt(weekStr);
-
-                // Calculate the date of the first day of that week
-                const startOfYear = new Date(Number.parseInt(year), 0, 1);
-                const daysToAdd = (weekNum - 1) * 7 - startOfYear.getDay();
-                const weekStartDate = new Date(
-                  startOfYear.getTime() + daysToAdd * 24 * 60 * 60 * 1000,
-                );
-
-                // Format as DD/MM/YYYY
-                const day = weekStartDate.getDate().toString().padStart(2, '0');
-                const month = (weekStartDate.getMonth() + 1)
-                  .toString()
-                  .padStart(2, '0');
-                const yearFull = weekStartDate.getFullYear();
-
-                return `Semana de ${day}/${month}/${yearFull}`;
-              }}
+              labelFormatter={label => formatWeekString(label, 'long')}
             />
             <Area
               type="monotone"
