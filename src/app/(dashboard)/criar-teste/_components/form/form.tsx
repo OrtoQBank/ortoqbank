@@ -308,13 +308,6 @@ export default function TestForm() {
           error={form.formState.errors.numQuestions?.message}
         />
 
-        {/* Available Questions Info disabled for now as inefficient */}
-        {/*    <AvailableQuestionsInfo
-            isLoading={isCountLoading}
-            count={availableQuestionCount}
-            requestedCount={numQuestions}
-          /> */}
-
         <Button
           type="submit"
           className="w-full bg-blue-500 hover:bg-blue-600"

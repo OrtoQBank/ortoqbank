@@ -166,7 +166,7 @@ export default defineSchema({
     .index('by_user_incorrect', ['userId', 'isIncorrect'])
     .index('by_user_answered', ['userId', 'hasAnswered']),
 
-  taxonomy: defineTable({
+  droptaxonomy: defineTable({
     name: v.string(),
     type: v.union(
       v.literal('theme'),
@@ -182,7 +182,7 @@ export default defineSchema({
     .index('by_type', ['type'])
     .index('by_name', ['name']),
 
-  taxonomyHierarchy: defineTable({
+  droptaxonomyHierarchy: defineTable({
     themes: v.array(
       v.object({
         _id: v.id('taxonomy'),
