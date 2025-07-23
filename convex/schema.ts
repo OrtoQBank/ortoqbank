@@ -75,12 +75,6 @@ export default defineSchema({
     .index('by_theme', ['themeId'])
     .index('by_subtheme', ['subthemeId'])
     .index('by_group', ['groupId'])
-    .index('by_taxonomy', ['TaxThemeId', 'TaxSubthemeId', 'TaxGroupId'])
-    .index('by_taxonomy_theme', ['TaxThemeId'])
-    .index('by_taxonomy_subtheme', ['TaxSubthemeId'])
-    .index('by_taxonomy_group', ['TaxGroupId'])
-    .index('by_taxonomyPathIds', ['taxonomyPathIds'])
-    .index('by_group_randomKey', ['groupId', 'randomKey'])
     .searchIndex('search_by_title', { searchField: 'title' })
     .searchIndex('search_by_code', { searchField: 'questionCode' }),
 
@@ -105,9 +99,6 @@ export default defineSchema({
     .index('by_theme', ['themeId'])
     .index('by_subtheme', ['subthemeId'])
     .index('by_group', ['groupId'])
-    .index('by_taxonomy_theme', ['TaxThemeId'])
-    .index('by_taxonomy_subtheme', ['TaxSubthemeId'])
-    .index('by_taxonomy_group', ['TaxGroupId'])
     .searchIndex('search_by_name', { searchField: 'name' }),
 
   customQuizzes: defineTable({
@@ -175,7 +166,7 @@ export default defineSchema({
     .index('by_user_incorrect', ['userId', 'isIncorrect'])
     .index('by_user_answered', ['userId', 'hasAnswered']),
 
-  taxonomy: defineTable({
+  droptaxonomy: defineTable({
     name: v.string(),
     type: v.union(
       v.literal('theme'),
@@ -191,7 +182,7 @@ export default defineSchema({
     .index('by_type', ['type'])
     .index('by_name', ['name']),
 
-  taxonomyHierarchy: defineTable({
+  droptaxonomyHierarchy: defineTable({
     themes: v.array(
       v.object({
         _id: v.id('taxonomy'),
