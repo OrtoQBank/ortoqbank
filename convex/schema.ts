@@ -153,4 +153,26 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_user_incorrect', ['userId', 'isIncorrect'])
     .index('by_user_answered', ['userId', 'hasAnswered']),
+
+  questionCounts: defineTable({
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+    questionCount: v.number(),
+  }).index('byThemeSubGroup', ['themeId', 'subthemeId', 'groupId']),
+
+  userAggregates: defineTable({
+    userId: v.id('users'),
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+    answeredCount: v.number(),
+    incorrectCount: v.number(),
+    bookmarkCount: v.number(),
+  }).index('byUserThemeSubGroup', [
+    'userId',
+    'themeId',
+    'subthemeId',
+    'groupId',
+  ]),
 });
