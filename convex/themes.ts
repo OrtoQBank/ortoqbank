@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 
+import { internal } from './_generated/api';
 import { mutation, query } from './_generated/server';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
@@ -124,6 +125,17 @@ export const remove = mutation({
 
     // Check if theme can be safely deleted
     await canSafelyDelete(context, id, 'themes', dependencies);
+
+    // Clean up question counts before deleting the theme
+    try {
+      await context.runMutation(
+        internal.questions.cleanupQuestionCountsForTheme,
+        { themeId: id },
+      );
+    } catch (error) {
+      console.warn(`Error cleaning up question counts for theme ${id}:`, error);
+      // Continue with deletion even if cleanup fails
+    }
 
     // If we get here, it means the theme can be safely deleted
     await context.db.delete(id);

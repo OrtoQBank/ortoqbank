@@ -46,7 +46,6 @@ export default defineSchema({
     normalizedTitle: v.string(),
     questionCode: v.optional(v.string()),
     orderedNumberId: v.optional(v.number()),
-    randomKey: v.optional(v.string()),
     questionText: v.optional(v.any()),
     explanationText: v.optional(v.any()),
     questionTextString: v.string(),
@@ -54,20 +53,9 @@ export default defineSchema({
     contentMigrated: v.optional(v.boolean()),
     alternatives: v.array(v.string()),
     correctAlternativeIndex: v.number(),
-
-    // Legacy fields
     themeId: v.id('themes'),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
-
-    // Taxonomy fields
-    TaxThemeId: v.optional(v.id('taxonomy')),
-    TaxSubthemeId: v.optional(v.id('taxonomy')),
-    TaxGroupId: v.optional(v.id('taxonomy')),
-    TaxThemeName: v.optional(v.string()),
-    TaxSubthemeName: v.optional(v.string()),
-    TaxGroupName: v.optional(v.string()),
-    taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     authorId: v.optional(v.id('users')),
     isPublic: v.optional(v.boolean()),
   })
@@ -166,48 +154,25 @@ export default defineSchema({
     .index('by_user_incorrect', ['userId', 'isIncorrect'])
     .index('by_user_answered', ['userId', 'hasAnswered']),
 
-  droptaxonomy: defineTable({
-    name: v.string(),
-    type: v.union(
-      v.literal('theme'),
-      v.literal('subtheme'),
-      v.literal('group'),
-    ),
-    parentId: v.optional(v.id('taxonomy')),
-    pathIds: v.optional(v.array(v.id('taxonomy'))),
-    pathNames: v.optional(v.array(v.string())),
-    prefix: v.optional(v.string()),
-  })
-    .index('by_parent', ['parentId'])
-    .index('by_type', ['type'])
-    .index('by_name', ['name']),
+  questionCounts: defineTable({
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+    questionCount: v.number(),
+  }).index('byThemeSubGroup', ['themeId', 'subthemeId', 'groupId']),
 
-  droptaxonomyHierarchy: defineTable({
-    themes: v.array(
-      v.object({
-        _id: v.id('taxonomy'),
-        type: v.literal('theme'),
-        parentId: v.optional(v.id('taxonomy')),
-        name: v.string(),
-        children: v.array(
-          v.object({
-            _id: v.id('taxonomy'),
-            type: v.literal('subtheme'),
-            parentId: v.id('taxonomy'),
-            name: v.string(),
-            children: v.array(
-              v.object({
-                _id: v.id('taxonomy'),
-                type: v.literal('group'),
-                parentId: v.id('taxonomy'),
-                name: v.string(),
-              }),
-            ),
-          }),
-        ),
-      }),
-    ),
-    lastUpdated: v.number(),
-    version: v.number(),
-  }).index('by_version', ['version']),
+  userAggregates: defineTable({
+    userId: v.id('users'),
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+    answeredCount: v.number(),
+    incorrectCount: v.number(),
+    bookmarkCount: v.number(),
+  }).index('byUserThemeSubGroup', [
+    'userId',
+    'themeId',
+    'subthemeId',
+    'groupId',
+  ]),
 });
