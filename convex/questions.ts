@@ -1330,3 +1330,119 @@ export const startBatchedBackfill = internalAction({
     };
   },
 });
+
+// ---------- Public Client Functions ----------
+
+/**
+ * Public mutation to trigger simple backfill from client
+ */
+export const triggerSimpleBackfill = mutation({
+  args: {},
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async ctx => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+
+    try {
+      // Schedule the backfill action
+      await ctx.scheduler.runAfter(
+        0,
+        internal.questions.backfillQuestionCounts,
+        {},
+      );
+
+      return {
+        success: true,
+        message:
+          'Simple backfill started successfully. Check logs for progress.',
+      };
+    } catch (error) {
+      console.error('Error starting simple backfill:', error);
+      return {
+        success: false,
+        message: `Failed to start backfill: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      };
+    }
+  },
+});
+
+/**
+ * Public mutation to trigger batched backfill from client
+ */
+export const triggerBatchedBackfill = mutation({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+    batchSize: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) throw new Error('Not authenticated');
+
+    try {
+      const batchSize = args.batchSize || 500;
+
+      // Schedule the batched backfill action
+      await ctx.scheduler.runAfter(0, internal.questions.startBatchedBackfill, {
+        batchSize,
+      });
+
+      return {
+        success: true,
+        message: `Batched backfill started with batch size ${batchSize}. Check logs for progress.`,
+        batchSize,
+      };
+    } catch (error) {
+      console.error('Error starting batched backfill:', error);
+      return {
+        success: false,
+        message: `Failed to start backfill: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        batchSize: undefined,
+      };
+    }
+  },
+});
+
+/**
+ * Public query to get basic backfill status/info
+ */
+export const getBackfillInfo = query({
+  args: {},
+  returns: v.object({
+    totalQuestions: v.number(),
+    questionsWithTaxonomy: v.number(),
+    countEntries: v.number(),
+    coverage: v.number(),
+  }),
+  handler: async ctx => {
+    // Get total questions
+    const allQuestions = await ctx.db.query('questions').collect();
+    const totalQuestions = allQuestions.length;
+
+    // Count questions with complete taxonomy
+    const questionsWithTaxonomy = allQuestions.filter(
+      q => q.themeId && q.subthemeId && q.groupId,
+    ).length;
+
+    // Get count entries
+    const countEntries = await ctx.db.query('questionCounts').collect();
+    const totalCountEntries = countEntries.length;
+
+    // Calculate coverage
+    const coverage =
+      totalQuestions > 0 ? (questionsWithTaxonomy / totalQuestions) * 100 : 0;
+
+    return {
+      totalQuestions,
+      questionsWithTaxonomy,
+      countEntries: totalCountEntries,
+      coverage: Math.round(coverage * 100) / 100, // Round to 2 decimal places
+    };
+  },
+});
