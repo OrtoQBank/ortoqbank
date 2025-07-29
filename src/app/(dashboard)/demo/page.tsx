@@ -353,7 +353,7 @@ export default function DemoPage() {
                                     / {count.groupName}
                                   </span>
                                 </div>
-                                <Badge variant="secondary" size="sm">
+                                <Badge variant="secondary">
                                   {count.questionCount}
                                 </Badge>
                               </div>
