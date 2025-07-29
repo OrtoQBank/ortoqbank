@@ -40,6 +40,8 @@ export default function DemoPage() {
   const [isSimpleBackfillRunning, setIsSimpleBackfillRunning] = useState(false);
   const [isBatchedBackfillRunning, setIsBatchedBackfillRunning] =
     useState(false);
+  const [isTaxonomyCleanupRunning, setIsTaxonomyCleanupRunning] =
+    useState(false);
 
   const { toast } = useToast();
 
@@ -49,6 +51,7 @@ export default function DemoPage() {
     questionMode: 'all',
   });
   const backfillInfo = useQuery(api.questions.getBackfillInfo);
+  const oldTaxonomyFields = useQuery(api.questions.checkOldTaxonomyFields);
 
   // Get themes for the theme breakdown
   const themes = useQuery(api.themes.list);
@@ -59,6 +62,9 @@ export default function DemoPage() {
   );
   const triggerBatchedBackfill = useMutation(
     api.questions.triggerBatchedBackfill,
+  );
+  const triggerTaxonomyCleanup = useMutation(
+    api.questions.triggerTaxonomyCleanup,
   );
 
   const handleRefresh = async () => {
@@ -118,6 +124,33 @@ export default function DemoPage() {
       });
     } finally {
       setIsBatchedBackfillRunning(false);
+    }
+  };
+
+  const handleTaxonomyCleanup = async () => {
+    setIsTaxonomyCleanupRunning(true);
+    try {
+      const result = await triggerTaxonomyCleanup({ batchSize: 50 });
+      if (result.success) {
+        toast({
+          title: 'Taxonomy Cleanup Started',
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: 'Cleanup Failed',
+          description: result.message,
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to start taxonomy cleanup',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsTaxonomyCleanupRunning(false);
     }
   };
 

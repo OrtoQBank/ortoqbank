@@ -504,7 +504,7 @@ describe('CustomQuizzes Functions', () => {
           ...orthopedicQuestionIds.slice(0, 3),
           ...cardiologyQuestionIds.slice(0, 2),
         ];
-        quiz.questions.forEach(q => {
+        quiz.questions.forEach((q: any) => {
           expect(incorrectQuestionIds).toContain(q?._id);
         });
       }
@@ -532,7 +532,7 @@ describe('CustomQuizzes Functions', () => {
         });
 
         // All questions should be orthopedic and incorrect
-        quiz.questions.forEach(q => {
+        quiz.questions.forEach((q: any) => {
           expect(orthopedicQuestionIds.slice(0, 3)).toContain(q?._id);
         });
       }
