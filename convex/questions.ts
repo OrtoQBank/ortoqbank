@@ -7,6 +7,7 @@ import {
   // Keep these for defining the actual mutations/queries
   internalAction,
   internalMutation,
+  internalQuery,
   mutation,
   query,
 } from './_generated/server';
@@ -15,6 +16,152 @@ import {
   _updateQuestionStatsOnDelete,
   _updateQuestionStatsOnInsert,
 } from './questionStats';
+
+// ---------- Helper Functions for Question Count Management ----------
+
+/**
+ * Updates the questionCounts table when a question is created
+ */
+async function _updateQuestionCountOnInsert(
+  ctx: GenericMutationCtx<DataModel>,
+  questionDoc: Doc<'questions'>,
+) {
+  const { themeId, subthemeId, groupId } = questionDoc;
+
+  // We need all three values to create a count entry
+  if (!themeId || !subthemeId || !groupId) {
+    console.warn(
+      `Question ${questionDoc._id} missing required taxonomy fields for count tracking`,
+    );
+    return;
+  }
+
+  // Check if an entry already exists for this combination
+  const existingCount = await ctx.db
+    .query('questionCounts')
+    .withIndex('byThemeSubGroup', q =>
+      q
+        .eq('themeId', themeId)
+        .eq('subthemeId', subthemeId)
+        .eq('groupId', groupId),
+    )
+    .unique();
+
+  if (existingCount) {
+    // Increment existing count
+    await ctx.db.patch(existingCount._id, {
+      questionCount: existingCount.questionCount + 1,
+    });
+    console.log(
+      `Incremented question count for theme/subtheme/group: ${existingCount.questionCount + 1}`,
+    );
+  } else {
+    // Create new count entry
+    await ctx.db.insert('questionCounts', {
+      themeId,
+      subthemeId,
+      groupId,
+      questionCount: 1,
+    });
+    console.log(`Created new question count entry for theme/subtheme/group`);
+  }
+}
+
+/**
+ * Updates the questionCounts table when a question is deleted
+ */
+async function _updateQuestionCountOnDelete(
+  ctx: GenericMutationCtx<DataModel>,
+  questionDoc: Doc<'questions'>,
+) {
+  const { themeId, subthemeId, groupId } = questionDoc;
+
+  // We need all three values to find the count entry
+  if (!themeId || !subthemeId || !groupId) {
+    console.warn(
+      `Question ${questionDoc._id} missing required taxonomy fields for count tracking`,
+    );
+    return;
+  }
+
+  // Find the existing count entry
+  const existingCount = await ctx.db
+    .query('questionCounts')
+    .withIndex('byThemeSubGroup', q =>
+      q
+        .eq('themeId', themeId)
+        .eq('subthemeId', subthemeId)
+        .eq('groupId', groupId),
+    )
+    .unique();
+
+  if (existingCount) {
+    if (existingCount.questionCount <= 1) {
+      // Delete the entry if count would become 0
+      await ctx.db.delete(existingCount._id);
+      console.log(
+        `Deleted question count entry for theme/subtheme/group (count was ${existingCount.questionCount})`,
+      );
+    } else {
+      // Decrement the count
+      await ctx.db.patch(existingCount._id, {
+        questionCount: existingCount.questionCount - 1,
+      });
+      console.log(
+        `Decremented question count for theme/subtheme/group: ${existingCount.questionCount - 1}`,
+      );
+    }
+  } else {
+    console.warn(
+      `No question count entry found for theme/subtheme/group when deleting question ${questionDoc._id}`,
+    );
+  }
+}
+
+/**
+ * Updates the questionCounts table when a question's taxonomy changes
+ */
+async function _updateQuestionCountOnUpdate(
+  ctx: GenericMutationCtx<DataModel>,
+  oldQuestionDoc: Doc<'questions'>,
+  newQuestionDoc: Doc<'questions'>,
+) {
+  const oldTaxonomy = {
+    themeId: oldQuestionDoc.themeId,
+    subthemeId: oldQuestionDoc.subthemeId,
+    groupId: oldQuestionDoc.groupId,
+  };
+
+  const newTaxonomy = {
+    themeId: newQuestionDoc.themeId,
+    subthemeId: newQuestionDoc.subthemeId,
+    groupId: newQuestionDoc.groupId,
+  };
+
+  // Check if any taxonomy field changed
+  const taxonomyChanged =
+    oldTaxonomy.themeId !== newTaxonomy.themeId ||
+    oldTaxonomy.subthemeId !== newTaxonomy.subthemeId ||
+    oldTaxonomy.groupId !== newTaxonomy.groupId;
+
+  if (!taxonomyChanged) {
+    return; // No update needed
+  }
+
+  console.log(
+    `Question ${newQuestionDoc._id} taxonomy changed, updating counts...`,
+  );
+
+  // Remove from old taxonomy (if it had complete taxonomy)
+  if (oldTaxonomy.themeId && oldTaxonomy.subthemeId && oldTaxonomy.groupId) {
+    await _updateQuestionCountOnDelete(ctx, oldQuestionDoc);
+  }
+
+  // Add to new taxonomy (if it has complete taxonomy)
+  if (newTaxonomy.themeId && newTaxonomy.subthemeId && newTaxonomy.groupId) {
+    await _updateQuestionCountOnInsert(ctx, newQuestionDoc);
+  }
+}
 
 // ---------- Helper Functions for Question CRUD + Aggregate Sync ----------
 
@@ -59,7 +206,21 @@ async function _internalInsertQuestion(
     aggregateErrors.push(`total count aggregate: ${error.message}`);
   }
 
-  // 3. Question stats aggregate (no-op but wrap it)
+  // 3. Question counts table update
+  try {
+    await _updateQuestionCountOnInsert(ctx, questionDoc);
+    console.log(
+      `Successfully updated question counts for question ${questionId}`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error updating question counts for question ${questionId}:`,
+      error,
+    );
+    aggregateErrors.push(`question counts: ${error.message}`);
+  }
+
+  // 4. Question stats aggregate (no-op but wrap it)
   try {
     await _updateQuestionStatsOnInsert(ctx, questionDoc);
     console.log(
@@ -99,21 +260,39 @@ async function _internalUpdateQuestion(
   await ctx.db.patch(id, updates);
   const newQuestionDoc = (await ctx.db.get(id))!;
 
-  // Only update aggregates if themeId changed (which affects question counts)
-  if (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) {
-    // Handle aggregate updates with error recovery
-    // If the question doesn't exist in the aggregate, insert it instead of replacing
-    try {
-      await questionCountByTheme.replace(ctx, oldQuestionDoc, newQuestionDoc);
-    } catch (error: any) {
-      if (error.code === 'DELETE_MISSING_KEY') {
-        console.warn(
-          `Question ${id} not found in theme aggregate, inserting instead`,
-        );
-        await questionCountByTheme.insert(ctx, newQuestionDoc);
-      } else {
-        throw error;
+  // Check if any taxonomy fields changed
+  const taxonomyChanged =
+    (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) ||
+    (updates.subthemeId !== undefined &&
+      updates.subthemeId !== oldQuestionDoc.subthemeId) ||
+    (updates.groupId !== undefined &&
+      updates.groupId !== oldQuestionDoc.groupId);
+
+  if (taxonomyChanged) {
+    console.log(`Question ${id} taxonomy changed, updating aggregates...`);
+
+    // Update theme-based aggregates if themeId changed
+    if (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) {
+      try {
+        await questionCountByTheme.replace(ctx, oldQuestionDoc, newQuestionDoc);
+      } catch (error: any) {
+        if (error.code === 'DELETE_MISSING_KEY') {
+          console.warn(
+            `Question ${id} not found in theme aggregate, inserting instead`,
+          );
+          await questionCountByTheme.insert(ctx, newQuestionDoc);
+        } else {
+          throw error;
+        }
       }
+    }
+
+    // Update question counts table
+    try {
+      await _updateQuestionCountOnUpdate(ctx, oldQuestionDoc, newQuestionDoc);
+      console.log(`Successfully updated question counts for question ${id}`);
+    } catch (error: any) {
+      console.warn(`Error updating question counts for question ${id}:`, error);
     }
 
     // totalQuestionCount doesn't change when moving between themes, so no update needed
@@ -167,7 +346,21 @@ async function _internalDeleteQuestion(
     // Continue regardless of error type for now
   }
 
-  // 3. Question stats aggregate (although it's a no-op, wrap it just in case)
+  // 3. Question counts table update
+  try {
+    await _updateQuestionCountOnDelete(ctx, questionDoc);
+    console.log(
+      `Successfully updated question counts for deleted question ${id}`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error updating question counts for deleted question ${id}:`,
+      error,
+    );
+    // Continue regardless of error
+  }
+
+  // 4. Question stats aggregate (although it's a no-op, wrap it just in case)
   try {
     await _updateQuestionStatsOnDelete(ctx, questionDoc);
     console.log(
@@ -632,5 +825,508 @@ export const searchByTitle = query({
     }
 
     return [];
+  },
+});
+
+// ---------- Question Count Utilities ----------
+
+/**
+ * Get question count for a specific theme/subtheme/group combination
+ */
+export const getQuestionCount = query({
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+  },
+  handler: async (ctx, args) => {
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', args.groupId),
+      )
+      .unique();
+
+    return countEntry?.questionCount || 0;
+  },
+});
+
+/**
+ * Get all question counts for a specific theme
+ */
+export const getQuestionCountsByTheme = query({
+  args: { themeId: v.id('themes') },
+  handler: async (ctx, args) => {
+    const counts = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q => q.eq('themeId', args.themeId))
+      .collect();
+
+    // Fetch subtheme and group names for better readability
+    const enrichedCounts = await Promise.all(
+      counts.map(async count => {
+        const [subtheme, group] = await Promise.all([
+          ctx.db.get(count.subthemeId),
+          ctx.db.get(count.groupId),
+        ]);
+
+        return {
+          ...count,
+          subthemeName: subtheme?.name,
+          groupName: group?.name,
+        };
+      }),
+    );
+
+    return enrichedCounts;
+  },
+});
+
+/**
+ * Get all question counts with full details
+ */
+export const getAllQuestionCounts = query({
+  handler: async ctx => {
+    const counts = await ctx.db.query('questionCounts').collect();
+
+    // Fetch theme, subtheme, and group names
+    const enrichedCounts = await Promise.all(
+      counts.map(async count => {
+        const [theme, subtheme, group] = await Promise.all([
+          ctx.db.get(count.themeId),
+          ctx.db.get(count.subthemeId),
+          ctx.db.get(count.groupId),
+        ]);
+
+        return {
+          ...count,
+          themeName: theme?.name,
+          subthemeName: subtheme?.name,
+          groupName: group?.name,
+        };
+      }),
+    );
+
+    return enrichedCounts;
+  },
+});
+
+// ---------- Cleanup Functions for Deleted Taxonomy ----------
+
+/**
+ * Clean up question counts when a theme is deleted
+ * This should be called when deleting a theme
+ */
+export const cleanupQuestionCountsForTheme = internalMutation({
+  args: { themeId: v.id('themes') },
+  returns: v.object({ deletedCount: v.number() }),
+  handler: async (ctx, args) => {
+    // Delete all question count entries for this theme
+    const countsToDelete = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q => q.eq('themeId', args.themeId))
+      .collect();
+
+    for (const count of countsToDelete) {
+      await ctx.db.delete(count._id);
+    }
+
+    console.log(
+      `Cleaned up ${countsToDelete.length} question count entries for deleted theme ${args.themeId}`,
+    );
+    return { deletedCount: countsToDelete.length };
+  },
+});
+
+/**
+ * Clean up question counts when a subtheme is deleted
+ * This should be called when deleting a subtheme
+ */
+export const cleanupQuestionCountsForSubtheme = internalMutation({
+  args: { subthemeId: v.id('subthemes') },
+  returns: v.object({ deletedCount: v.number() }),
+  handler: async (ctx, args) => {
+    // Find all question count entries for this subtheme
+    const allCounts = await ctx.db.query('questionCounts').collect();
+    const countsToDelete = allCounts.filter(
+      count => count.subthemeId === args.subthemeId,
+    );
+
+    for (const count of countsToDelete) {
+      await ctx.db.delete(count._id);
+    }
+
+    console.log(
+      `Cleaned up ${countsToDelete.length} question count entries for deleted subtheme ${args.subthemeId}`,
+    );
+    return { deletedCount: countsToDelete.length };
+  },
+});
+
+/**
+ * Clean up question counts when a group is deleted
+ * This should be called when deleting a group
+ */
+export const cleanupQuestionCountsForGroup = internalMutation({
+  args: { groupId: v.id('groups') },
+  returns: v.object({ deletedCount: v.number() }),
+  handler: async (ctx, args) => {
+    // Find all question count entries for this group
+    const allCounts = await ctx.db.query('questionCounts').collect();
+    const countsToDelete = allCounts.filter(
+      count => count.groupId === args.groupId,
+    );
+
+    for (const count of countsToDelete) {
+      await ctx.db.delete(count._id);
+    }
+
+    console.log(
+      `Cleaned up ${countsToDelete.length} question count entries for deleted group ${args.groupId}`,
+    );
+    return { deletedCount: countsToDelete.length };
+  },
+});
+
+// ---------- Backfill Functions ----------
+
+/**
+ * Backfill question counts from existing questions
+ * This should be run once to populate the questionCounts table
+ */
+export const backfillQuestionCounts = internalAction({
+  args: {},
+  returns: v.object({
+    totalQuestions: v.number(),
+    questionsWithFullTaxonomy: v.number(),
+    insertedCountEntries: v.number(),
+  }),
+  handler: async (
+    ctx,
+  ): Promise<{
+    totalQuestions: number;
+    questionsWithFullTaxonomy: number;
+    insertedCountEntries: number;
+  }> => {
+    console.log('Starting backfill for question counts...');
+
+    // Get all questions
+    const questions: Doc<'questions'>[] = await ctx.runQuery(
+      api.questions.listAll,
+    );
+
+    // Group questions by theme/subtheme/group combination
+    const countMap = new Map<string, number>();
+
+    for (const question of questions) {
+      // Only count questions that have all three taxonomy fields
+      if (question.themeId && question.subthemeId && question.groupId) {
+        const key = `${question.themeId}-${question.subthemeId}-${question.groupId}`;
+        countMap.set(key, (countMap.get(key) || 0) + 1);
+      }
+    }
+
+    // Insert the counts
+    let insertedCount = 0;
+    for (const [key, count] of countMap.entries()) {
+      const [themeId, subthemeId, groupId] = key.split('-');
+
+      try {
+        await ctx.runMutation(internal.questions.insertQuestionCount, {
+          themeId: themeId as Id<'themes'>,
+          subthemeId: subthemeId as Id<'subthemes'>,
+          groupId: groupId as Id<'groups'>,
+          questionCount: count,
+        });
+        insertedCount++;
+      } catch (error) {
+        console.error(`Failed to insert count for ${key}:`, error);
+      }
+    }
+
+    console.log(
+      `Successfully backfilled ${insertedCount} question count entries.`,
+    );
+    return {
+      totalQuestions: questions.length,
+      questionsWithFullTaxonomy: [...countMap.values()].reduce(
+        (a, b) => a + b,
+        0,
+      ),
+      insertedCountEntries: insertedCount,
+    };
+  },
+});
+
+/**
+ * Batched backfill function for large datasets
+ * Processes questions in chunks to avoid timeout issues
+ */
+export const backfillQuestionCountsBatched = internalAction({
+  args: {
+    batchSize: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+    totalProcessed: v.optional(v.number()),
+    totalInserted: v.optional(v.number()),
+  },
+  returns: v.object({
+    isComplete: v.boolean(),
+    totalProcessed: v.number(),
+    totalInserted: v.number(),
+    nextCursor: v.optional(v.string()),
+    currentBatchSize: v.number(),
+  }),
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    isComplete: boolean;
+    totalProcessed: number;
+    totalInserted: number;
+    nextCursor: string | undefined;
+    currentBatchSize: number;
+  }> => {
+    const batchSize: number = args.batchSize || 500; // Process 500 questions at a time
+    const totalProcessed: number = args.totalProcessed || 0;
+    const totalInserted: number = args.totalInserted || 0;
+
+    console.log(`Processing batch starting from position ${totalProcessed}...`);
+
+    // Get a batch of questions using pagination
+    const result: {
+      questions: Doc<'questions'>[];
+      isDone: boolean;
+      continueCursor?: string;
+    } = await ctx.runQuery(internal.questions.getQuestionsBatch, {
+      cursor: args.cursor || null,
+      batchSize,
+    });
+
+    if (result.questions.length === 0) {
+      console.log('Batched backfill completed - no more questions to process');
+      return {
+        isComplete: true,
+        totalProcessed,
+        totalInserted,
+        nextCursor: undefined,
+        currentBatchSize: 0,
+      };
+    }
+
+    // Group questions by theme/subtheme/group combination for this batch
+    const countMap = new Map<string, number>();
+
+    for (const question of result.questions) {
+      // Only count questions that have all three taxonomy fields
+      if (question.themeId && question.subthemeId && question.groupId) {
+        const key = `${question.themeId}-${question.subthemeId}-${question.groupId}`;
+        countMap.set(key, (countMap.get(key) || 0) + 1);
+      }
+    }
+
+    // Update counts for this batch
+    let insertedThisBatch = 0;
+    for (const [key, count] of countMap.entries()) {
+      const [themeId, subthemeId, groupId] = key.split('-');
+
+      try {
+        // Use upsert logic to handle existing entries
+        await ctx.runMutation(internal.questions.upsertQuestionCount, {
+          themeId: themeId as Id<'themes'>,
+          subthemeId: subthemeId as Id<'subthemes'>,
+          groupId: groupId as Id<'groups'>,
+          additionalCount: count,
+        });
+        insertedThisBatch++;
+      } catch (error) {
+        console.error(`Failed to upsert count for ${key}:`, error);
+      }
+    }
+
+    const newTotalProcessed = totalProcessed + result.questions.length;
+    const newTotalInserted = totalInserted + insertedThisBatch;
+
+    console.log(
+      `Processed batch: ${result.questions.length} questions, ${insertedThisBatch} count entries updated. ` +
+        `Total: ${newTotalProcessed} processed, ${newTotalInserted} entries updated.`,
+    );
+
+    // If we got fewer questions than the batch size, we're done
+    const isComplete: boolean =
+      result.questions.length < batchSize || result.isDone;
+
+    if (isComplete) {
+      console.log(
+        `Batched backfill completed! Total processed: ${newTotalProcessed}, Total inserted: ${newTotalInserted}`,
+      );
+    } else {
+      // Schedule the next batch
+      console.log('Scheduling next batch...');
+      await ctx.scheduler.runAfter(
+        0,
+        internal.questions.backfillQuestionCountsBatched,
+        {
+          batchSize,
+          cursor: result.continueCursor,
+          totalProcessed: newTotalProcessed,
+          totalInserted: newTotalInserted,
+        },
+      );
+    }
+
+    return {
+      isComplete,
+      totalProcessed: newTotalProcessed,
+      totalInserted: newTotalInserted,
+      nextCursor: result.continueCursor,
+      currentBatchSize: result.questions.length,
+    };
+  },
+});
+
+/**
+ * Helper query to get a batch of questions for backfill processing
+ */
+export const getQuestionsBatch = internalQuery({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    questions: v.array(v.any()), // Using v.any() for question documents
+    isDone: v.boolean(),
+    continueCursor: v.optional(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const paginationOpts = {
+      numItems: args.batchSize,
+      cursor: args.cursor,
+    };
+
+    const result = await ctx.db
+      .query('questions')
+      .order('asc') // Use ascending order for consistent pagination
+      .paginate(paginationOpts);
+
+    return {
+      questions: result.page,
+      isDone: result.isDone,
+      continueCursor: result.continueCursor,
+    };
+  },
+});
+
+/**
+ * Upsert function for batched backfill - adds to existing count or creates new entry
+ */
+export const upsertQuestionCount = internalMutation({
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+    additionalCount: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Check if entry already exists
+    const existing = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', args.groupId),
+      )
+      .unique();
+
+    // Add to existing count or create new entry
+    await (existing
+      ? ctx.db.patch(existing._id, {
+          questionCount: existing.questionCount + args.additionalCount,
+        })
+      : ctx.db.insert('questionCounts', {
+          themeId: args.themeId,
+          subthemeId: args.subthemeId,
+          groupId: args.groupId,
+          questionCount: args.additionalCount,
+        }));
+
+    return null;
+  },
+});
+
+/**
+ * Helper internal mutation for backfill (simple version)
+ */
+export const insertQuestionCount = internalMutation({
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+    questionCount: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Check if entry already exists
+    const existing = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', args.groupId),
+      )
+      .unique();
+
+    // Update existing entry or create new one
+    await (existing
+      ? ctx.db.patch(existing._id, { questionCount: args.questionCount })
+      : ctx.db.insert('questionCounts', {
+          themeId: args.themeId,
+          subthemeId: args.subthemeId,
+          groupId: args.groupId,
+          questionCount: args.questionCount,
+        }));
+
+    return null;
+  },
+});
+
+/**
+ * Start the batched backfill process
+ * This is the main function to call for large datasets
+ */
+export const startBatchedBackfill = internalAction({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    message: v.string(),
+    batchSize: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 500;
+
+    console.log(`Starting batched backfill with batch size: ${batchSize}`);
+
+    // Schedule the first batch
+    await ctx.scheduler.runAfter(
+      0,
+      internal.questions.backfillQuestionCountsBatched,
+      {
+        batchSize,
+        cursor: undefined,
+        totalProcessed: 0,
+        totalInserted: 0,
+      },
+    );
+
+    return {
+      message: `Batched backfill started with batch size ${batchSize}. Check logs for progress.`,
+      batchSize,
+    };
   },
 });
