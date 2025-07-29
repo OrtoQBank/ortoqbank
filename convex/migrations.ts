@@ -147,6 +147,7 @@ export const processBatch = internalMutation({
           if ('TaxThemeId' in doc) fieldsToRemove.push('TaxThemeId');
           if ('TaxSubthemeId' in doc) fieldsToRemove.push('TaxSubthemeId');
           if ('TaxGroupId' in doc) fieldsToRemove.push('TaxGroupId');
+          if ('taxonomyPathIds' in doc) fieldsToRemove.push('taxonomyPathIds');
 
           break;
         }

@@ -62,6 +62,7 @@ export default defineSchema({
     TaxThemeId: v.optional(v.string()),
     TaxSubthemeId: v.optional(v.string()),
     TaxGroupId: v.optional(v.string()),
+    taxonomyPathIds: v.optional(v.array(v.string())),
   })
     .index('by_title', ['normalizedTitle'])
     .index('by_theme', ['themeId'])
