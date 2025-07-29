@@ -72,15 +72,10 @@ export default defineSchema({
     category: v.union(v.literal('trilha'), v.literal('simulado')),
     questions: v.array(v.id('questions')),
     subcategory: v.optional(v.string()),
-    // Legacy taxonomy fields
+    // Legacy taxonomy fields (kept for existing data)
     themeId: v.optional(v.id('themes')),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
-    // New taxonomy fields
-    TaxThemeId: v.optional(v.id('taxonomy')),
-    TaxSubthemeId: v.optional(v.id('taxonomy')),
-    TaxGroupId: v.optional(v.id('taxonomy')),
-    taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
     isPublic: v.boolean(),
     displayOrder: v.optional(v.number()),
   })
@@ -101,16 +96,10 @@ export default defineSchema({
       v.literal('incorrect'),
       v.literal('bookmarked'),
     ),
-    // Legacy taxonomy fields
+    // Legacy taxonomy fields (kept for existing data)
     selectedThemes: v.optional(v.array(v.id('themes'))),
     selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
     selectedGroups: v.optional(v.array(v.id('groups'))),
-    // New taxonomy fields
-    selectedTaxThemes: v.optional(v.array(v.id('taxonomy'))),
-    selectedTaxSubthemes: v.optional(v.array(v.id('taxonomy'))),
-    selectedTaxGroups: v.optional(v.array(v.id('taxonomy'))),
-
-    taxonomyPathIds: v.optional(v.array(v.id('taxonomy'))),
   }).searchIndex('search_by_name', { searchField: 'name' }),
 
   quizSessions: defineTable({
