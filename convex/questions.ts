@@ -1,3 +1,5 @@
+/* eslint-disable unicorn/no-useless-undefined */
+
 import { GenericMutationCtx, paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -20,7 +22,54 @@ import {
 // ---------- Helper Functions for Question Count Management ----------
 
 /**
+ * Helper function to upsert a question count entry
+ */
+async function _upsertQuestionCount(
+  ctx: GenericMutationCtx<DataModel>,
+  criteria: {
+    themeId: Id<'themes'>;
+    subthemeId: Id<'subthemes'> | undefined;
+    groupId: Id<'groups'> | undefined;
+  },
+  increment: number,
+) {
+  // Find existing count entry using the full index
+  const existingCount = await ctx.db
+    .query('questionCounts')
+    .withIndex('byThemeSubGroup', q =>
+      q
+        .eq('themeId', criteria.themeId)
+        .eq('subthemeId', criteria.subthemeId)
+        .eq('groupId', criteria.groupId),
+    )
+    .unique();
+
+  if (existingCount) {
+    // Update existing count
+    const newCount = existingCount.questionCount + increment;
+
+    if (newCount <= 0) {
+      // Delete if count becomes 0 or negative
+      await ctx.db.delete(existingCount._id);
+    } else {
+      await ctx.db.patch(existingCount._id, {
+        questionCount: newCount,
+      });
+    }
+  } else if (increment > 0) {
+    // Create new count entry only if increment is positive
+    await ctx.db.insert('questionCounts', {
+      themeId: criteria.themeId,
+      subthemeId: criteria.subthemeId,
+      groupId: criteria.groupId,
+      questionCount: increment,
+    });
+  }
+}
+
+/**
  * Updates the questionCounts table when a question is created
+ * Maintains counts at theme, theme+subtheme, and theme+subtheme+group levels
  */
 async function _updateQuestionCountOnInsert(
   ctx: GenericMutationCtx<DataModel>,
@@ -28,42 +77,32 @@ async function _updateQuestionCountOnInsert(
 ) {
   const { themeId, subthemeId, groupId } = questionDoc;
 
-  // We need all three values to create a count entry
-  if (!themeId || !subthemeId || !groupId) {
+  if (!themeId) {
     console.warn(
-      `Question ${questionDoc._id} missing required taxonomy fields for count tracking`,
+      `Question ${questionDoc._id} missing themeId for count tracking`,
     );
     return;
   }
 
-  // Check if an entry already exists for this combination
-  const existingCount = await ctx.db
-    .query('questionCounts')
-    .withIndex('byThemeSubGroup', q =>
-      q
-        .eq('themeId', themeId)
-        .eq('subthemeId', subthemeId)
-        .eq('groupId', groupId),
-    )
-    .unique();
+  // 1. Update theme-level count
+  await _upsertQuestionCount(
+    ctx,
+    { themeId, subthemeId: undefined, groupId: undefined },
+    1,
+  );
 
-  if (existingCount) {
-    // Increment existing count
-    await ctx.db.patch(existingCount._id, {
-      questionCount: existingCount.questionCount + 1,
-    });
-    console.log(
-      `Incremented question count for theme/subtheme/group: ${existingCount.questionCount + 1}`,
+  // 2. Update theme+subtheme count (if subtheme exists)
+  if (subthemeId) {
+    await _upsertQuestionCount(
+      ctx,
+      { themeId, subthemeId, groupId: undefined },
+      1,
     );
-  } else {
-    // Create new count entry
-    await ctx.db.insert('questionCounts', {
-      themeId,
-      subthemeId,
-      groupId,
-      questionCount: 1,
-    });
-    console.log(`Created new question count entry for theme/subtheme/group`);
+  }
+
+  // 3. Update theme+subtheme+group count (if all three exist)
+  if (subthemeId && groupId) {
+    await _upsertQuestionCount(ctx, { themeId, subthemeId, groupId }, 1);
   }
 }
 
@@ -855,6 +894,75 @@ export const getQuestionCount = query({
 });
 
 /**
+ * Get stored question count for a specific theme (uses questionCounts table)
+ */
+export const getQuestionCountByTheme = query({
+  args: { themeId: v.id('themes') },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', undefined)
+          .eq('groupId', undefined),
+      )
+      .unique();
+
+    return countEntry?.questionCount || 0;
+  },
+});
+
+/**
+ * Get stored question count for a specific subtheme (uses questionCounts table)
+ */
+export const getQuestionCountBySubtheme = query({
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', undefined),
+      )
+      .unique();
+
+    return countEntry?.questionCount || 0;
+  },
+});
+
+/**
+ * Get stored question count for a specific group (uses questionCounts table)
+ */
+export const getQuestionCountByGroup = query({
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+  },
+  handler: async (ctx, args) => {
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', args.groupId),
+      )
+      .unique();
+
+    return countEntry?.questionCount || 0;
+  },
+});
+
+/**
  * Get all question counts for a specific theme
  */
 export const getQuestionCountsByTheme = query({
@@ -868,9 +976,10 @@ export const getQuestionCountsByTheme = query({
     // Fetch subtheme and group names for better readability
     const enrichedCounts = await Promise.all(
       counts.map(async count => {
-        const [subtheme, group] = await Promise.all([
-          ctx.db.get(count.subthemeId),
-          ctx.db.get(count.groupId),
+        const [theme, subtheme, group] = await Promise.all([
+          ctx.db.get(count.themeId),
+          count.subthemeId ? ctx.db.get(count.subthemeId) : null,
+          count.groupId ? ctx.db.get(count.groupId) : null,
         ]);
 
         return {
@@ -897,8 +1006,8 @@ export const getAllQuestionCounts = query({
       counts.map(async count => {
         const [theme, subtheme, group] = await Promise.all([
           ctx.db.get(count.themeId),
-          ctx.db.get(count.subthemeId),
-          ctx.db.get(count.groupId),
+          count.subthemeId ? ctx.db.get(count.subthemeId) : null,
+          count.groupId ? ctx.db.get(count.groupId) : null,
         ]);
 
         return {
@@ -911,6 +1020,71 @@ export const getAllQuestionCounts = query({
     );
 
     return enrichedCounts;
+  },
+});
+
+/**
+ * Get comprehensive question counts for all themes, subthemes, and groups
+ */
+export const getComprehensiveQuestionCounts = query({
+  handler: async ctx => {
+    // Get all questions
+    const allQuestions = await ctx.db.query('questions').collect();
+
+    // Get all themes, subthemes, and groups
+    const [allThemes, allSubthemes, allGroups] = await Promise.all([
+      ctx.db.query('themes').collect(),
+      ctx.db.query('subthemes').collect(),
+      ctx.db.query('groups').collect(),
+    ]);
+
+    // Count questions for each theme
+    const themeCounts = allThemes.map(theme => {
+      const questionCount = allQuestions.filter(
+        q => q.themeId === theme._id,
+      ).length;
+      return {
+        type: 'theme' as const,
+        id: theme._id,
+        name: theme.name,
+        questionCount,
+      };
+    });
+
+    // Count questions for each subtheme
+    const subthemeCounts = allSubthemes.map(subtheme => {
+      const questionCount = allQuestions.filter(
+        q => q.subthemeId === subtheme._id,
+      ).length;
+      return {
+        type: 'subtheme' as const,
+        id: subtheme._id,
+        name: subtheme.name,
+        themeId: subtheme.themeId,
+        questionCount,
+      };
+    });
+
+    // Count questions for each group
+    const groupCounts = allGroups.map(group => {
+      const questionCount = allQuestions.filter(
+        q => q.groupId === group._id,
+      ).length;
+      return {
+        type: 'group' as const,
+        id: group._id,
+        name: group.name,
+        subthemeId: group.subthemeId,
+        questionCount,
+      };
+    });
+
+    return {
+      themes: themeCounts,
+      subthemes: subthemeCounts,
+      groups: groupCounts,
+      totalQuestions: allQuestions.length,
+    };
   },
 });
 
@@ -1030,14 +1204,14 @@ export const backfillQuestionCounts = internalAction({
   args: {},
   returns: v.object({
     totalQuestions: v.number(),
-    questionsWithFullTaxonomy: v.number(),
+    questionsWithTheme: v.number(),
     insertedCountEntries: v.number(),
   }),
   handler: async (
     ctx,
   ): Promise<{
     totalQuestions: number;
-    questionsWithFullTaxonomy: number;
+    questionsWithTheme: number;
     insertedCountEntries: number;
   }> => {
     console.log('Starting backfill for question counts...');
@@ -1049,12 +1223,19 @@ export const backfillQuestionCounts = internalAction({
 
     // Group questions by theme/subtheme/group combination
     const countMap = new Map<string, number>();
+    let questionsWithTheme = 0;
 
     for (const question of questions) {
-      // Only count questions that have all three taxonomy fields
-      if (question.themeId && question.subthemeId && question.groupId) {
-        const key = `${question.themeId}-${question.subthemeId}-${question.groupId}`;
-        countMap.set(key, (countMap.get(key) || 0) + 1);
+      // Count all questions that have at least a themeId (required field)
+      if (question.themeId) {
+        questionsWithTheme++;
+
+        // Only create questionCounts entries for complete theme/subtheme/group combinations
+        // since the questionCounts table requires all three fields
+        if (question.subthemeId && question.groupId) {
+          const key = `${question.themeId}-${question.subthemeId}-${question.groupId}`;
+          countMap.set(key, (countMap.get(key) || 0) + 1);
+        }
       }
     }
 
@@ -1081,10 +1262,7 @@ export const backfillQuestionCounts = internalAction({
     );
     return {
       totalQuestions: questions.length,
-      questionsWithFullTaxonomy: [...countMap.values()].reduce(
-        (a, b) => a + b,
-        0,
-      ),
+      questionsWithTheme,
       insertedCountEntries: insertedCount,
     };
   },
@@ -1149,7 +1327,7 @@ export const backfillQuestionCountsBatched = internalAction({
     const countMap = new Map<string, number>();
 
     for (const question of result.questions) {
-      // Only count questions that have all three taxonomy fields
+      // Create count entries only for questions with complete theme/subtheme/group
       if (question.themeId && question.subthemeId && question.groupId) {
         const key = `${question.themeId}-${question.subthemeId}-${question.groupId}`;
         countMap.set(key, (countMap.get(key) || 0) + 1);
@@ -1445,7 +1623,7 @@ export const getBackfillInfo = query({
   args: {},
   returns: v.object({
     totalQuestions: v.number(),
-    questionsWithTaxonomy: v.number(),
+    questionsWithTheme: v.number(),
     countEntries: v.number(),
     coverage: v.number(),
   }),
@@ -1454,22 +1632,20 @@ export const getBackfillInfo = query({
     const allQuestions = await ctx.db.query('questions').collect();
     const totalQuestions = allQuestions.length;
 
-    // Count questions with complete taxonomy
-    const questionsWithTaxonomy = allQuestions.filter(
-      q => q.themeId && q.subthemeId && q.groupId,
-    ).length;
+    // Count questions with at least a theme (themeId is required)
+    const questionsWithTheme = allQuestions.filter(q => q.themeId).length;
 
     // Get count entries
     const countEntries = await ctx.db.query('questionCounts').collect();
     const totalCountEntries = countEntries.length;
 
-    // Calculate coverage
+    // Calculate coverage (percentage of questions that have theme classification)
     const coverage =
-      totalQuestions > 0 ? (questionsWithTaxonomy / totalQuestions) * 100 : 0;
+      totalQuestions > 0 ? (questionsWithTheme / totalQuestions) * 100 : 0;
 
     return {
       totalQuestions,
-      questionsWithTaxonomy,
+      questionsWithTheme,
       countEntries: totalCountEntries,
       coverage: Math.round(coverage * 100) / 100, // Round to 2 decimal places
     };

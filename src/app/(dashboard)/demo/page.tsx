@@ -33,14 +33,12 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
-import { api, internal } from '../../../../convex/_generated/api';
+import { api } from '../../../../convex/_generated/api';
 
 export default function DemoPage() {
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [isSimpleBackfillRunning, setIsSimpleBackfillRunning] = useState(false);
   const [isBatchedBackfillRunning, setIsBatchedBackfillRunning] =
-    useState(false);
-  const [isTaxonomyCleanupRunning, setIsTaxonomyCleanupRunning] =
     useState(false);
 
   const { toast } = useToast();
@@ -51,7 +49,6 @@ export default function DemoPage() {
     questionMode: 'all',
   });
   const backfillInfo = useQuery(api.questions.getBackfillInfo);
-  const oldTaxonomyFields = useQuery(api.questions.checkOldTaxonomyFields);
 
   // Get themes for the theme breakdown
   const themes = useQuery(api.themes.list);
@@ -62,9 +59,6 @@ export default function DemoPage() {
   );
   const triggerBatchedBackfill = useMutation(
     api.questions.triggerBatchedBackfill,
-  );
-  const triggerTaxonomyCleanup = useMutation(
-    api.questions.triggerTaxonomyCleanup,
   );
 
   const handleRefresh = async () => {
@@ -127,33 +121,6 @@ export default function DemoPage() {
     }
   };
 
-  const handleTaxonomyCleanup = async () => {
-    setIsTaxonomyCleanupRunning(true);
-    try {
-      const result = await triggerTaxonomyCleanup({ batchSize: 50 });
-      if (result.success) {
-        toast({
-          title: 'Taxonomy Cleanup Started',
-          description: result.message,
-        });
-      } else {
-        toast({
-          title: 'Cleanup Failed',
-          description: result.message,
-          variant: 'destructive',
-        });
-      }
-    } catch {
-      toast({
-        title: 'Error',
-        description: 'Failed to start taxonomy cleanup',
-        variant: 'destructive',
-      });
-    } finally {
-      setIsTaxonomyCleanupRunning(false);
-    }
-  };
-
   // Calculate summary stats
   const totalCombinations = allQuestionCounts?.length || 0;
   const totalQuestionsInCounts =
@@ -168,7 +135,7 @@ export default function DemoPage() {
         <div>
           <h1 className="text-3xl font-bold">Question Count Dashboard</h1>
           <p className="text-muted-foreground">
-            Monitor question distribution across taxonomy
+            Monitor question distribution across themes, subthemes, and groups
           </p>
         </div>
         <Button
@@ -215,7 +182,7 @@ export default function DemoPage() {
               {totalQuestionsInCounts.toLocaleString()}
             </div>
             <p className="text-muted-foreground text-xs">
-              Questions with full taxonomy
+              Questions with theme classification
             </p>
           </CardContent>
         </Card>
@@ -248,7 +215,7 @@ export default function DemoPage() {
               %
             </div>
             <p className="text-muted-foreground text-xs">
-              Questions with taxonomy
+              Questions with complete classification
             </p>
           </CardContent>
         </Card>
@@ -266,7 +233,7 @@ export default function DemoPage() {
         <TabsContent value="detailed" className="space-y-4">
           <Card>
             <CardHeader>
-              <CardTitle>Question Counts by Taxonomy</CardTitle>
+              <CardTitle>Question Counts by Theme/Subtheme/Group</CardTitle>
               <CardDescription>
                 Detailed breakdown of questions by theme, subtheme, and group
                 combinations
@@ -394,7 +361,7 @@ export default function DemoPage() {
                           </div>
                         ) : (
                           <p className="text-muted-foreground text-sm">
-                            No questions with complete taxonomy
+                            No questions with complete classification
                           </p>
                         )}
                       </div>
@@ -492,17 +459,17 @@ export default function DemoPage() {
                       </span>
                     </div>
                     <div>
-                      <span className="font-medium">With Taxonomy:</span>
+                      <span className="font-medium">With Theme:</span>
                       <span className="ml-2">
-                        {backfillInfo.questionsWithTaxonomy.toLocaleString()}
+                        {backfillInfo.questionsWithTheme.toLocaleString()}
                       </span>
                     </div>
                     <div>
-                      <span className="font-medium">Missing Taxonomy:</span>
+                      <span className="font-medium">Missing Theme:</span>
                       <span className="ml-2">
                         {(
                           backfillInfo.totalQuestions -
-                          backfillInfo.questionsWithTaxonomy
+                          backfillInfo.questionsWithTheme
                         ).toLocaleString()}
                       </span>
                     </div>
