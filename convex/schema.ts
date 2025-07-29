@@ -58,6 +58,10 @@ export default defineSchema({
     groupId: v.optional(v.id('groups')),
     authorId: v.optional(v.id('users')),
     isPublic: v.optional(v.boolean()),
+    // Legacy taxonomy fields (for migration cleanup only)
+    TaxThemeId: v.optional(v.string()),
+    TaxSubthemeId: v.optional(v.string()),
+    TaxGroupId: v.optional(v.string()),
   })
     .index('by_title', ['normalizedTitle'])
     .index('by_theme', ['themeId'])
@@ -72,12 +76,17 @@ export default defineSchema({
     category: v.union(v.literal('trilha'), v.literal('simulado')),
     questions: v.array(v.id('questions')),
     subcategory: v.optional(v.string()),
-    // Legacy taxonomy fields (kept for existing data)
+    // Current taxonomy fields
     themeId: v.optional(v.id('themes')),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
     isPublic: v.boolean(),
     displayOrder: v.optional(v.number()),
+    // Legacy taxonomy fields (for migration cleanup only)
+    TaxThemeId: v.optional(v.string()),
+    TaxSubthemeId: v.optional(v.string()),
+    TaxGroupId: v.optional(v.string()),
+    taxonomyPathIds: v.optional(v.array(v.string())),
   })
     .index('by_theme', ['themeId'])
     .index('by_subtheme', ['subthemeId'])
@@ -96,10 +105,15 @@ export default defineSchema({
       v.literal('incorrect'),
       v.literal('bookmarked'),
     ),
-    // Legacy taxonomy fields (kept for existing data)
+    // Current taxonomy fields
     selectedThemes: v.optional(v.array(v.id('themes'))),
     selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
     selectedGroups: v.optional(v.array(v.id('groups'))),
+    // Legacy taxonomy fields (for migration cleanup only)
+    selectedTaxThemes: v.optional(v.array(v.string())),
+    selectedTaxSubthemes: v.optional(v.array(v.string())),
+    selectedTaxGroups: v.optional(v.array(v.string())),
+    taxonomyPathIds: v.optional(v.array(v.string())),
   }).searchIndex('search_by_name', { searchField: 'name' }),
 
   quizSessions: defineTable({
