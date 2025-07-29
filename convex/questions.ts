@@ -1,3 +1,5 @@
+/* eslint-disable unicorn/no-useless-undefined */
+
 import { GenericMutationCtx, paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -20,7 +22,54 @@ import {
 // ---------- Helper Functions for Question Count Management ----------
 
 /**
+ * Helper function to upsert a question count entry
+ */
+async function _upsertQuestionCount(
+  ctx: GenericMutationCtx<DataModel>,
+  criteria: {
+    themeId: Id<'themes'>;
+    subthemeId: Id<'subthemes'> | undefined;
+    groupId: Id<'groups'> | undefined;
+  },
+  increment: number,
+) {
+  // Find existing count entry using the full index
+  const existingCount = await ctx.db
+    .query('questionCounts')
+    .withIndex('byThemeSubGroup', q =>
+      q
+        .eq('themeId', criteria.themeId)
+        .eq('subthemeId', criteria.subthemeId)
+        .eq('groupId', criteria.groupId),
+    )
+    .unique();
+
+  if (existingCount) {
+    // Update existing count
+    const newCount = existingCount.questionCount + increment;
+
+    if (newCount <= 0) {
+      // Delete if count becomes 0 or negative
+      await ctx.db.delete(existingCount._id);
+    } else {
+      await ctx.db.patch(existingCount._id, {
+        questionCount: newCount,
+      });
+    }
+  } else if (increment > 0) {
+    // Create new count entry only if increment is positive
+    await ctx.db.insert('questionCounts', {
+      themeId: criteria.themeId,
+      subthemeId: criteria.subthemeId,
+      groupId: criteria.groupId,
+      questionCount: increment,
+    });
+  }
+}
+
+/**
  * Updates the questionCounts table when a question is created
+ * Maintains counts at theme, theme+subtheme, and theme+subtheme+group levels
  */
 async function _updateQuestionCountOnInsert(
   ctx: GenericMutationCtx<DataModel>,
@@ -28,42 +77,32 @@ async function _updateQuestionCountOnInsert(
 ) {
   const { themeId, subthemeId, groupId } = questionDoc;
 
-  // We need all three values to create a count entry
-  if (!themeId || !subthemeId || !groupId) {
+  if (!themeId) {
     console.warn(
-      `Question ${questionDoc._id} missing required taxonomy fields for count tracking`,
+      `Question ${questionDoc._id} missing themeId for count tracking`,
     );
     return;
   }
 
-  // Check if an entry already exists for this combination
-  const existingCount = await ctx.db
-    .query('questionCounts')
-    .withIndex('byThemeSubGroup', q =>
-      q
-        .eq('themeId', themeId)
-        .eq('subthemeId', subthemeId)
-        .eq('groupId', groupId),
-    )
-    .unique();
+  // 1. Update theme-level count
+  await _upsertQuestionCount(
+    ctx,
+    { themeId, subthemeId: undefined, groupId: undefined },
+    1,
+  );
 
-  if (existingCount) {
-    // Increment existing count
-    await ctx.db.patch(existingCount._id, {
-      questionCount: existingCount.questionCount + 1,
-    });
-    console.log(
-      `Incremented question count for theme/subtheme/group: ${existingCount.questionCount + 1}`,
+  // 2. Update theme+subtheme count (if subtheme exists)
+  if (subthemeId) {
+    await _upsertQuestionCount(
+      ctx,
+      { themeId, subthemeId, groupId: undefined },
+      1,
     );
-  } else {
-    // Create new count entry
-    await ctx.db.insert('questionCounts', {
-      themeId,
-      subthemeId,
-      groupId,
-      questionCount: 1,
-    });
-    console.log(`Created new question count entry for theme/subtheme/group`);
+  }
+
+  // 3. Update theme+subtheme+group count (if all three exist)
+  if (subthemeId && groupId) {
+    await _upsertQuestionCount(ctx, { themeId, subthemeId, groupId }, 1);
   }
 }
 
@@ -855,47 +894,71 @@ export const getQuestionCount = query({
 });
 
 /**
- * Get total question count for a specific theme
+ * Get stored question count for a specific theme (uses questionCounts table)
  */
 export const getQuestionCountByTheme = query({
   args: { themeId: v.id('themes') },
+  returns: v.number(),
   handler: async (ctx, args) => {
-    const questions = await ctx.db
-      .query('questions')
-      .withIndex('by_theme', q => q.eq('themeId', args.themeId))
-      .collect();
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', undefined)
+          .eq('groupId', undefined),
+      )
+      .unique();
 
-    return questions.length;
+    return countEntry?.questionCount || 0;
   },
 });
 
 /**
- * Get total question count for a specific subtheme
+ * Get stored question count for a specific subtheme (uses questionCounts table)
  */
 export const getQuestionCountBySubtheme = query({
-  args: { subthemeId: v.id('subthemes') },
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+  },
+  returns: v.number(),
   handler: async (ctx, args) => {
-    const questions = await ctx.db
-      .query('questions')
-      .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId))
-      .collect();
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', undefined),
+      )
+      .unique();
 
-    return questions.length;
+    return countEntry?.questionCount || 0;
   },
 });
 
 /**
- * Get total question count for a specific group
+ * Get stored question count for a specific group (uses questionCounts table)
  */
 export const getQuestionCountByGroup = query({
-  args: { groupId: v.id('groups') },
+  args: {
+    themeId: v.id('themes'),
+    subthemeId: v.id('subthemes'),
+    groupId: v.id('groups'),
+  },
   handler: async (ctx, args) => {
-    const questions = await ctx.db
-      .query('questions')
-      .withIndex('by_group', q => q.eq('groupId', args.groupId))
-      .collect();
+    const countEntry = await ctx.db
+      .query('questionCounts')
+      .withIndex('byThemeSubGroup', q =>
+        q
+          .eq('themeId', args.themeId)
+          .eq('subthemeId', args.subthemeId)
+          .eq('groupId', args.groupId),
+      )
+      .unique();
 
-    return questions.length;
+    return countEntry?.questionCount || 0;
   },
 });
 
@@ -913,9 +976,10 @@ export const getQuestionCountsByTheme = query({
     // Fetch subtheme and group names for better readability
     const enrichedCounts = await Promise.all(
       counts.map(async count => {
-        const [subtheme, group] = await Promise.all([
-          ctx.db.get(count.subthemeId),
-          ctx.db.get(count.groupId),
+        const [theme, subtheme, group] = await Promise.all([
+          ctx.db.get(count.themeId),
+          count.subthemeId ? ctx.db.get(count.subthemeId) : null,
+          count.groupId ? ctx.db.get(count.groupId) : null,
         ]);
 
         return {
@@ -942,8 +1006,8 @@ export const getAllQuestionCounts = query({
       counts.map(async count => {
         const [theme, subtheme, group] = await Promise.all([
           ctx.db.get(count.themeId),
-          ctx.db.get(count.subthemeId),
-          ctx.db.get(count.groupId),
+          count.subthemeId ? ctx.db.get(count.subthemeId) : null,
+          count.groupId ? ctx.db.get(count.groupId) : null,
         ]);
 
         return {

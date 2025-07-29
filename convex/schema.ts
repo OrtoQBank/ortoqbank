@@ -160,10 +160,13 @@ export default defineSchema({
 
   questionCounts: defineTable({
     themeId: v.id('themes'),
-    subthemeId: v.id('subthemes'),
-    groupId: v.id('groups'),
+    subthemeId: v.optional(v.id('subthemes')), // null for theme-only counts
+    groupId: v.optional(v.id('groups')), // null for theme or theme+subtheme counts
     questionCount: v.number(),
-  }).index('byThemeSubGroup', ['themeId', 'subthemeId', 'groupId']),
+  })
+    .index('byThemeSubGroup', ['themeId', 'subthemeId', 'groupId'])
+    .index('byTheme', ['themeId'])
+    .index('byThemeSubtheme', ['themeId', 'subthemeId']),
 
   userAggregates: defineTable({
     userId: v.id('users'),
