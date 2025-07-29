@@ -26,6 +26,7 @@ export const cleanupOldTaxonomyFields = internalAction({
     let totalProcessed = 0;
     let totalUpdated = 0;
     let hasMore = true;
+    let lastProcessedTime: number | undefined;
 
     console.log(
       `Starting cleanup of ${args.table} with batch size: ${batchSize}`,
@@ -35,12 +36,13 @@ export const cleanupOldTaxonomyFields = internalAction({
       const result = await ctx.runMutation(internal.migrations.processBatch, {
         table: args.table,
         batchSize,
-        skipCount: totalProcessed,
+        lastProcessedTime,
       });
 
       totalProcessed += result.processedCount;
       totalUpdated += result.updatedCount;
       hasMore = result.hasMore;
+      lastProcessedTime = result.lastProcessedTime;
 
       // Small delay between batches
       if (hasMore) {
@@ -70,34 +72,55 @@ export const processBatch = internalMutation({
       v.literal('questions'),
     ),
     batchSize: v.number(),
-    skipCount: v.number(),
+    lastProcessedTime: v.optional(v.number()),
   },
   returns: v.object({
     processedCount: v.number(),
     updatedCount: v.number(),
     hasMore: v.boolean(),
+    lastProcessedTime: v.optional(v.number()),
   }),
   handler: async (ctx, args) => {
-    // Get all documents from the table
-    let allDocs: any[];
+    // Fetch batch using cursor-based pagination with creation time
+    let batch: any[];
     if (args.table === 'presetQuizzes') {
-      allDocs = await ctx.db.query('presetQuizzes').collect();
+      const query = ctx.db.query('presetQuizzes').order('asc');
+      batch = args.lastProcessedTime
+        ? await query
+            .filter(q =>
+              q.gt(q.field('_creationTime'), args.lastProcessedTime!),
+            )
+            .take(args.batchSize)
+        : await query.take(args.batchSize);
     } else if (args.table === 'customQuizzes') {
-      allDocs = await ctx.db.query('customQuizzes').collect();
+      const query = ctx.db.query('customQuizzes').order('asc');
+      batch = args.lastProcessedTime
+        ? await query
+            .filter(q =>
+              q.gt(q.field('_creationTime'), args.lastProcessedTime!),
+            )
+            .take(args.batchSize)
+        : await query.take(args.batchSize);
     } else {
-      allDocs = await ctx.db.query('questions').collect();
+      const query = ctx.db.query('questions').order('asc');
+      batch = args.lastProcessedTime
+        ? await query
+            .filter(q =>
+              q.gt(q.field('_creationTime'), args.lastProcessedTime!),
+            )
+            .take(args.batchSize)
+        : await query.take(args.batchSize);
     }
 
-    // Get the batch to process
-    const batch = allDocs.slice(
-      args.skipCount,
-      args.skipCount + args.batchSize,
-    );
     let updatedCount = 0;
+    let lastProcessedTime: number | undefined;
 
     for (const doc of batch) {
       let hasOldFields = false;
       let fieldsToRemove: string[] = [];
+
+      // Track the last processed document's creation time
+      lastProcessedTime = doc._creationTime;
 
       // Check for old fields based on table type
       switch (args.table) {
@@ -158,7 +181,8 @@ export const processBatch = internalMutation({
     return {
       processedCount: batch.length,
       updatedCount,
-      hasMore: args.skipCount + args.batchSize < allDocs.length,
+      hasMore: batch.length === args.batchSize, // If we got fewer than requested, we're done
+      lastProcessedTime,
     };
   },
 });

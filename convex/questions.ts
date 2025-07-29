@@ -995,77 +995,28 @@ export const cleanupQuestionCountsForGroup = internalMutation({
  * Clean up old taxonomy fields from questions
  * Removes: TaxThemeId, TaxSubthemeId, TaxGroupId
  */
-export const cleanupQuestionsOldFields = internalMutation({
+export const cleanupQuestionsOldFields = internalAction({
   args: {
     batchSize: v.optional(v.number()),
-    processedCount: v.optional(v.number()),
   },
   returns: v.object({
     processedCount: v.number(),
     updatedCount: v.number(),
-    isComplete: v.boolean(),
+    message: v.string(),
   }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 50;
-    const processedCount = args.processedCount || 0;
-
-    // Get a batch of questions
-    const allQuestions = await ctx.db.query('questions').collect();
-    const batch = allQuestions.slice(
-      processedCount,
-      processedCount + batchSize,
-    );
-
-    let updatedCount = 0;
-
-    for (const question of batch) {
-      // Check if document has any of the old fields
-      const hasOldFields =
-        'TaxThemeId' in question ||
-        'TaxSubthemeId' in question ||
-        'TaxGroupId' in question;
-
-      if (hasOldFields) {
-        // Create update object without the old fields
-        const updates: any = {};
-
-        // Copy all fields except the old ones
-        Object.keys(question).forEach(key => {
-          if (
-            ![
-              'TaxThemeId',
-              'TaxSubthemeId',
-              'TaxGroupId',
-              '_id',
-              '_creationTime',
-            ].includes(key)
-          ) {
-            updates[key] = (question as any)[key];
-          }
-        });
-
-        // Replace the entire document (this removes the old fields)
-        await ctx.db.replace(question._id, updates);
-        updatedCount++;
-
-        console.log(
-          `Updated question ${question._id} - removed old taxonomy fields`,
-        );
-      }
-    }
-
-    const newProcessedCount = processedCount + batch.length;
-    const isComplete = newProcessedCount >= allQuestions.length;
-
-    console.log(
-      `Processed ${batch.length} questions, updated ${updatedCount}. Total processed: ${newProcessedCount}/${allQuestions.length}`,
-    );
-
-    return {
-      processedCount: newProcessedCount,
-      updatedCount,
-      isComplete,
-    };
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    processedCount: number;
+    updatedCount: number;
+    message: string;
+  }> => {
+    // Delegate to the centralized cleanup function
+    return await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
+      table: 'questions',
+      batchSize: args.batchSize,
+    });
   },
 });
 
@@ -1531,76 +1482,28 @@ export const getBackfillInfo = query({
  * Clean up old taxonomy fields from presetQuizzes
  * Removes: TaxThemeId, TaxSubthemeId, TaxGroupId, taxonomyPathIds
  */
-export const cleanupPresetQuizzesOldFields = internalMutation({
+export const cleanupPresetQuizzesOldFields = internalAction({
   args: {
     batchSize: v.optional(v.number()),
-    processedCount: v.optional(v.number()),
   },
   returns: v.object({
     processedCount: v.number(),
     updatedCount: v.number(),
-    isComplete: v.boolean(),
+    message: v.string(),
   }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 50;
-    const processedCount = args.processedCount || 0;
-
-    // Get a batch of presetQuizzes
-    const allQuizzes = await ctx.db.query('presetQuizzes').collect();
-    const batch = allQuizzes.slice(processedCount, processedCount + batchSize);
-
-    let updatedCount = 0;
-
-    for (const quiz of batch) {
-      // Check if document has any of the old fields
-      const hasOldFields =
-        'TaxThemeId' in quiz ||
-        'TaxSubthemeId' in quiz ||
-        'TaxGroupId' in quiz ||
-        'taxonomyPathIds' in quiz;
-
-      if (hasOldFields) {
-        // Create update object without the old fields
-        const updates: any = {};
-
-        // Copy all fields except the old ones
-        Object.keys(quiz).forEach(key => {
-          if (
-            ![
-              'TaxThemeId',
-              'TaxSubthemeId',
-              'TaxGroupId',
-              'taxonomyPathIds',
-              '_id',
-              '_creationTime',
-            ].includes(key)
-          ) {
-            updates[key] = (quiz as any)[key];
-          }
-        });
-
-        // Replace the entire document (this removes the old fields)
-        await ctx.db.replace(quiz._id, updates);
-        updatedCount++;
-
-        console.log(
-          `Updated presetQuiz ${quiz._id} - removed old taxonomy fields`,
-        );
-      }
-    }
-
-    const newProcessedCount = processedCount + batch.length;
-    const isComplete = newProcessedCount >= allQuizzes.length;
-
-    console.log(
-      `Processed ${batch.length} presetQuizzes, updated ${updatedCount}. Total processed: ${newProcessedCount}/${allQuizzes.length}`,
-    );
-
-    return {
-      processedCount: newProcessedCount,
-      updatedCount,
-      isComplete,
-    };
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    processedCount: number;
+    updatedCount: number;
+    message: string;
+  }> => {
+    // Delegate to the centralized cleanup function
+    return await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
+      table: 'presetQuizzes',
+      batchSize: args.batchSize,
+    });
   },
 });
 
@@ -1608,76 +1511,28 @@ export const cleanupPresetQuizzesOldFields = internalMutation({
  * Clean up old taxonomy fields from customQuizzes
  * Removes: selectedTaxThemes, selectedTaxSubthemes, selectedTaxGroups, taxonomyPathIds
  */
-export const cleanupCustomQuizzesOldFields = internalMutation({
+export const cleanupCustomQuizzesOldFields = internalAction({
   args: {
     batchSize: v.optional(v.number()),
-    processedCount: v.optional(v.number()),
   },
   returns: v.object({
     processedCount: v.number(),
     updatedCount: v.number(),
-    isComplete: v.boolean(),
+    message: v.string(),
   }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 50;
-    const processedCount = args.processedCount || 0;
-
-    // Get a batch of customQuizzes
-    const allQuizzes = await ctx.db.query('customQuizzes').collect();
-    const batch = allQuizzes.slice(processedCount, processedCount + batchSize);
-
-    let updatedCount = 0;
-
-    for (const quiz of batch) {
-      // Check if document has any of the old fields
-      const hasOldFields =
-        'selectedTaxThemes' in quiz ||
-        'selectedTaxSubthemes' in quiz ||
-        'selectedTaxGroups' in quiz ||
-        'taxonomyPathIds' in quiz;
-
-      if (hasOldFields) {
-        // Create update object without the old fields
-        const updates: any = {};
-
-        // Copy all fields except the old ones
-        Object.keys(quiz).forEach(key => {
-          if (
-            ![
-              'selectedTaxThemes',
-              'selectedTaxSubthemes',
-              'selectedTaxGroups',
-              'taxonomyPathIds',
-              '_id',
-              '_creationTime',
-            ].includes(key)
-          ) {
-            updates[key] = (quiz as any)[key];
-          }
-        });
-
-        // Replace the entire document (this removes the old fields)
-        await ctx.db.replace(quiz._id, updates);
-        updatedCount++;
-
-        console.log(
-          `Updated customQuiz ${quiz._id} - removed old taxonomy fields`,
-        );
-      }
-    }
-
-    const newProcessedCount = processedCount + batch.length;
-    const isComplete = newProcessedCount >= allQuizzes.length;
-
-    console.log(
-      `Processed ${batch.length} customQuizzes, updated ${updatedCount}. Total processed: ${newProcessedCount}/${allQuizzes.length}`,
-    );
-
-    return {
-      processedCount: newProcessedCount,
-      updatedCount,
-      isComplete,
-    };
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    processedCount: number;
+    updatedCount: number;
+    message: string;
+  }> => {
+    // Delegate to the centralized cleanup function
+    return await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
+      table: 'customQuizzes',
+      batchSize: args.batchSize,
+    });
   },
 });
 
@@ -1701,24 +1556,17 @@ export const runPresetQuizzesCleanup = internalAction({
 
     console.log(`Starting presetQuizzes cleanup with batch size: ${batchSize}`);
 
-    while (!isComplete) {
-      const result = await ctx.runMutation(
-        internal.questions.cleanupPresetQuizzesOldFields,
-        {
-          batchSize,
-          processedCount: totalProcessed,
-        },
-      );
+    // Use the centralized cleanup function directly
+    const result = await ctx.runAction(
+      internal.migrations.cleanupOldTaxonomyFields,
+      {
+        table: 'presetQuizzes',
+        batchSize,
+      },
+    );
 
-      totalProcessed = result.processedCount;
-      totalUpdated += result.updatedCount;
-      isComplete = result.isComplete;
-
-      // Small delay between batches to avoid overwhelming the system
-      if (!isComplete) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    totalProcessed = result.processedCount;
+    totalUpdated = result.updatedCount;
 
     const message = `PresetQuizzes cleanup completed. Processed: ${totalProcessed}, Updated: ${totalUpdated}`;
     console.log(message);
@@ -1751,24 +1599,17 @@ export const runCustomQuizzesCleanup = internalAction({
 
     console.log(`Starting customQuizzes cleanup with batch size: ${batchSize}`);
 
-    while (!isComplete) {
-      const result = await ctx.runMutation(
-        internal.questions.cleanupCustomQuizzesOldFields,
-        {
-          batchSize,
-          processedCount: totalProcessed,
-        },
-      );
+    // Use the centralized cleanup function directly
+    const result = await ctx.runAction(
+      internal.migrations.cleanupOldTaxonomyFields,
+      {
+        table: 'customQuizzes',
+        batchSize,
+      },
+    );
 
-      totalProcessed = result.processedCount;
-      totalUpdated += result.updatedCount;
-      isComplete = result.isComplete;
-
-      // Small delay between batches to avoid overwhelming the system
-      if (!isComplete) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    totalProcessed = result.processedCount;
+    totalUpdated = result.updatedCount;
 
     const message = `CustomQuizzes cleanup completed. Processed: ${totalProcessed}, Updated: ${totalUpdated}`;
     console.log(message);
@@ -1801,24 +1642,17 @@ export const runQuestionsCleanup = internalAction({
 
     console.log(`Starting questions cleanup with batch size: ${batchSize}`);
 
-    while (!isComplete) {
-      const result = await ctx.runMutation(
-        internal.questions.cleanupQuestionsOldFields,
-        {
-          batchSize,
-          processedCount: totalProcessed,
-        },
-      );
+    // Use the centralized cleanup function directly
+    const result = await ctx.runAction(
+      internal.migrations.cleanupOldTaxonomyFields,
+      {
+        table: 'questions',
+        batchSize,
+      },
+    );
 
-      totalProcessed = result.processedCount;
-      totalUpdated += result.updatedCount;
-      isComplete = result.isComplete;
-
-      // Small delay between batches to avoid overwhelming the system
-      if (!isComplete) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
+    totalProcessed = result.processedCount;
+    totalUpdated = result.updatedCount;
 
     const message = `Questions cleanup completed. Processed: ${totalProcessed}, Updated: ${totalUpdated}`;
     console.log(message);
@@ -1880,48 +1714,38 @@ export const runFullTaxonomyCleanup = internalAction({
   }> => {
     const batchSize = args.batchSize || 50;
 
-    console.log('Starting full taxonomy cleanup...');
+    // Delegate to the centralized cleanup function
+    const result = await ctx.runAction(
+      internal.migrations.runAllTaxonomyCleanup,
+      {
+        batchSize,
+      },
+    );
 
-    // Clean up presetQuizzes first
-    const presetQuizzesResult: {
-      totalProcessed: number;
-      totalUpdated: number;
-      message: string;
-    } = await ctx.runAction(internal.questions.runPresetQuizzesCleanup, {
-      batchSize,
-    });
+    // Map the centralized result to match our expected interface
+    const presetQuizzesResult = {
+      totalProcessed: result.presetQuizzesResult.processedCount,
+      totalUpdated: result.presetQuizzesResult.updatedCount,
+      message: result.presetQuizzesResult.message,
+    };
 
-    // Clean up customQuizzes
-    const customQuizzesResult: {
-      totalProcessed: number;
-      totalUpdated: number;
-      message: string;
-    } = await ctx.runAction(internal.questions.runCustomQuizzesCleanup, {
-      batchSize,
-    });
+    const customQuizzesResult = {
+      totalProcessed: result.customQuizzesResult.processedCount,
+      totalUpdated: result.customQuizzesResult.updatedCount,
+      message: result.customQuizzesResult.message,
+    };
 
-    // Clean up questions
-    const questionsResult: {
-      totalProcessed: number;
-      totalUpdated: number;
-      message: string;
-    } = await ctx.runAction(internal.questions.runQuestionsCleanup, {
-      batchSize,
-    });
-
-    const overallMessage =
-      `Full taxonomy cleanup completed! ` +
-      `PresetQuizzes: ${presetQuizzesResult.totalUpdated} updated. ` +
-      `CustomQuizzes: ${customQuizzesResult.totalUpdated} updated. ` +
-      `Questions: ${questionsResult.totalUpdated} updated.`;
-
-    console.log(overallMessage);
+    const questionsResult = {
+      totalProcessed: result.questionsResult.processedCount,
+      totalUpdated: result.questionsResult.updatedCount,
+      message: result.questionsResult.message,
+    };
 
     return {
       presetQuizzesResult,
       customQuizzesResult,
       questionsResult,
-      overallMessage,
+      overallMessage: result.overallMessage,
     };
   },
 });
