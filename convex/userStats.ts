@@ -337,7 +337,7 @@ function getWeekString(timestamp: number): string {
 /**
  * Get user progress over time grouped by weeks
  */
-export const getUserWeeklyProgress = query({
+/* export const getUserWeeklyProgress = query({
   args: {},
   returns: v.array(
     v.object({
@@ -390,3 +390,4 @@ export const getUserWeeklyProgress = query({
     return result;
   },
 });
+ */

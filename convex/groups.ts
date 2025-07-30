@@ -105,17 +105,6 @@ export const remove = mutation({
     // Check if group can be safely deleted
     await canSafelyDelete(context, id, 'groups', dependencies);
 
-    // Clean up question counts before deleting the group
-    try {
-      await context.runMutation(
-        internal.questions.cleanupQuestionCountsForGroup,
-        { groupId: id },
-      );
-    } catch (error) {
-      console.warn(`Error cleaning up question counts for group ${id}:`, error);
-      // Continue with deletion even if cleanup fails
-    }
-
     // If we get here, it means the group can be safely deleted
     await context.db.delete(id);
   },
