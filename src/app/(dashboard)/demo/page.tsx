@@ -40,6 +40,8 @@ export default function DemoPage() {
   const [isSimpleBackfillRunning, setIsSimpleBackfillRunning] = useState(false);
   const [isBatchedBackfillRunning, setIsBatchedBackfillRunning] =
     useState(false);
+  const [isClearRecalculateRunning, setIsClearRecalculateRunning] = 
+    useState(false);
 
   const { toast } = useToast();
 
@@ -50,8 +52,10 @@ export default function DemoPage() {
   });
   const backfillInfo = useQuery(api.questions.getBackfillInfo);
 
-  // Get themes for the theme breakdown
+  // Get themes, subthemes, and groups for the breakdown
   const themes = useQuery(api.themes.list);
+  const subthemes = useQuery(api.subthemes.list);
+  const groups = useQuery(api.groups.list);
 
   // Mutations for backfill operations
   const triggerSimpleBackfill = useMutation(
@@ -59,6 +63,9 @@ export default function DemoPage() {
   );
   const triggerBatchedBackfill = useMutation(
     api.questions.triggerBatchedBackfill,
+  );
+  const triggerClearAndRecalculate = useMutation(
+    api.questions.triggerClearAndRecalculate,
   );
 
   const handleRefresh = async () => {
@@ -121,11 +128,44 @@ export default function DemoPage() {
     }
   };
 
+  const handleClearAndRecalculate = async () => {
+    setIsClearRecalculateRunning(true);
+    try {
+      const result = await triggerClearAndRecalculate({});
+      if (result.success) {
+        toast({
+          title: 'Clear & Recalculate Started',
+          description: result.message,
+        });
+      } else {
+        toast({
+          title: 'Clear & Recalculate Failed',
+          description: result.message,
+          variant: 'destructive',
+        });
+      }
+    } catch {
+      toast({
+        title: 'Error',
+        description: 'Failed to start clear and recalculate',
+        variant: 'destructive',
+      });
+    } finally {
+      setIsClearRecalculateRunning(false);
+    }
+  };
+
   // Calculate summary stats
   const totalCombinations = allQuestionCounts?.length || 0;
+  
+  // Only count questions at the group level (most specific) to avoid triple-counting
+  // since we now store counts at theme, theme+subtheme, and theme+subtheme+group levels
   const totalQuestionsInCounts =
-    allQuestionCounts?.reduce((sum, count) => sum + count.questionCount, 0) ||
-    0;
+    allQuestionCounts?.filter(count => 
+      count.groupId != null && count.groupId !== undefined && 
+      count.subthemeId != null && count.subthemeId !== undefined
+    ).reduce((sum, count) => sum + count.questionCount, 0) || 0;
+  
   const totalQuestions = questionCountsByMode?.all || 0;
 
   return (
@@ -182,7 +222,7 @@ export default function DemoPage() {
               {totalQuestionsInCounts.toLocaleString()}
             </div>
             <p className="text-muted-foreground text-xs">
-              Questions with theme classification
+              Questions with complete theme+subtheme+group classification
             </p>
           </CardContent>
         </Card>
@@ -226,6 +266,7 @@ export default function DemoPage() {
         <TabsList>
           <TabsTrigger value="detailed">Detailed Counts</TabsTrigger>
           <TabsTrigger value="themes">By Theme</TabsTrigger>
+          <TabsTrigger value="taxonomy">Taxonomy Counts</TabsTrigger>
           <TabsTrigger value="backfill">Backfill Tools</TabsTrigger>
         </TabsList>
 
@@ -382,6 +423,127 @@ export default function DemoPage() {
           </Card>
         </TabsContent>
 
+        {/* Taxonomy Counts Tab */}
+        <TabsContent value="taxonomy" className="space-y-4">
+          <div className="grid grid-cols-1 gap-6 lg:grid-cols-3">
+            {/* Theme Counts */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Theme Counts</CardTitle>
+                <CardDescription>
+                  Questions per theme (all questions with themeId)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {themes && allQuestionCounts ? (
+                  <div className="space-y-2">
+                    {themes.map(theme => {
+                      // Find theme-level count (subthemeId = null/undefined, groupId = null/undefined)
+                      const themeCount = allQuestionCounts.find(
+                        count => count.themeId === theme._id && 
+                                (count.subthemeId == null || count.subthemeId === undefined) && 
+                                (count.groupId == null || count.groupId === undefined)
+                      );
+                      
+                      return (
+                        <div key={theme._id} className="flex items-center justify-between py-2 border-b">
+                          <div className="font-medium text-sm">
+                            {theme.name}
+                          </div>
+                          <Badge variant="secondary">
+                            {themeCount?.questionCount || 0}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground text-sm">Loading themes...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Subtheme Counts */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Subtheme Counts</CardTitle>
+                <CardDescription>
+                  Questions per subtheme (themeId + subthemeId)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {subthemes && allQuestionCounts ? (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {subthemes.map(subtheme => {
+                      // Find subtheme-level count (groupId = null/undefined)
+                      const subthemeCount = allQuestionCounts.find(
+                        count => count.themeId === subtheme.themeId && 
+                                count.subthemeId === subtheme._id && 
+                                (count.groupId == null || count.groupId === undefined)
+                      );
+                      
+                      return (
+                        <div key={subtheme._id} className="flex items-center justify-between py-2 border-b">
+                          <div className="font-medium text-sm">
+                            {subtheme.name}
+                          </div>
+                          <Badge variant="secondary">
+                            {subthemeCount?.questionCount || 0}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground text-sm">Loading subthemes...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
+            {/* Group Counts */}
+            <Card>
+              <CardHeader>
+                <CardTitle>Group Counts</CardTitle>
+                <CardDescription>
+                  Questions per group (themeId + subthemeId + groupId)
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                {groups && allQuestionCounts ? (
+                  <div className="space-y-2 max-h-96 overflow-y-auto">
+                    {groups.map(group => {
+                      // Find group-level count (all three IDs present)
+                      const groupCount = allQuestionCounts.find(
+                        count => count.subthemeId === group.subthemeId && 
+                                count.groupId === group._id
+                      );
+                      
+                      return (
+                        <div key={group._id} className="flex items-center justify-between py-2 border-b">
+                          <div className="font-medium text-sm">
+                            {group.name}
+                          </div>
+                          <Badge variant="secondary">
+                            {groupCount?.questionCount || 0}
+                          </Badge>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <div className="text-center py-8">
+                    <p className="text-muted-foreground text-sm">Loading groups...</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        </TabsContent>
+
         {/* Backfill Tools Tab */}
         <TabsContent value="backfill" className="space-y-4">
           <Card>
@@ -392,12 +554,37 @@ export default function DemoPage() {
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
+              <div className="rounded-lg border p-4 mb-4">
+                <h4 className="mb-2 font-semibold text-green-700">✨ Clear & Recalculate (Recommended)</h4>
+                <p className="text-muted-foreground mb-3 text-sm">
+                  <strong>Clears all existing counts and recalculates exact counts from the database.</strong> 
+                  This is the most accurate method and should be used to fix any counting issues.
+                </p>
+                <Button
+                  onClick={handleClearAndRecalculate}
+                  disabled={isClearRecalculateRunning}
+                  variant="default"
+                  className="w-full"
+                >
+                  {isClearRecalculateRunning ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Running Clear & Recalculate...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="mr-2 h-4 w-4" />
+                      Clear & Recalculate All Counts
+                    </>
+                  )}
+                </Button>
+              </div>
+
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                 <div className="rounded-lg border p-4">
-                  <h4 className="mb-2 font-semibold">Simple Backfill</h4>
+                  <h4 className="mb-2 font-semibold">Simple Backfill (Legacy)</h4>
                   <p className="text-muted-foreground mb-3 text-sm">
-                    For smaller datasets (&lt; 1,000 questions). Processes all
-                    questions at once.
+                    For smaller datasets (&lt; 1,000 questions). Now uses the clear & recalculate method.
                   </p>
                   <Button
                     onClick={handleSimpleBackfill}
@@ -420,10 +607,10 @@ export default function DemoPage() {
                 </div>
 
                 <div className="rounded-lg border p-4">
-                  <h4 className="mb-2 font-semibold">Batched Backfill</h4>
+                  <h4 className="mb-2 font-semibold">Batched Backfill (Legacy)</h4>
                   <p className="text-muted-foreground mb-3 text-sm">
                     For large datasets (1,000+ questions). Processes in safe
-                    batches.
+                    batches but may accumulate incorrect counts.
                   </p>
                   <Button
                     onClick={handleBatchedBackfill}

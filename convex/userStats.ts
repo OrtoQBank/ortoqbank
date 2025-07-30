@@ -1,9 +1,8 @@
 import { v } from 'convex/values';
 
 import { api } from './_generated/api';
-import { Doc, Id } from './_generated/dataModel';
+import { Id } from './_generated/dataModel';
 import { internalMutation, query } from './_generated/server';
-import * as aggregateHelpers from './aggregateHelpers';
 import { getCurrentUserOrThrow } from './users';
 
 type UserStats = {
@@ -68,10 +67,7 @@ export const getUserStatsFromTable = query({
     const totalBookmarked = bookmarks.length;
 
     // Get total questions count using aggregate
-    const totalQuestions = await ctx.runQuery(
-      api.questionStats.getTotalQuestionCount,
-      {},
-    );
+    const totalQuestions = await ctx.runQuery(api.questions.listAll);
 
     // Efficiently process theme stats using a group approach
     // We'll use a Map to store stats by theme
@@ -147,40 +143,7 @@ export const getUserStatsFromTable = query({
             : 0,
       },
       byTheme: themeStats,
-      totalQuestions,
-    };
-  },
-});
-
-/**
- * Get user statistics summary using aggregates for faster performance
- */
-export const getUserStatsSummaryWithAggregates = query({
-  args: {},
-  handler: async (ctx): Promise<UserStatsSummary> => {
-    const userId = await getCurrentUserOrThrow(ctx);
-
-    // Using our aggregate helpers for efficient counting
-    const [totalQuestions, totalAnswered, totalIncorrect, totalBookmarked] =
-      await Promise.all([
-        aggregateHelpers.getTotalQuestionCount(ctx),
-        aggregateHelpers.getUserAnsweredCount(ctx, userId._id),
-        aggregateHelpers.getUserIncorrectCount(ctx, userId._id),
-        aggregateHelpers.getUserBookmarksCount(ctx, userId._id),
-      ]);
-
-    // Calculate derived values
-    const totalCorrect = totalAnswered - totalIncorrect;
-    const correctPercentage =
-      totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-
-    return {
-      totalAnswered,
-      totalCorrect,
-      totalIncorrect,
-      totalBookmarked,
-      correctPercentage,
-      totalQuestions,
+      totalQuestions: totalQuestions.length,
     };
   },
 });
