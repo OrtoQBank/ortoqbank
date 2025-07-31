@@ -65,7 +65,7 @@ export function useTestFormState() {
 
   // Query the count of available questions based on current selection (legacy system)
   const countQuestions = useQuery(
-    api.countFunctions.getQuestionCountByFilter,
+    api.aggregateQueries.getQuestionCountByFilter,
     isAuthenticated
       ? { filter: mapQuestionMode(questionMode || 'all') }
       : 'skip',

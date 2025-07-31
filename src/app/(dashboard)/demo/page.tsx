@@ -44,7 +44,7 @@ export default function DemoPage() {
   const { toast } = useToast();
 
   // Queries for question count data
-  const allQuestionCounts = useQuery(api.questions.getAllQuestionCounts);
+  const allQuestionCounts = useQuery(api.aggregateQueries.getAllQuestionCounts);
   const questionCountsByMode = useQuery(api.questions.countQuestionsByMode, {
     questionMode: 'all',
   });

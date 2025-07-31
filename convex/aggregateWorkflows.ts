@@ -8,6 +8,8 @@ import {
   bookmarkedByUser,
   incorrectByUser,
   questionCountByTheme,
+  questionCountBySubtheme,
+  questionCountByGroup,
   totalQuestionCount,
 } from './aggregates';
 
@@ -23,7 +25,7 @@ export const startAggregateRepair = mutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateRepairWorkflow.repairWorkflow,
+      internal.aggregateWorkflows.repairWorkflow,
       {},
     );
 
@@ -41,7 +43,7 @@ export const startUserAggregatesRepair = mutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateRepairWorkflow.repairUserAggregatesWorkflow,
+      internal.aggregateWorkflows.repairUserAggregatesWorkflow,
       {},
     );
 
@@ -57,10 +59,7 @@ export const repairWorkflow = workflow.define({
     console.log('Workflow: Starting aggregate repair process...');
 
     // Step 1: Clear the total question count aggregate
-    await step.runMutation(
-      internal.aggregateRepairWorkflow.clearAggregatesStep,
-      {},
-    );
+    await step.runMutation(internal.aggregateWorkflows.clearAggregatesStep, {});
 
     // Step 2: Process questions in batches
     let cursor: string | undefined = undefined;
@@ -68,7 +67,7 @@ export const repairWorkflow = workflow.define({
 
     while (true) {
       const result: any = await step.runMutation(
-        internal.aggregateRepairWorkflow.processBatchStep,
+        internal.aggregateWorkflows.processBatchStep,
         { cursor, batchSize: 50 },
       );
 
@@ -83,7 +82,7 @@ export const repairWorkflow = workflow.define({
 
     // Step 3: Verify final counts
     const finalCount: any = await step.runMutation(
-      internal.aggregateRepairWorkflow.verifyCountStep,
+      internal.aggregateWorkflows.verifyCountStep,
       {},
     );
 
@@ -102,7 +101,7 @@ export const repairUserAggregatesWorkflow = workflow.define({
 
     // Step 1: Clear all user aggregates
     await step.runMutation(
-      internal.aggregateRepairWorkflow.clearUserAggregatesStep,
+      internal.aggregateWorkflows.clearUserAggregatesStep,
       {},
     );
 
@@ -114,7 +113,7 @@ export const repairUserAggregatesWorkflow = workflow.define({
 
     while (true) {
       const result: any = await step.runMutation(
-        internal.aggregateRepairWorkflow.processUserStatsBatchStep,
+        internal.aggregateWorkflows.processUserStatsBatchStep,
         { cursor, batchSize: 100 },
       );
 
@@ -137,7 +136,7 @@ export const repairUserAggregatesWorkflow = workflow.define({
 
     while (true) {
       const result: any = await step.runMutation(
-        internal.aggregateRepairWorkflow.processBookmarksBatchStep,
+        internal.aggregateWorkflows.processBookmarksBatchStep,
         { cursor, batchSize: 100 },
       );
 
@@ -154,7 +153,7 @@ export const repairUserAggregatesWorkflow = workflow.define({
 
     // Step 4: Verify final counts
     const finalCounts: any = await step.runMutation(
-      internal.aggregateRepairWorkflow.verifyUserAggregatesStep,
+      internal.aggregateWorkflows.verifyUserAggregatesStep,
       {},
     );
 
@@ -279,6 +278,17 @@ export const processBatchStep = internalMutation({
       if (question.themeId) {
         await questionCountByTheme.insertIfDoesNotExist(ctx, question);
       }
+
+      // Insert into subtheme count aggregate if has subtheme
+      if (question.subthemeId) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      // Insert into group count aggregate if has group
+      if (question.groupId) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
       processed++;
     }
 

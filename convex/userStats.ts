@@ -3,7 +3,12 @@ import { v } from 'convex/values';
 import { api } from './_generated/api';
 import { Doc, Id } from './_generated/dataModel';
 import { internalMutation, query } from './_generated/server';
-import * as aggregateHelpers from './aggregateHelpers';
+import {
+  getTotalQuestionCount,
+  getUserAnsweredCount,
+  getUserIncorrectCount,
+  getUserBookmarksCount,
+} from './aggregateQueries.js';
 import { getCurrentUserOrThrow } from './users';
 
 type UserStats = {
@@ -42,36 +47,23 @@ export const getUserStatsFromTable = query({
   handler: async (ctx): Promise<UserStats> => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // We'll skip the aggregate for now until we properly set it up
-    // Just go directly to more efficient queries
+    // Use efficient aggregates for user stats
+    const [totalAnswered, totalIncorrect, totalBookmarked] = await Promise.all([
+      getUserAnsweredCount(ctx, userId._id),
+      getUserIncorrectCount(ctx, userId._id),
+      getUserBookmarksCount(ctx, userId._id),
+    ]);
 
-    // Get user stats efficiently with a single query using aggregation
+    const totalCorrect = totalAnswered - totalIncorrect;
+
+    // Still need to collect user stats for theme breakdown
     const userStatsSummary = await ctx.db
       .query('userQuestionStats')
       .withIndex('by_user', q => q.eq('userId', userId._id))
       .collect();
 
-    // Count the totals from the summary rather than making individual queries
-    const totalAnswered = userStatsSummary.filter(
-      stat => stat.hasAnswered,
-    ).length;
-    const totalIncorrect = userStatsSummary.filter(
-      stat => stat.isIncorrect,
-    ).length;
-    const totalCorrect = totalAnswered - totalIncorrect;
-
-    // Get bookmarks count (can't be avoided, but this is a smaller query)
-    const bookmarks = await ctx.db
-      .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
-    const totalBookmarked = bookmarks.length;
-
     // Get total questions count using aggregate
-    const totalQuestions = await ctx.runQuery(
-      api.questionStats.getTotalQuestionCount,
-      {},
-    );
+    const totalQuestions = await getTotalQuestionCount(ctx);
 
     // Efficiently process theme stats using a group approach
     // We'll use a Map to store stats by theme
@@ -163,10 +155,10 @@ export const getUserStatsSummaryWithAggregates = query({
     // Using our aggregate helpers for efficient counting
     const [totalQuestions, totalAnswered, totalIncorrect, totalBookmarked] =
       await Promise.all([
-        aggregateHelpers.getTotalQuestionCount(ctx),
-        aggregateHelpers.getUserAnsweredCount(ctx, userId._id),
-        aggregateHelpers.getUserIncorrectCount(ctx, userId._id),
-        aggregateHelpers.getUserBookmarksCount(ctx, userId._id),
+        getTotalQuestionCount(ctx),
+        getUserAnsweredCount(ctx, userId._id),
+        getUserIncorrectCount(ctx, userId._id),
+        getUserBookmarksCount(ctx, userId._id),
       ]);
 
     // Calculate derived values

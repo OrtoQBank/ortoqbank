@@ -2,37 +2,57 @@
 
 import { v } from 'convex/values';
 
+import { Id } from './_generated/dataModel';
 import { api } from './_generated/api';
 import { mutation, query } from './_generated/server';
-import { questionCountByTheme, totalQuestionCount } from './aggregates';
+import { getCurrentUserOrThrow } from './users';
+import {
+  questionCountByTheme,
+  questionCountBySubtheme,
+  questionCountByGroup,
+  totalQuestionCount,
+  answeredByUser,
+  incorrectByUser,
+  bookmarkedByUser,
+} from './aggregates';
 
 /**
- * OPTIMIZED AGGREGATE HELPERS - NO MORE FULL TABLE SCANS!
+ * UNIFIED AGGREGATE-BASED COUNTING SYSTEM
  *
- * BEFORE: All functions used .collect() causing O(n) full table scans
- * AFTER: Using efficient strategies to avoid scanning entire tables:
+ * This file consolidates all counting operations into a single, efficient aggregate-based system.
+ * Previously split across countFunctions.ts and aggregateQueries.ts with mixed approaches.
  *
+ * ARCHITECTURE:
  * 1. TOTAL QUESTION COUNT:
- *    - OLD: ctx.db.query('questions').collect() → SCANS ALL QUESTIONS
- *    - NEW: totalQuestionCount.count() → O(log n) aggregate lookup
- *    - USES: Global aggregate with 'global' namespace
+ *    - totalQuestionCount.count() → O(log n) global aggregate lookup
  *
- * 2. THEME QUESTION COUNT:
- *    - OLD: .withIndex().collect() → Could scan many rows
- *    - NEW: questionCountByTheme.count() → O(log n) aggregate lookup
- *    - FALLBACK: Efficient index scan for reliability
+ * 2. THEME/SUBTHEME/GROUP QUESTION COUNT:
+ *    - questionCountByTheme/Subtheme/Group.count() → O(log n) aggregate lookup
+ *    - Fallback to index scans for reliability
  *
  * 3. USER STATS (answered, incorrect, bookmarks):
- *    - OLD: .filter().collect() → FULL TABLE SCANS
- *    - NEW: .withIndex().collect() → INDEX SCANS only relevant user data
- *    - Uses by_user, by_user_answered, by_user_incorrect indexes
+ *    - answeredByUser/incorrectByUser/bookmarkedByUser.count() → O(log n) aggregate lookup
+ *    - Pure aggregate approach, no fallbacks for maximum performance
  *
- * PERFORMANCE IMPACT:
- * - Total questions: O(n) → O(log n) with global aggregate
- * - Theme questions: O(n) → O(log n) with theme aggregate
- * - User stats: O(n) → O(user_data) where user_data << total_data
+ * 4. HIGH-LEVEL QUERY FUNCTIONS:
+ *    - getQuestionCountByFilter: Single filter-based counting
+ *    - getAllQuestionCounts: Batch counting for UI efficiency
  *
- * This eliminates full table scans that could scan thousands of irrelevant rows!
+ * PERFORMANCE BENEFITS:
+ * - All counting operations are O(log n) instead of O(n) table scans
+ * - User stats use per-user namespaces for isolated performance
+ * - Question counts use theme/subtheme/group namespaces for efficient lookups
+ *
+ * CONVEX AGGREGATE BEST PRACTICES:
+ * ✅ NAMESPACES: Each aggregate uses appropriate namespacing (user, theme, global)
+ * ✅ BOUNDS: Efficient bounds usage to minimize dependency footprint
+ * ✅ ATOMICITY: All aggregate operations are atomic
+ * ✅ PERFORMANCE: Consistent O(log n) performance across all operations
+ *
+ * REPAIR FUNCTIONS:
+ * - Comprehensive repair functions for all aggregates
+ * - Production-safe paginated repairs for large datasets
+ * - Individual and batch repair options
  */
 
 // Query function to get total question count using aggregate - MOST EFFICIENT
@@ -54,6 +74,22 @@ export const getTotalQuestionCountQuery = query({
 export const getThemeQuestionCountQuery = query({
   args: {
     themeId: v.id('themes'),
+    bounds: v.optional(
+      v.object({
+        lower: v.optional(
+          v.object({
+            key: v.any(),
+            inclusive: v.boolean(),
+          }),
+        ),
+        upper: v.optional(
+          v.object({
+            key: v.any(),
+            inclusive: v.boolean(),
+          }),
+        ),
+      }),
+    ),
   },
   returns: v.number(),
   handler: async (ctx, args) => {
@@ -61,7 +97,7 @@ export const getThemeQuestionCountQuery = query({
     try {
       const count = await questionCountByTheme.count(ctx, {
         namespace: args.themeId,
-        bounds: {},
+        bounds: args.bounds || {},
       });
       return count;
     } catch (error) {
@@ -76,69 +112,136 @@ export const getThemeQuestionCountQuery = query({
   },
 });
 
-// Query function to get user answer count - optimized with index
+// Query function to get subtheme question count using aggregate
+export const getSubthemeQuestionCountQuery = query({
+  args: {
+    subthemeId: v.id('subthemes'),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    try {
+      const count = await questionCountBySubtheme.count(ctx, {
+        namespace: args.subthemeId,
+        bounds: {},
+      });
+      return count;
+    } catch (error) {
+      console.warn(`Aggregate failed for subtheme ${args.subthemeId}:`, error);
+      // Fallback to efficient index-based query
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId))
+        .collect();
+      return questions.length;
+    }
+  },
+});
+
+// Query function to get group question count using aggregate
+export const getGroupQuestionCountQuery = query({
+  args: {
+    groupId: v.id('groups'),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    try {
+      const count = await questionCountByGroup.count(ctx, {
+        namespace: args.groupId,
+        bounds: {},
+      });
+      return count;
+    } catch (error) {
+      console.warn(`Aggregate failed for group ${args.groupId}:`, error);
+      // Fallback to efficient index-based query
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_group', q => q.eq('groupId', args.groupId))
+        .collect();
+      return questions.length;
+    }
+  },
+});
+
+// Query function to get user answer count - using aggregate for O(log n) performance
 export const getUserAnsweredCountQuery = query({
   args: {
     userId: v.id('users'),
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    // Use efficient index scan instead of .collect() on full table
-    const stats = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user_answered', q =>
-        q.eq('userId', args.userId).eq('hasAnswered', true),
-      )
-      .collect();
-    return stats.length;
+    // Use answeredByUser aggregate for O(log n) counting
+    const count = await (answeredByUser.count as any)(ctx, {
+      namespace: args.userId,
+      bounds: {},
+    });
+    return count;
   },
 });
 
-// Query function to get user incorrect count - optimized with index
+// Query function to get user incorrect count - using aggregate for O(log n) performance
 export const getUserIncorrectCountQuery = query({
   args: {
     userId: v.id('users'),
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    // Use efficient index scan instead of .collect() on full table
-    const stats = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user_incorrect', q =>
-        q.eq('userId', args.userId).eq('isIncorrect', true),
-      )
-      .collect();
-    return stats.length;
+    // Use incorrectByUser aggregate for O(log n) counting
+    const count = await (incorrectByUser.count as any)(ctx, {
+      namespace: args.userId,
+      bounds: {},
+    });
+    return count;
   },
 });
 
-// Query function to get user bookmarks count - optimized with index
+// Query function to get user bookmarks count - using aggregate for O(log n) performance
 export const getUserBookmarksCountQuery = query({
   args: {
     userId: v.id('users'),
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    // Use efficient index scan instead of .collect() on full table
-    const bookmarks = await ctx.db
-      .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', args.userId))
-      .collect();
-    return bookmarks.length;
+    // Use bookmarkedByUser aggregate for O(log n) counting
+    const count = await (bookmarkedByUser.count as any)(ctx, {
+      namespace: args.userId,
+      bounds: {},
+    });
+    return count;
   },
 });
 
 // Helper functions that call these queries
 export async function getTotalQuestionCount(ctx: any): Promise<number> {
-  return await ctx.runQuery(api.aggregateHelpers.getTotalQuestionCountQuery);
+  return await ctx.runQuery(api.aggregateQueries.getTotalQuestionCountQuery);
 }
 
 export async function getThemeQuestionCount(
   ctx: any,
   themeId: any,
 ): Promise<number> {
-  return await ctx.runQuery(api.aggregateHelpers.getThemeQuestionCountQuery, {
+  return await ctx.runQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
     themeId,
+  });
+}
+
+export async function getSubthemeQuestionCount(
+  ctx: any,
+  subthemeId: any,
+): Promise<number> {
+  return await ctx.runQuery(
+    api.aggregateQueries.getSubthemeQuestionCountQuery,
+    {
+      subthemeId,
+    },
+  );
+}
+
+export async function getGroupQuestionCount(
+  ctx: any,
+  groupId: any,
+): Promise<number> {
+  return await ctx.runQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
+    groupId,
   });
 }
 
@@ -146,7 +249,7 @@ export async function getUserAnsweredCount(
   ctx: any,
   userId: any,
 ): Promise<number> {
-  return await ctx.runQuery(api.aggregateHelpers.getUserAnsweredCountQuery, {
+  return await ctx.runQuery(api.aggregateQueries.getUserAnsweredCountQuery, {
     userId,
   });
 }
@@ -155,7 +258,7 @@ export async function getUserIncorrectCount(
   ctx: any,
   userId: any,
 ): Promise<number> {
-  return await ctx.runQuery(api.aggregateHelpers.getUserIncorrectCountQuery, {
+  return await ctx.runQuery(api.aggregateQueries.getUserIncorrectCountQuery, {
     userId,
   });
 }
@@ -164,10 +267,96 @@ export async function getUserBookmarksCount(
   ctx: any,
   userId: any,
 ): Promise<number> {
-  return await ctx.runQuery(api.aggregateHelpers.getUserBookmarksCountQuery, {
+  return await ctx.runQuery(api.aggregateQueries.getUserBookmarksCountQuery, {
     userId,
   });
 }
+
+/**
+ * Count questions based on filter type only (no taxonomy selection yet)
+ * This function efficiently counts questions using aggregates where possible
+ */
+export const getQuestionCountByFilter = query({
+  args: {
+    filter: v.union(
+      v.literal('all'),
+      v.literal('unanswered'),
+      v.literal('incorrect'),
+      v.literal('bookmarked'),
+    ),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserOrThrow(ctx);
+    return await getCountForFilterType(ctx, args.filter, userId._id);
+  },
+});
+
+/**
+ * Get count for a specific filter type (all/unanswered/incorrect/bookmarked)
+ */
+async function getCountForFilterType(
+  ctx: any,
+  filter: 'all' | 'unanswered' | 'incorrect' | 'bookmarked',
+  userId: Id<'users'>,
+): Promise<number> {
+  switch (filter) {
+    case 'all': {
+      return await getTotalQuestionCount(ctx);
+    }
+
+    case 'unanswered': {
+      // Total questions minus answered questions
+      const totalQuestions = await getTotalQuestionCount(ctx);
+      const answeredCount = await getUserAnsweredCount(ctx, userId);
+      return Math.max(0, totalQuestions - answeredCount);
+    }
+
+    case 'incorrect': {
+      return await getUserIncorrectCount(ctx, userId);
+    }
+
+    case 'bookmarked': {
+      return await getUserBookmarksCount(ctx, userId);
+    }
+
+    default: {
+      return 0;
+    }
+  }
+}
+
+/**
+ * Get question counts for all filter types at once (for efficiency)
+ * This can be used to populate all counters in the UI with a single query
+ */
+export const getAllQuestionCounts = query({
+  args: {},
+  returns: v.object({
+    all: v.number(),
+    unanswered: v.number(),
+    incorrect: v.number(),
+    bookmarked: v.number(),
+  }),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Get all counts efficiently with parallel queries using aggregates
+    const [all, answered, incorrect, bookmarked] = await Promise.all([
+      getTotalQuestionCount(ctx),
+      getUserAnsweredCount(ctx, userId._id),
+      getUserIncorrectCount(ctx, userId._id),
+      getUserBookmarksCount(ctx, userId._id),
+    ]);
+
+    return {
+      all,
+      unanswered: Math.max(0, all - answered),
+      incorrect,
+      bookmarked,
+    };
+  },
+});
 
 // Repair function for totalQuestionCount aggregate
 export const repairTotalQuestionCount = mutation({
@@ -228,6 +417,54 @@ export const repairQuestionCountByTheme = mutation({
   },
 });
 
+// Repair function for questionCountBySubtheme aggregate
+export const repairQuestionCountBySubtheme = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    console.log('Starting questionCountBySubtheme aggregate repair...');
+
+    const allQuestions = await ctx.db.query('questions').collect();
+    let processedCount = 0;
+
+    for (const question of allQuestions) {
+      if (question.subthemeId) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+        processedCount++;
+      }
+    }
+
+    console.log(
+      `Repair completed! Processed ${processedCount} questions with subthemes.`,
+    );
+    return;
+  },
+});
+
+// Repair function for questionCountByGroup aggregate
+export const repairQuestionCountByGroup = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    console.log('Starting questionCountByGroup aggregate repair...');
+
+    const allQuestions = await ctx.db.query('questions').collect();
+    let processedCount = 0;
+
+    for (const question of allQuestions) {
+      if (question.groupId) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+        processedCount++;
+      }
+    }
+
+    console.log(
+      `Repair completed! Processed ${processedCount} questions with groups.`,
+    );
+    return;
+  },
+});
+
 // Combined repair function for all aggregates
 export const repairAllAggregates = mutation({
   args: {},
@@ -235,8 +472,10 @@ export const repairAllAggregates = mutation({
   handler: async ctx => {
     console.log('Starting repair of all question-related aggregates...');
 
-    await ctx.runMutation(api.aggregateHelpers.repairTotalQuestionCount);
-    await ctx.runMutation(api.aggregateHelpers.repairQuestionCountByTheme);
+    await ctx.runMutation(api.aggregateQueries.repairTotalQuestionCount);
+    await ctx.runMutation(api.aggregateQueries.repairQuestionCountByTheme);
+    await ctx.runMutation(api.aggregateQueries.repairQuestionCountBySubtheme);
+    await ctx.runMutation(api.aggregateQueries.repairQuestionCountByGroup);
 
     console.log('All aggregate repairs completed!');
     return;
@@ -352,7 +591,7 @@ export const runTotalQuestionCountRepair = mutation({
 
     while (true) {
       const result = await ctx.runMutation(
-        api.aggregateHelpers.repairTotalQuestionCountPaginated,
+        api.aggregateQueries.repairTotalQuestionCountPaginated,
         {
           batchSize: 50,
           cursor,
@@ -401,7 +640,7 @@ export const runQuestionCountByThemeRepair = mutation({
 
     while (true) {
       const result = await ctx.runMutation(
-        api.aggregateHelpers.repairQuestionCountByThemePaginated,
+        api.aggregateQueries.repairQuestionCountByThemePaginated,
         {
           batchSize: 50,
           cursor,
@@ -429,20 +668,91 @@ export const runQuestionCountByThemeRepair = mutation({
   },
 });
 
+// Repair function for answeredByUser aggregate
+export const repairAnsweredByUser = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    console.log('Starting answeredByUser aggregate repair...');
+
+    const allStats = await ctx.db.query('userQuestionStats').collect();
+    let processedCount = 0;
+
+    for (const stat of allStats) {
+      if (stat.hasAnswered) {
+        await answeredByUser.insertIfDoesNotExist(ctx, stat);
+        processedCount++;
+      }
+    }
+
+    console.log(
+      `Repair completed! Processed ${processedCount} answered stats.`,
+    );
+    return;
+  },
+});
+
+// Repair function for incorrectByUser aggregate
+export const repairIncorrectByUser = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    console.log('Starting incorrectByUser aggregate repair...');
+
+    const allStats = await ctx.db.query('userQuestionStats').collect();
+    let processedCount = 0;
+
+    for (const stat of allStats) {
+      if (stat.isIncorrect) {
+        await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+        processedCount++;
+      }
+    }
+
+    console.log(
+      `Repair completed! Processed ${processedCount} incorrect stats.`,
+    );
+    return;
+  },
+});
+
+// Repair function for bookmarkedByUser aggregate
+export const repairBookmarkedByUser = mutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    console.log('Starting bookmarkedByUser aggregate repair...');
+
+    const allBookmarks = await ctx.db.query('userBookmarks').collect();
+    let processedCount = 0;
+
+    for (const bookmark of allBookmarks) {
+      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+      processedCount++;
+    }
+
+    console.log(`Repair completed! Processed ${processedCount} bookmarks.`);
+    return;
+  },
+});
+
 // Production-safe combined repair function
 export const repairAllAggregatesProduction = mutation({
   args: {},
   returns: v.null(),
   handler: async ctx => {
-    console.log(
-      'Starting production-safe repair of all question-related aggregates...',
-    );
+    console.log('Starting production-safe repair of all aggregates...');
 
-    // Repair totalQuestionCount with pagination
-    await ctx.runMutation(api.aggregateHelpers.runTotalQuestionCountRepair);
+    // Repair question-related aggregates with pagination
+    await ctx.runMutation(api.aggregateQueries.runTotalQuestionCountRepair);
+    await ctx.runMutation(api.aggregateQueries.runQuestionCountByThemeRepair);
+    await ctx.runMutation(api.aggregateQueries.repairQuestionCountBySubtheme);
+    await ctx.runMutation(api.aggregateQueries.repairQuestionCountByGroup);
 
-    // Repair questionCountByTheme with pagination
-    await ctx.runMutation(api.aggregateHelpers.runQuestionCountByThemeRepair);
+    // Repair user stat aggregates
+    await ctx.runMutation(api.aggregateQueries.repairAnsweredByUser);
+    await ctx.runMutation(api.aggregateQueries.repairIncorrectByUser);
+    await ctx.runMutation(api.aggregateQueries.repairBookmarkedByUser);
 
     console.log('All aggregate repairs completed successfully!');
     return;
