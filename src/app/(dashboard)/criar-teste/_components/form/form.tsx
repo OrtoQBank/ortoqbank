@@ -19,6 +19,7 @@ import { QuestionModeSelector } from './QuestionModeSelector';
 import { SubthemeSelector } from './SubthemeSelector';
 import { TestModeSelector } from './TestModeSelector';
 import { ThemeSelector } from './ThemeSelector';
+import { TotalQuestionCount } from './TotalQuestionCount';
 
 export default function TestForm() {
   const router = useRouter();
@@ -298,6 +299,14 @@ export default function TestForm() {
             }}
           />
         )}
+
+        {/* Total Unique Questions */}
+        <TotalQuestionCount
+          selectedThemes={selectedThemes}
+          selectedSubthemes={selectedSubthemes}
+          selectedGroups={selectedGroups}
+          questionMode={questionMode}
+        />
 
         {/* Question Count Section */}
         <QuestionCountSelector

@@ -297,6 +297,151 @@ export const getQuestionCountByFilter = query({
 });
 
 /**
+ * Count questions with hierarchical selections (themes/subthemes/groups)
+ * This provides a smart total that avoids double-counting overlapping hierarchies
+ */
+export const getQuestionCountBySelection = query({
+  args: {
+    filter: v.union(
+      v.literal('all'),
+      v.literal('unanswered'),
+      v.literal('incorrect'),
+      v.literal('bookmarked'),
+    ),
+    selectedThemes: v.optional(v.array(v.id('themes'))),
+    selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
+    selectedGroups: v.optional(v.array(v.id('groups'))),
+  },
+  returns: v.number(),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    const selectedThemes = args.selectedThemes || [];
+    const selectedSubthemes = args.selectedSubthemes || [];
+    const selectedGroups = args.selectedGroups || [];
+
+    // If no selections, return total count for filter type
+    if (
+      selectedThemes.length === 0 &&
+      selectedSubthemes.length === 0 &&
+      selectedGroups.length === 0
+    ) {
+      return await getCountForFilterType(ctx, args.filter, userId._id);
+    }
+
+    // Get all questions that match the hierarchical selections
+    let questionIds = new Set<Id<'questions'>>();
+
+    // Add questions from selected groups (most specific)
+    for (const groupId of selectedGroups) {
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_group')
+        .filter(q => q.eq(q.field('groupId'), groupId))
+        .collect();
+      questions.forEach(q => questionIds.add(q._id));
+    }
+
+    // Add questions from selected subthemes (if no groups from that subtheme are selected)
+    for (const subthemeId of selectedSubthemes) {
+      // Check if any groups from this subtheme are already selected
+      const subthemeGroups = await ctx.db
+        .query('groups')
+        .withIndex('by_subtheme')
+        .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+        .collect();
+
+      const hasSelectedGroupsFromSubtheme = subthemeGroups.some(g =>
+        selectedGroups.includes(g._id),
+      );
+
+      if (!hasSelectedGroupsFromSubtheme) {
+        const questions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme')
+          .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+          .collect();
+        questions.forEach(q => questionIds.add(q._id));
+      }
+    }
+
+    // Add questions from selected themes (if no subthemes from that theme are selected)
+    for (const themeId of selectedThemes) {
+      // Check if any subthemes from this theme are already selected
+      const themeSubthemes = await ctx.db
+        .query('subthemes')
+        .withIndex('by_theme')
+        .filter(q => q.eq(q.field('themeId'), themeId))
+        .collect();
+
+      const hasSelectedSubthemesFromTheme = themeSubthemes.some(s =>
+        selectedSubthemes.includes(s._id),
+      );
+
+      if (!hasSelectedSubthemesFromTheme) {
+        const questions = await ctx.db
+          .query('questions')
+          .withIndex('by_theme')
+          .filter(q => q.eq(q.field('themeId'), themeId))
+          .collect();
+        questions.forEach(q => questionIds.add(q._id));
+      }
+    }
+
+    // Convert to array for filtering
+    const allQuestions = Array.from(questionIds);
+
+    // Apply question mode filter
+    if (args.filter === 'all') {
+      return allQuestions.length;
+    }
+
+    // For user-specific filters, we need to check user stats
+    if (args.filter === 'unanswered') {
+      const userStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user')
+        .filter(q => q.eq(q.field('userId'), userId._id))
+        .collect();
+
+      const answeredQuestionIds = new Set(
+        userStats.map(stat => stat.questionId),
+      );
+      return allQuestions.filter(qId => !answeredQuestionIds.has(qId)).length;
+    }
+
+    if (args.filter === 'incorrect') {
+      const incorrectStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user')
+        .filter(q => q.eq(q.field('userId'), userId._id))
+        .filter(q => q.eq(q.field('isIncorrect'), true))
+        .collect();
+
+      const incorrectQuestionIds = new Set(
+        incorrectStats.map(stat => stat.questionId),
+      );
+      return allQuestions.filter(qId => incorrectQuestionIds.has(qId)).length;
+    }
+
+    if (args.filter === 'bookmarked') {
+      const bookmarks = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user')
+        .filter(q => q.eq(q.field('userId'), userId._id))
+        .collect();
+
+      const bookmarkedQuestionIds = new Set(
+        bookmarks.map(bookmark => bookmark.questionId),
+      );
+      return allQuestions.filter(qId => bookmarkedQuestionIds.has(qId)).length;
+    }
+
+    return 0;
+  },
+});
+
+/**
  * Get count for a specific filter type (all/unanswered/incorrect/bookmarked)
  */
 async function getCountForFilterType(

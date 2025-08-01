@@ -1,10 +1,13 @@
 'use client';
 
+import { useQuery } from 'convex/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+import { api } from '../../../../../../convex/_generated/api';
+import { Id } from '../../../../../../convex/_generated/dataModel';
 
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };
@@ -21,6 +24,54 @@ type SubthemeSelectorProps = {
   onToggleGroup: (groupId: string) => void;
   onToggleMultipleGroups?: (groupIds: string[]) => void;
 };
+
+function SubthemeQuestionCount({ subthemeId }: { subthemeId: string }) {
+  const count = useQuery(api.aggregateQueries.getSubthemeQuestionCountQuery, {
+    subthemeId: subthemeId as Id<'subthemes'>,
+  });
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {count}
+    </span>
+  );
+}
+
+function GroupQuestionCount({ groupId }: { groupId: string }) {
+  const count = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
+    groupId: groupId as Id<'groups'>,
+  });
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {count}
+    </span>
+  );
+}
+
+function ThemeQuestionCount({ themeId }: { themeId: string }) {
+  const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
+    themeId: themeId as Id<'themes'>,
+  });
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {count}
+    </span>
+  );
+}
 
 export function SubthemeSelector({
   themes,
@@ -143,13 +194,14 @@ export function SubthemeSelector({
               onCheckedChange={() => handleSubthemeToggle(subtheme)}
               className="mt-0.5 flex-shrink-0"
             />
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-1 items-center">
               <Label
                 htmlFor={subtheme._id}
                 className="text-sm font-medium hyphens-auto"
               >
                 {subtheme.name}
               </Label>
+              <SubthemeQuestionCount subthemeId={subtheme._id} />
             </div>
             {hasGroups && (
               <button
@@ -177,12 +229,12 @@ export function SubthemeSelector({
                     onCheckedChange={() => onToggleGroup(group._id)}
                     className="mt-0.5 flex-shrink-0"
                   />
-                  <Label
-                    htmlFor={group._id}
-                    className="min-w-0 flex-1 text-sm hyphens-auto"
-                  >
-                    {group.name}
-                  </Label>
+                  <div className="flex min-w-0 flex-1 items-center">
+                    <Label htmlFor={group._id} className="text-sm hyphens-auto">
+                      {group.name}
+                    </Label>
+                    <GroupQuestionCount groupId={group._id} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -209,9 +261,12 @@ export function SubthemeSelector({
 
       return themeSubthemesList.length > 0 ? (
         <div key={themeId} className="space-y-3">
-          <h4 className="text-muted-foreground text-sm font-medium hyphens-auto">
-            {theme?.name}
-          </h4>
+          <div className="flex items-center gap-2">
+            <h4 className="text-muted-foreground text-sm font-medium hyphens-auto">
+              {theme?.name}
+            </h4>
+            <ThemeQuestionCount themeId={themeId} />
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {themeSubthemesList.map(subtheme => (
               <SubthemeItem key={subtheme._id} subtheme={subtheme} />

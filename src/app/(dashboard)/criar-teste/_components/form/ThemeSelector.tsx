@@ -1,5 +1,6 @@
 'use client';
 
+import { useQuery } from 'convex/react';
 import { InfoIcon as InfoCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -8,6 +9,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+import { api } from '../../../../../../convex/_generated/api';
+import { Id } from '../../../../../../convex/_generated/dataModel';
 
 type Theme = { _id: string; name: string };
 
@@ -17,6 +20,22 @@ type ThemeSelectorProps = {
   onToggleTheme: (themeId: string) => void;
   error?: string;
 };
+
+function ThemeQuestionCount({ themeId }: { themeId: string }) {
+  const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
+    themeId: themeId as Id<'themes'>,
+  });
+
+  if (count === undefined) {
+    return <span className="text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {count}
+    </span>
+  );
+}
 
 export function ThemeSelector({
   themes,
@@ -50,9 +69,10 @@ export function ThemeSelector({
               variant={
                 selectedThemes.includes(theme._id) ? 'default' : 'outline'
               }
-              className="h-auto w-full justify-start py-2 text-left"
+              className="h-auto w-full justify-between py-2 text-left"
             >
               <span className="flex-1 truncate text-sm">{theme.name}</span>
+              <ThemeQuestionCount themeId={theme._id} />
             </Button>
           );
         })}
