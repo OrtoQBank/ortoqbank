@@ -93,3 +93,56 @@ export const questionCountByGroup = new TableAggregate<{
   },
   sortKey: (d: unknown) => 'question',
 });
+
+// Random question selection aggregates for efficient randomization
+export const randomQuestions = new TableAggregate<{
+  Namespace: string;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestions, {
+  namespace: () => 'global',
+  sortKey: () => null, // No sorting = random order by _id
+});
+
+export const randomQuestionsByTheme = new TableAggregate<{
+  Namespace: Id<'themes'>;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestionsByTheme, {
+  namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
+  sortKey: () => null, // No sorting = random order by _id
+});
+
+export const randomQuestionsBySubtheme = new TableAggregate<{
+  Namespace: Id<'subthemes'>;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestionsBySubtheme, {
+  namespace: (d: unknown) => {
+    const question = d as { subthemeId?: Id<'subthemes'> };
+    if (!question.subthemeId) {
+      throw new Error('Question has no subthemeId');
+    }
+    return question.subthemeId;
+  },
+  sortKey: () => null, // No sorting = random order by _id
+});
+
+export const randomQuestionsByGroup = new TableAggregate<{
+  Namespace: Id<'groups'>;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestionsByGroup, {
+  namespace: (d: unknown) => {
+    const question = d as { groupId?: Id<'groups'> };
+    if (!question.groupId) {
+      throw new Error('Question has no groupId');
+    }
+    return question.groupId;
+  },
+  sortKey: () => null, // No sorting = random order by _id
+});

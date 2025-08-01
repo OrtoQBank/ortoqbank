@@ -19,4 +19,10 @@ app.use(aggregate, { name: 'answeredByUser' });
 app.use(aggregate, { name: 'incorrectByUser' });
 app.use(aggregate, { name: 'bookmarkedByUser' });
 
+// Random selection aggregates
+app.use(aggregate, { name: 'randomQuestions' });
+app.use(aggregate, { name: 'randomQuestionsByTheme' });
+app.use(aggregate, { name: 'randomQuestionsBySubtheme' });
+app.use(aggregate, { name: 'randomQuestionsByGroup' });
+
 export default app;

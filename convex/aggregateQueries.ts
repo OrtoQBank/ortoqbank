@@ -14,6 +14,10 @@ import {
   answeredByUser,
   incorrectByUser,
   bookmarkedByUser,
+  randomQuestions,
+  randomQuestionsByTheme,
+  randomQuestionsBySubtheme,
+  randomQuestionsByGroup,
 } from './aggregates';
 
 /**
@@ -358,507 +362,432 @@ export const getAllQuestionCounts = query({
   },
 });
 
-// Repair function for totalQuestionCount aggregate
-export const repairTotalQuestionCount = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting totalQuestionCount aggregate repair...');
+// Random question selection functions using aggregates for efficient randomization
 
-    // Clear and rebuild the aggregate
-    await totalQuestionCount.clear(ctx, { namespace: 'global' });
-    console.log('Cleared existing totalQuestionCount aggregate');
-
-    // Get all questions and insert them into the aggregate
-    const allQuestions = await ctx.db.query('questions').collect();
-    console.log(`Found ${allQuestions.length} questions to process`);
-
-    for (const question of allQuestions) {
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-    }
-
-    // Verify the count
-    const finalCount = await totalQuestionCount.count(ctx, {
+/**
+ * Get random questions from the global pool
+ */
+export const getRandomQuestions = query({
+  args: {
+    count: v.number(),
+    seed: v.optional(v.string()),
+  },
+  returns: v.array(v.id('questions')),
+  handler: async (ctx, args) => {
+    const totalCount = await (randomQuestions.count as any)(ctx, {
       namespace: 'global',
       bounds: {},
     });
 
-    console.log(`Repair completed! Final aggregate count: ${finalCount}`);
-    return;
-  },
-});
+    if (totalCount === 0) return [];
 
-// Repair function for questionCountByTheme aggregate
-export const repairQuestionCountByTheme = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting questionCountByTheme aggregate repair...');
+    const questionIds: Id<'questions'>[] = [];
+    const maxAttempts = Math.min(args.count * 3, totalCount); // Avoid infinite loops
+    const usedIndices = new Set<number>();
 
-    // Note: We skip clearing the aggregate since it requires a specific namespace
-    // Instead we'll just ensure all questions are properly inserted
-    console.log('Rebuilding questionCountByTheme aggregate...');
+    // Generate random indices and fetch questions
+    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
+      let randomIndex: number;
+      do {
+        randomIndex = Math.floor(Math.random() * totalCount);
+      } while (usedIndices.has(randomIndex));
 
-    // Get all questions with themes and insert them
-    const allQuestions = await ctx.db.query('questions').collect();
-    let processedCount = 0;
+      usedIndices.add(randomIndex);
 
-    for (const question of allQuestions) {
-      if (question.themeId) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-        processedCount++;
+      try {
+        const randomQuestion = await (randomQuestions.at as any)(
+          ctx,
+          randomIndex,
+        );
+        if (randomQuestion?.id) {
+          questionIds.push(randomQuestion.id);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to get random question at index ${randomIndex}:`,
+          error,
+        );
       }
     }
 
-    console.log(
-      `Repair completed! Processed ${processedCount} questions with themes.`,
-    );
-    return;
+    return questionIds;
   },
 });
 
-// Repair function for questionCountBySubtheme aggregate
-export const repairQuestionCountBySubtheme = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting questionCountBySubtheme aggregate repair...');
-
-    const allQuestions = await ctx.db.query('questions').collect();
-    let processedCount = 0;
-
-    for (const question of allQuestions) {
-      if (question.subthemeId) {
-        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
-        processedCount++;
-      }
-    }
-
-    console.log(
-      `Repair completed! Processed ${processedCount} questions with subthemes.`,
-    );
-    return;
-  },
-});
-
-// Repair function for questionCountByGroup aggregate
-export const repairQuestionCountByGroup = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting questionCountByGroup aggregate repair...');
-
-    const allQuestions = await ctx.db.query('questions').collect();
-    let processedCount = 0;
-
-    for (const question of allQuestions) {
-      if (question.groupId) {
-        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
-        processedCount++;
-      }
-    }
-
-    console.log(
-      `Repair completed! Processed ${processedCount} questions with groups.`,
-    );
-    return;
-  },
-});
-
-// Combined repair function for all aggregates
-export const repairAllAggregates = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting repair of all question-related aggregates...');
-
-    await ctx.runMutation(api.aggregateQueries.repairTotalQuestionCount);
-    await ctx.runMutation(api.aggregateQueries.repairQuestionCountByTheme);
-    await ctx.runMutation(api.aggregateQueries.repairQuestionCountBySubtheme);
-    await ctx.runMutation(api.aggregateQueries.repairQuestionCountByGroup);
-
-    console.log('All aggregate repairs completed!');
-    return;
-  },
-});
-
-// Paginated repair function for totalQuestionCount aggregate (production-safe)
-export const repairTotalQuestionCountPaginated = mutation({
+/**
+ * Get random questions from a specific theme
+ */
+export const getRandomQuestionsByTheme = query({
   args: {
-    batchSize: v.optional(v.number()),
-    cursor: v.optional(v.string()),
-    clearFirst: v.optional(v.boolean()),
+    themeId: v.id('themes'),
+    count: v.number(),
   },
-  returns: v.object({
-    processed: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-    totalProcessed: v.number(),
-  }),
+  returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 50; // Process 50 questions at a time
-    const isFirstRun = args.clearFirst === true;
-
-    console.log(`Processing batch of ${batchSize} questions...`);
-
-    // Clear the aggregate only on first run
-    if (isFirstRun) {
-      console.log('Clearing totalQuestionCount aggregate...');
-      await totalQuestionCount.clear(ctx, { namespace: 'global' });
-      console.log('Aggregate cleared successfully');
-    }
-
-    // Get a batch of questions
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor ?? null,
-      numItems: batchSize,
+    const totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
+      namespace: args.themeId,
+      bounds: {},
     });
 
-    // Process each question in this batch
-    let processed = 0;
-    for (const question of result.page) {
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-      processed++;
-    }
+    if (totalCount === 0) return [];
 
-    console.log(`Processed ${processed} questions in this batch`);
+    const questionIds: Id<'questions'>[] = [];
+    const maxAttempts = Math.min(args.count * 3, totalCount);
+    const usedIndices = new Set<number>();
 
-    return {
-      processed,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-      totalProcessed: processed, // This will be accumulated by the caller
-    };
-  },
-});
+    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
+      let randomIndex: number;
+      do {
+        randomIndex = Math.floor(Math.random() * totalCount);
+      } while (usedIndices.has(randomIndex));
 
-// Paginated repair function for questionCountByTheme aggregate (production-safe)
-export const repairQuestionCountByThemePaginated = mutation({
-  args: {
-    batchSize: v.optional(v.number()),
-    cursor: v.optional(v.string()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-    totalProcessed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 50; // Process 50 questions at a time
+      usedIndices.add(randomIndex);
 
-    console.log(
-      `Processing batch of ${batchSize} questions for theme aggregate...`,
-    );
-
-    // Get a batch of questions
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor ?? null,
-      numItems: batchSize,
-    });
-
-    // Process each question in this batch (only those with themeId)
-    let processed = 0;
-    for (const question of result.page) {
-      if (question.themeId) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-        processed++;
+      try {
+        const randomQuestion = await (randomQuestionsByTheme.at as any)(ctx, {
+          namespace: args.themeId,
+          index: randomIndex,
+        });
+        if (randomQuestion?.id) {
+          questionIds.push(randomQuestion.id);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to get random question at index ${randomIndex} for theme ${args.themeId}:`,
+          error,
+        );
       }
     }
 
-    console.log(`Processed ${processed} questions with themes in this batch`);
-
-    return {
-      processed,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-      totalProcessed: processed,
-    };
+    return questionIds;
   },
 });
 
-// Orchestrator function to run paginated repair for totalQuestionCount
-export const runTotalQuestionCountRepair = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting paginated totalQuestionCount repair...');
+/**
+ * Get random questions from a specific subtheme
+ */
+export const getRandomQuestionsBySubtheme = query({
+  args: {
+    subthemeId: v.id('subthemes'),
+    count: v.number(),
+  },
+  returns: v.array(v.id('questions')),
+  handler: async (ctx, args) => {
+    const totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
+      namespace: args.subthemeId,
+      bounds: {},
+    });
 
-    let cursor: string | undefined;
-    let totalProcessed = 0;
-    let batchCount = 0;
-    let isFirstRun = true;
+    if (totalCount === 0) return [];
 
-    while (true) {
-      const result = await ctx.runMutation(
-        api.aggregateQueries.repairTotalQuestionCountPaginated,
-        {
-          batchSize: 50,
-          cursor,
-          clearFirst: isFirstRun,
-        },
-      );
+    const questionIds: Id<'questions'>[] = [];
+    const maxAttempts = Math.min(args.count * 3, totalCount);
+    const usedIndices = new Set<number>();
 
-      totalProcessed += result.processed;
-      batchCount++;
-      isFirstRun = false;
+    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
+      let randomIndex: number;
+      do {
+        randomIndex = Math.floor(Math.random() * totalCount);
+      } while (usedIndices.has(randomIndex));
 
-      console.log(
-        `Batch ${batchCount} completed. Total processed: ${totalProcessed}`,
-      );
+      usedIndices.add(randomIndex);
 
-      if (result.isDone) {
+      try {
+        const randomQuestion = await (randomQuestionsBySubtheme.at as any)(
+          ctx,
+          {
+            namespace: args.subthemeId,
+            index: randomIndex,
+          },
+        );
+        if (randomQuestion?.id) {
+          questionIds.push(randomQuestion.id);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to get random question at index ${randomIndex} for subtheme ${args.subthemeId}:`,
+          error,
+        );
+      }
+    }
+
+    return questionIds;
+  },
+});
+
+/**
+ * Get random questions from a specific group
+ */
+export const getRandomQuestionsByGroup = query({
+  args: {
+    groupId: v.id('groups'),
+    count: v.number(),
+  },
+  returns: v.array(v.id('questions')),
+  handler: async (ctx, args) => {
+    const totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
+      namespace: args.groupId,
+      bounds: {},
+    });
+
+    if (totalCount === 0) return [];
+
+    const questionIds: Id<'questions'>[] = [];
+    const maxAttempts = Math.min(args.count * 3, totalCount);
+    const usedIndices = new Set<number>();
+
+    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
+      let randomIndex: number;
+      do {
+        randomIndex = Math.floor(Math.random() * totalCount);
+      } while (usedIndices.has(randomIndex));
+
+      usedIndices.add(randomIndex);
+
+      try {
+        const randomQuestion = await (randomQuestionsByGroup.at as any)(ctx, {
+          namespace: args.groupId,
+          index: randomIndex,
+        });
+        if (randomQuestion?.id) {
+          questionIds.push(randomQuestion.id);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to get random question at index ${randomIndex} for group ${args.groupId}:`,
+          error,
+        );
+      }
+    }
+
+    return questionIds;
+  },
+});
+
+/**
+ * Get random questions filtered by user mode (incorrect, bookmarked, unanswered)
+ * This combines aggregate-based random selection with user filtering
+ */
+export const getRandomQuestionsByUserMode = query({
+  args: {
+    userId: v.id('users'),
+    mode: v.union(
+      v.literal('incorrect'),
+      v.literal('bookmarked'),
+      v.literal('unanswered'),
+    ),
+    count: v.number(),
+    themeId: v.optional(v.id('themes')),
+    subthemeId: v.optional(v.id('subthemes')),
+    groupId: v.optional(v.id('groups')),
+  },
+  returns: v.array(v.id('questions')),
+  handler: async (ctx, args) => {
+    const questionIds: Id<'questions'>[] = [];
+    const maxAttempts = args.count * 10; // Try more to account for filtering
+    let attempts = 0;
+
+    // Get user filter data based on mode
+    let userQuestionIds: Set<Id<'questions'>>;
+
+    switch (args.mode) {
+      case 'incorrect': {
+        const incorrectStats = await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user_incorrect', q =>
+            q.eq('userId', args.userId).eq('isIncorrect', true),
+          )
+          .collect();
+        userQuestionIds = new Set(incorrectStats.map(s => s.questionId));
         break;
       }
-
-      cursor = result.continueCursor;
-    }
-
-    // Verify the final count
-    const finalCount = await totalQuestionCount.count(ctx, {
-      namespace: 'global',
-      bounds: {},
-    });
-
-    console.log(
-      `Repair completed! Processed ${totalProcessed} questions in ${batchCount} batches. Final count: ${finalCount}`,
-    );
-    return;
-  },
-});
-
-// Orchestrator function to run paginated repair for questionCountByTheme
-export const runQuestionCountByThemeRepair = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting paginated questionCountByTheme repair...');
-
-    let cursor: string | undefined;
-    let totalProcessed = 0;
-    let batchCount = 0;
-
-    while (true) {
-      const result = await ctx.runMutation(
-        api.aggregateQueries.repairQuestionCountByThemePaginated,
-        {
-          batchSize: 50,
-          cursor,
-        },
-      );
-
-      totalProcessed += result.processed;
-      batchCount++;
-
-      console.log(
-        `Batch ${batchCount} completed. Total processed: ${totalProcessed}`,
-      );
-
-      if (result.isDone) {
+      case 'bookmarked': {
+        const bookmarks = await ctx.db
+          .query('userBookmarks')
+          .withIndex('by_user', q => q.eq('userId', args.userId))
+          .collect();
+        userQuestionIds = new Set(bookmarks.map(b => b.questionId));
         break;
       }
+      case 'unanswered': {
+        const answeredStats = await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', args.userId))
+          .collect();
+        const answeredIds = new Set(answeredStats.map(s => s.questionId));
 
-      cursor = result.continueCursor;
-    }
+        // For unanswered, we'll use a different strategy - get random from aggregate then filter
+        let totalCount: number;
+        let randomQuestionGetter: (index: number) => Promise<any>;
 
-    console.log(
-      `Theme repair completed! Processed ${totalProcessed} questions with themes in ${batchCount} batches.`,
-    );
-    return;
-  },
-});
+        if (args.groupId) {
+          totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
+            namespace: args.groupId,
+            bounds: {},
+          });
+          randomQuestionGetter = index =>
+            (randomQuestionsByGroup.at as any)(ctx, {
+              namespace: args.groupId,
+              index,
+            });
+        } else if (args.subthemeId) {
+          totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
+            namespace: args.subthemeId,
+            bounds: {},
+          });
+          randomQuestionGetter = index =>
+            (randomQuestionsBySubtheme.at as any)(ctx, {
+              namespace: args.subthemeId,
+              index,
+            });
+        } else if (args.themeId) {
+          totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
+            namespace: args.themeId,
+            bounds: {},
+          });
+          randomQuestionGetter = index =>
+            (randomQuestionsByTheme.at as any)(ctx, {
+              namespace: args.themeId,
+              index,
+            });
+        } else {
+          totalCount = await (randomQuestions.count as any)(ctx, {
+            namespace: 'global',
+            bounds: {},
+          });
+          randomQuestionGetter = index =>
+            (randomQuestions.at as any)(ctx, index);
+        }
 
-// Repair function for answeredByUser aggregate
-export const repairAnsweredByUser = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting answeredByUser aggregate repair...');
+        const usedIndices = new Set<number>();
 
-    const allStats = await ctx.db.query('userQuestionStats').collect();
-    let processedCount = 0;
+        // Get random unanswered questions
+        while (questionIds.length < args.count && attempts < maxAttempts) {
+          let randomIndex: number;
+          do {
+            randomIndex = Math.floor(Math.random() * totalCount);
+          } while (usedIndices.has(randomIndex));
 
-    for (const stat of allStats) {
-      if (stat.hasAnswered) {
-        await answeredByUser.insertIfDoesNotExist(ctx, stat);
-        processedCount++;
+          usedIndices.add(randomIndex);
+          attempts++;
+
+          try {
+            const randomQuestion = await randomQuestionGetter(randomIndex);
+            if (randomQuestion?.id && !answeredIds.has(randomQuestion.id)) {
+              questionIds.push(randomQuestion.id);
+            }
+          } catch (error) {
+            console.warn(
+              `Failed to get random question at index ${randomIndex}:`,
+              error,
+            );
+          }
+        }
+
+        return questionIds;
       }
     }
 
-    console.log(
-      `Repair completed! Processed ${processedCount} answered stats.`,
-    );
-    return;
-  },
-});
+    // For incorrect and bookmarked modes: get random questions then filter
+    if (userQuestionIds.size === 0) {
+      return [];
+    }
 
-// Repair function for incorrectByUser aggregate
-export const repairIncorrectByUser = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting incorrectByUser aggregate repair...');
+    // Strategy: Use appropriate aggregate then filter by user data
+    let totalCount: number;
+    let randomQuestionGetter: (index: number) => Promise<any>;
 
-    const allStats = await ctx.db.query('userQuestionStats').collect();
-    let processedCount = 0;
+    if (args.groupId) {
+      totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
+        namespace: args.groupId,
+        bounds: {},
+      });
+      randomQuestionGetter = index =>
+        (randomQuestionsByGroup.at as any)(ctx, {
+          namespace: args.groupId,
+          index,
+        });
+    } else if (args.subthemeId) {
+      totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
+        namespace: args.subthemeId,
+        bounds: {},
+      });
+      randomQuestionGetter = index =>
+        (randomQuestionsBySubtheme.at as any)(ctx, {
+          namespace: args.subthemeId,
+          index,
+        });
+    } else if (args.themeId) {
+      totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
+        namespace: args.themeId,
+        bounds: {},
+      });
+      randomQuestionGetter = index =>
+        (randomQuestionsByTheme.at as any)(ctx, {
+          namespace: args.themeId,
+          index,
+        });
+    } else {
+      totalCount = await (randomQuestions.count as any)(ctx, {
+        namespace: 'global',
+        bounds: {},
+      });
+      randomQuestionGetter = index => (randomQuestions.at as any)(ctx, index);
+    }
 
-    for (const stat of allStats) {
-      if (stat.isIncorrect) {
-        await incorrectByUser.insertIfDoesNotExist(ctx, stat);
-        processedCount++;
+    const usedIndices = new Set<number>();
+
+    // Get random questions that match user criteria
+    while (questionIds.length < args.count && attempts < maxAttempts) {
+      let randomIndex: number;
+      do {
+        randomIndex = Math.floor(Math.random() * totalCount);
+      } while (usedIndices.has(randomIndex));
+
+      usedIndices.add(randomIndex);
+      attempts++;
+
+      try {
+        const randomQuestion = await randomQuestionGetter(randomIndex);
+        if (randomQuestion?.id && userQuestionIds.has(randomQuestion.id)) {
+          questionIds.push(randomQuestion.id);
+        }
+      } catch (error) {
+        console.warn(
+          `Failed to get random question at index ${randomIndex}:`,
+          error,
+        );
       }
     }
 
-    console.log(
-      `Repair completed! Processed ${processedCount} incorrect stats.`,
-    );
-    return;
+    return questionIds;
   },
 });
 
-// Repair function for bookmarkedByUser aggregate
-export const repairBookmarkedByUser = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting bookmarkedByUser aggregate repair...');
-
-    const allBookmarks = await ctx.db.query('userBookmarks').collect();
-    let processedCount = 0;
-
-    for (const bookmark of allBookmarks) {
-      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
-      processedCount++;
-    }
-
-    console.log(`Repair completed! Processed ${processedCount} bookmarks.`);
-    return;
-  },
-});
-
-// Production-safe combined repair function
-export const repairAllAggregatesProduction = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Starting production-safe repair of all aggregates...');
-
-    // Repair question-related aggregates with pagination
-    await ctx.runMutation(api.aggregateQueries.runTotalQuestionCountRepair);
-    await ctx.runMutation(api.aggregateQueries.runQuestionCountByThemeRepair);
-    await ctx.runMutation(api.aggregateQueries.repairQuestionCountBySubtheme);
-    await ctx.runMutation(api.aggregateQueries.repairQuestionCountByGroup);
-
-    // Repair user stat aggregates
-    await ctx.runMutation(api.aggregateQueries.repairAnsweredByUser);
-    await ctx.runMutation(api.aggregateQueries.repairIncorrectByUser);
-    await ctx.runMutation(api.aggregateQueries.repairBookmarkedByUser);
-
-    console.log('All aggregate repairs completed successfully!');
-    return;
-  },
-});
-
-// Single-step repair functions that can be called individually
-export const stepOneClearTotalQuestionCount = mutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('Step 1: Clearing totalQuestionCount aggregate...');
-    await totalQuestionCount.clear(ctx, { namespace: 'global' });
-    console.log('totalQuestionCount aggregate cleared successfully');
-    return;
-  },
-});
-
-export const stepTwoRepairTotalQuestionCountBatch = mutation({
-  args: {
-    cursor: v.optional(v.string()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
-    console.log(
-      `Step 2: Processing batch of ${batchSize} questions for totalQuestionCount...`,
-    );
-
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor ?? null,
-      numItems: batchSize,
-    });
-
-    let processed = 0;
-    for (const question of result.page) {
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-      processed++;
-    }
-
-    console.log(`Processed ${processed} questions. Done: ${result.isDone}`);
-
-    return {
-      processed,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-export const stepThreeRepairThemeCountBatch = mutation({
-  args: {
-    cursor: v.optional(v.string()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
-    console.log(
-      `Step 3: Processing batch of ${batchSize} questions for questionCountByTheme...`,
-    );
-
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor ?? null,
-      numItems: batchSize,
-    });
-
-    let processed = 0;
-    for (const question of result.page) {
-      if (question.themeId) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-        processed++;
-      }
-    }
-
-    console.log(
-      `Processed ${processed} questions with themes. Done: ${result.isDone}`,
-    );
-
-    return {
-      processed,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-export const stepFourVerifyTotalCount = mutation({
-  args: {},
-  returns: v.number(),
-  handler: async ctx => {
-    console.log('Step 4: Verifying totalQuestionCount...');
-    const count = await totalQuestionCount.count(ctx, {
-      namespace: 'global',
-      bounds: {},
-    });
-    console.log(`Final totalQuestionCount: ${count}`);
-    return count;
-  },
-});
+/**
+ * ============================================================================
+ * AGGREGATE REPAIR FUNCTIONS - MOVED TO aggregateWorkflows.ts
+ * ============================================================================
+ *
+ * All repair operations are now consolidated in aggregateWorkflows.ts
+ *
+ * RECOMMENDED APPROACH (Production-Safe):
+ * - api.aggregateWorkflows.startComprehensiveRepair()
+ *   → Workflow-based repair for large datasets with full progress tracking
+ *
+ * EMERGENCY REPAIRS (Quick fixes):
+ * - api.aggregateWorkflows.emergencyRepairQuestionCount()
+ *   → Fast question count repair with pagination
+ * - api.aggregateWorkflows.emergencyRepairUserStats(userId)
+ *   → Fast user stats repair for specific user
+ *
+ * LEGACY WORKFLOW OPTIONS (Still available):
+ * - api.aggregateWorkflows.startAggregateRepair()
+ * - api.aggregateWorkflows.startUserAggregatesRepair()
+ *
+ * All repair functions now use:
+ * ✅ Production-safe pagination (100-item batches)
+ * ✅ Comprehensive progress logging
+ * ✅ Memory-efficient processing
+ * ✅ Automatic verification steps
+ */

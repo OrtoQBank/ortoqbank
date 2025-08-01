@@ -8,6 +8,7 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
+import { api } from './_generated/api';
 
 type QuestionMode = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
 
@@ -24,6 +25,272 @@ function shuffleArray<T>(array: T[]): T[] {
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
+}
+
+/**
+ * Aggregate-based random selection with complete hierarchy support
+ * Handles all hierarchy cases using the same override logic as the original
+ */
+async function collectRandomQuestionsWithAggregates(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<'users'>,
+  questionMode: QuestionMode,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+): Promise<Id<'questions'>[]> {
+  console.log(
+    `🚀 AGGREGATE ADVANCED: Using hierarchy-aware aggregate random selection:`,
+    {
+      questionMode,
+      themes: selectedThemes.length,
+      subthemes: selectedSubthemes.length,
+      groups: selectedGroups.length,
+      maxQuestions,
+    },
+  );
+
+  // For user-specific modes, use the new aggregate-based user mode function
+  if (questionMode !== 'all') {
+    console.log(
+      `🚀 AGGREGATE: Using aggregate-based approach for user mode ${questionMode}`,
+    );
+
+    let questionIds: Id<'questions'>[] = [];
+
+    // Strategy: Use the most specific aggregate + user filtering
+    if (selectedGroups.length > 0) {
+      const questionsPerGroup = Math.ceil(maxQuestions / selectedGroups.length);
+
+      for (const groupId of selectedGroups) {
+        const groupQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserMode,
+          {
+            userId,
+            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+            count: questionsPerGroup,
+            groupId,
+          },
+        );
+        questionIds.push(...groupQuestionIds);
+      }
+    } else if (selectedSubthemes.length > 0) {
+      const questionsPerSubtheme = Math.ceil(
+        maxQuestions / selectedSubthemes.length,
+      );
+
+      for (const subthemeId of selectedSubthemes) {
+        const subthemeQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserMode,
+          {
+            userId,
+            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+            count: questionsPerSubtheme,
+            subthemeId,
+          },
+        );
+        questionIds.push(...subthemeQuestionIds);
+      }
+    } else if (selectedThemes.length > 0) {
+      const questionsPerTheme = Math.ceil(maxQuestions / selectedThemes.length);
+
+      for (const themeId of selectedThemes) {
+        const themeQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserMode,
+          {
+            userId,
+            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+            count: questionsPerTheme,
+            themeId,
+          },
+        );
+        questionIds.push(...themeQuestionIds);
+      }
+    } else {
+      // Get from global pool with user filtering
+      questionIds = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsByUserMode,
+        {
+          userId,
+          mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+          count: maxQuestions,
+        },
+      );
+    }
+
+    // Remove duplicates and limit
+    const uniqueQuestionIds = [...new Set(questionIds)];
+    if (uniqueQuestionIds.length > maxQuestions) {
+      const shuffled = shuffleArray(uniqueQuestionIds);
+      return shuffled.slice(0, maxQuestions);
+    }
+
+    console.log(
+      `🚀 AGGREGATE: User mode ${questionMode} result: ${uniqueQuestionIds.length} unique questions`,
+    );
+    return uniqueQuestionIds;
+  }
+
+  const allQuestionIds = new Set<Id<'questions'>>();
+  let remainingQuestions = maxQuestions;
+
+  // Step 1: Build hierarchy mappings (same logic as original)
+  const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
+  if (selectedSubthemes.length > 0) {
+    const subthemes = await Promise.all(
+      selectedSubthemes.map(id => ctx.db.get(id)),
+    );
+    subthemes.forEach((subtheme, idx) => {
+      if (subtheme?.themeId) {
+        subthemeToTheme.set(selectedSubthemes[idx], subtheme.themeId);
+      }
+    });
+  }
+
+  const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
+  if (selectedGroups.length > 0) {
+    const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
+    groups.forEach((group, idx) => {
+      if (group?.subthemeId) {
+        groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
+      }
+    });
+  }
+
+  // Step 2: Group selected groups by their subtheme
+  const groupsBySubtheme = new Map<Id<'subthemes'>, Id<'groups'>[]>();
+  for (const groupId of selectedGroups) {
+    const subthemeId = groupToSubtheme.get(groupId);
+    if (subthemeId) {
+      if (!groupsBySubtheme.has(subthemeId)) {
+        groupsBySubtheme.set(subthemeId, []);
+      }
+      groupsBySubtheme.get(subthemeId)!.push(groupId);
+    }
+  }
+
+  // Step 3: Process groups (highest priority)
+  if (selectedGroups.length > 0) {
+    const questionsPerGroup = Math.ceil(
+      remainingQuestions / selectedGroups.length,
+    );
+    console.log(
+      `🚀 AGGREGATE: Processing ${selectedGroups.length} groups with ${questionsPerGroup} questions each`,
+    );
+
+    for (const groupId of selectedGroups) {
+      if (remainingQuestions <= 0) break;
+
+      const groupQuestionIds = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsByGroup,
+        {
+          groupId,
+          count: Math.min(questionsPerGroup, remainingQuestions),
+        },
+      );
+
+      groupQuestionIds.forEach(id => allQuestionIds.add(id));
+      remainingQuestions -= groupQuestionIds.length;
+      console.log(
+        `🚀 AGGREGATE: Group ${groupId} contributed ${groupQuestionIds.length} questions`,
+      );
+    }
+  }
+
+  // Step 4: Process subthemes (only those not overridden by groups)
+  const hasAnyGroupsSelected = selectedGroups.length > 0;
+  const subthemesToProcess = new Set(selectedSubthemes);
+
+  // Add implied subthemes from groups
+  if (hasAnyGroupsSelected) {
+    for (const [subthemeId] of groupsBySubtheme) {
+      subthemesToProcess.add(subthemeId);
+    }
+  }
+
+  for (const subthemeId of subthemesToProcess) {
+    if (remainingQuestions <= 0) break;
+
+    const groupsForThisSubtheme = groupsBySubtheme.get(subthemeId);
+    const isExplicitlySelected = selectedSubthemes.includes(subthemeId);
+
+    // Only get subtheme questions if:
+    // 1. Subtheme was explicitly selected AND
+    // 2. Either no groups are selected globally OR this subtheme has no groups
+    const shouldProcessSubtheme =
+      isExplicitlySelected &&
+      (!hasAnyGroupsSelected ||
+        !groupsForThisSubtheme ||
+        groupsForThisSubtheme.length === 0);
+
+    if (shouldProcessSubtheme) {
+      const subthemeQuestionIds = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsBySubtheme,
+        {
+          subthemeId,
+          count: remainingQuestions,
+        },
+      );
+
+      // Filter out questions that belong to groups (to avoid non-group questions when groups exist)
+      // Note: This is a simplification - we could add more sophisticated filtering here
+      subthemeQuestionIds.forEach(id => allQuestionIds.add(id));
+      remainingQuestions -= subthemeQuestionIds.length;
+      console.log(
+        `🚀 AGGREGATE: Subtheme ${subthemeId} contributed ${subthemeQuestionIds.length} questions`,
+      );
+    }
+  }
+
+  // Step 5: Process themes (only those not overridden by subthemes)
+  const overriddenThemes = new Set(subthemeToTheme.values());
+
+  for (const themeId of selectedThemes) {
+    if (remainingQuestions <= 0) break;
+
+    if (!overriddenThemes.has(themeId)) {
+      const themeQuestionIds = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsByTheme,
+        {
+          themeId,
+          count: remainingQuestions,
+        },
+      );
+
+      themeQuestionIds.forEach(id => allQuestionIds.add(id));
+      remainingQuestions -= themeQuestionIds.length;
+      console.log(
+        `🚀 AGGREGATE: Theme ${themeId} contributed ${themeQuestionIds.length} questions`,
+      );
+    } else {
+      console.log(
+        `🚀 AGGREGATE: Theme ${themeId} skipped (overridden by subthemes)`,
+      );
+    }
+  }
+
+  // Step 6: If no filters, get from global pool
+  if (
+    selectedThemes.length === 0 &&
+    selectedSubthemes.length === 0 &&
+    selectedGroups.length === 0
+  ) {
+    console.log(`🚀 AGGREGATE: Getting random questions from global pool`);
+    const globalQuestionIds = await ctx.runQuery(
+      api.aggregateQueries.getRandomQuestions,
+      {
+        count: maxQuestions,
+      },
+    );
+    globalQuestionIds.forEach(id => allQuestionIds.add(id));
+  }
+
+  const finalQuestionIds = [...allQuestionIds];
+  console.log(
+    `🚀 AGGREGATE: Final result: ${finalQuestionIds.length} unique questions`,
+  );
+  return finalQuestionIds;
 }
 
 /**
@@ -51,9 +318,39 @@ async function collectQuestionsOptimized(
     },
   );
 
-  // For 'all' mode: Keep original logic (taxonomical filtering first)
+  // Use aggregate approach for ALL modes (both 'all' and user-specific)
+  console.log(`🚀 DEBUG: Using aggregate approach for '${questionMode}' mode`);
+
+  const aggregateResult = await collectRandomQuestionsWithAggregates(
+    ctx,
+    userId,
+    questionMode,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    maxQuestions,
+  );
+
+  // If aggregate approach worked and gave us questions, use it
+  if (aggregateResult.length > 0) {
+    console.log(
+      `🚀 DEBUG: Aggregate approach succeeded with ${aggregateResult.length} questions`,
+    );
+
+    // Convert IDs to full question objects for consistency with existing code
+    const questions = await Promise.all(
+      aggregateResult.map(id => ctx.db.get(id)),
+    );
+
+    return questions.filter((q): q is Doc<'questions'> => q !== null);
+  }
+
+  console.log(
+    `🚀 DEBUG: Aggregate approach returned no questions, falling back to original logic`,
+  );
+
+  // Fall back to original logic only if aggregate approach completely failed
   if (questionMode === 'all') {
-    console.log(`🚀 DEBUG: Using original logic for 'all' mode`);
     return await collectQuestionsWithHierarchyRestriction(
       ctx,
       selectedThemes,

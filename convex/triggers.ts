@@ -13,6 +13,12 @@ triggers.register('userQuestionStats', aggregates.incorrectByUser.trigger());
 triggers.register('userBookmarks', aggregates.bookmarkedByUser.trigger());
 triggers.register('questions', aggregates.questionCountByTheme.trigger());
 
+// Register random selection aggregates
+triggers.register('questions', aggregates.randomQuestions.trigger());
+triggers.register('questions', aggregates.randomQuestionsByTheme.trigger());
+triggers.register('questions', aggregates.randomQuestionsBySubtheme.trigger());
+triggers.register('questions', aggregates.randomQuestionsByGroup.trigger());
+
 /**
  * Initialize all aggregates at startup by clearing
  * the existing data and setting up new parameters
@@ -35,6 +41,23 @@ export const initializeAggregates = internalMutation({
         rootLazy: true,
       }),
       aggregates.questionCountByTheme.clearAll(ctx, {
+        maxNodeSize: 16,
+        rootLazy: true,
+      }),
+      // Clear random selection aggregates
+      aggregates.randomQuestions.clearAll(ctx, {
+        maxNodeSize: 16,
+        rootLazy: true,
+      }),
+      aggregates.randomQuestionsByTheme.clearAll(ctx, {
+        maxNodeSize: 16,
+        rootLazy: true,
+      }),
+      aggregates.randomQuestionsBySubtheme.clearAll(ctx, {
+        maxNodeSize: 16,
+        rootLazy: true,
+      }),
+      aggregates.randomQuestionsByGroup.clearAll(ctx, {
         maxNodeSize: 16,
         rootLazy: true,
       }),
