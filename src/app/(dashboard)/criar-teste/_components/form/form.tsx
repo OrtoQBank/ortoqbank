@@ -258,6 +258,7 @@ export default function TestForm() {
             selectedThemes={selectedThemes}
             selectedSubthemes={selectedSubthemes}
             selectedGroups={selectedGroups}
+            questionMode={questionMode}
             onToggleSubtheme={subthemeId => {
               const current = selectedSubthemes || [];
               form.setValue(

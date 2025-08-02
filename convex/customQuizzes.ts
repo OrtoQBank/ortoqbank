@@ -51,85 +51,61 @@ async function collectRandomQuestionsWithAggregates(
     },
   );
 
-  // For user-specific modes, use the new aggregate-based user mode function
+  // For user-specific modes, use batch-optimized approach for maximum performance
   if (questionMode !== 'all') {
     console.log(
-      `🚀 AGGREGATE: Using aggregate-based approach for user mode ${questionMode}`,
+      `🚀 AGGREGATE BATCH: Using batch-optimized approach for user mode ${questionMode}`,
     );
 
-    let questionIds: Id<'questions'>[] = [];
+    // OPTIMIZATION: Use batch processing for multiple selections
+    const hasHierarchicalSelections =
+      selectedGroups.length > 0 ||
+      selectedSubthemes.length > 0 ||
+      selectedThemes.length > 0;
 
-    // Strategy: Use the most specific aggregate + user filtering
-    if (selectedGroups.length > 0) {
-      const questionsPerGroup = Math.ceil(maxQuestions / selectedGroups.length);
+    if (hasHierarchicalSelections) {
+      // Prepare selections for batch processing (priority order: group > subtheme > theme)
+      const selections = [
+        ...selectedGroups.map(id => ({ type: 'group' as const, id })),
+        ...selectedSubthemes.map(id => ({ type: 'subtheme' as const, id })),
+        ...selectedThemes.map(id => ({ type: 'theme' as const, id })),
+      ];
 
-      for (const groupId of selectedGroups) {
-        const groupQuestionIds = await ctx.runQuery(
-          api.aggregateQueries.getRandomQuestionsByUserMode,
-          {
-            userId,
-            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
-            count: questionsPerGroup,
-            groupId,
-          },
-        );
-        questionIds.push(...groupQuestionIds);
-      }
-    } else if (selectedSubthemes.length > 0) {
-      const questionsPerSubtheme = Math.ceil(
-        maxQuestions / selectedSubthemes.length,
+      console.log(
+        `🚀 AGGREGATE BATCH: Processing ${selections.length} selections in parallel`,
       );
 
-      for (const subthemeId of selectedSubthemes) {
-        const subthemeQuestionIds = await ctx.runQuery(
-          api.aggregateQueries.getRandomQuestionsByUserMode,
-          {
-            userId,
-            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
-            count: questionsPerSubtheme,
-            subthemeId,
-          },
-        );
-        questionIds.push(...subthemeQuestionIds);
-      }
-    } else if (selectedThemes.length > 0) {
-      const questionsPerTheme = Math.ceil(maxQuestions / selectedThemes.length);
+      // Use the batch-optimized function for maximum performance
+      const questionIds = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsByUserModeBatch,
+        {
+          userId,
+          mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+          totalCount: maxQuestions,
+          selections,
+        },
+      );
 
-      for (const themeId of selectedThemes) {
-        const themeQuestionIds = await ctx.runQuery(
-          api.aggregateQueries.getRandomQuestionsByUserMode,
-          {
-            userId,
-            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
-            count: questionsPerTheme,
-            themeId,
-          },
-        );
-        questionIds.push(...themeQuestionIds);
-      }
+      console.log(
+        `🚀 AGGREGATE BATCH: Returned ${questionIds.length} questions for mode '${questionMode}'`,
+      );
+      return questionIds;
     } else {
-      // Get from global pool with user filtering
-      questionIds = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestionsByUserMode,
+      // Global query for cases with no hierarchical selections
+      const questionIds = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsByUserModeOptimized,
         {
           userId,
           mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
           count: maxQuestions,
         },
       );
-    }
 
-    // Remove duplicates and limit
-    const uniqueQuestionIds = [...new Set(questionIds)];
-    if (uniqueQuestionIds.length > maxQuestions) {
-      const shuffled = shuffleArray(uniqueQuestionIds);
-      return shuffled.slice(0, maxQuestions);
+      console.log(
+        `🚀 AGGREGATE GLOBAL: Returned ${questionIds.length} questions for mode '${questionMode}'`,
+      );
+      return questionIds;
     }
-
-    console.log(
-      `🚀 AGGREGATE: User mode ${questionMode} result: ${uniqueQuestionIds.length} unique questions`,
-    );
-    return uniqueQuestionIds;
   }
 
   const allQuestionIds = new Set<Id<'questions'>>();
@@ -190,7 +166,7 @@ async function collectRandomQuestionsWithAggregates(
         },
       );
 
-      groupQuestionIds.forEach(id => allQuestionIds.add(id));
+      groupQuestionIds.forEach((id: Id<'questions'>) => allQuestionIds.add(id));
       remainingQuestions -= groupQuestionIds.length;
       console.log(
         `🚀 AGGREGATE: Group ${groupId} contributed ${groupQuestionIds.length} questions`,
@@ -235,7 +211,9 @@ async function collectRandomQuestionsWithAggregates(
 
       // Filter out questions that belong to groups (to avoid non-group questions when groups exist)
       // Note: This is a simplification - we could add more sophisticated filtering here
-      subthemeQuestionIds.forEach(id => allQuestionIds.add(id));
+      subthemeQuestionIds.forEach((id: Id<'questions'>) =>
+        allQuestionIds.add(id),
+      );
       remainingQuestions -= subthemeQuestionIds.length;
       console.log(
         `🚀 AGGREGATE: Subtheme ${subthemeId} contributed ${subthemeQuestionIds.length} questions`,
@@ -258,7 +236,7 @@ async function collectRandomQuestionsWithAggregates(
         },
       );
 
-      themeQuestionIds.forEach(id => allQuestionIds.add(id));
+      themeQuestionIds.forEach((id: Id<'questions'>) => allQuestionIds.add(id));
       remainingQuestions -= themeQuestionIds.length;
       console.log(
         `🚀 AGGREGATE: Theme ${themeId} contributed ${themeQuestionIds.length} questions`,
@@ -283,7 +261,7 @@ async function collectRandomQuestionsWithAggregates(
         count: maxQuestions,
       },
     );
-    globalQuestionIds.forEach(id => allQuestionIds.add(id));
+    globalQuestionIds.forEach((id: Id<'questions'>) => allQuestionIds.add(id));
   }
 
   const finalQuestionIds = [...allQuestionIds];

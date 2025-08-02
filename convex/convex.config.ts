@@ -25,4 +25,15 @@ app.use(aggregate, { name: 'randomQuestionsByTheme' });
 app.use(aggregate, { name: 'randomQuestionsBySubtheme' });
 app.use(aggregate, { name: 'randomQuestionsByGroup' });
 
+// Hierarchical user-specific aggregates for count
+app.use(aggregate, { name: 'incorrectByThemeByUser' });
+app.use(aggregate, { name: 'incorrectBySubthemeByUser' });
+app.use(aggregate, { name: 'incorrectByGroupByUser' });
+app.use(aggregate, { name: 'bookmarkedByThemeByUser' });
+app.use(aggregate, { name: 'bookmarkedBySubthemeByUser' });
+app.use(aggregate, { name: 'bookmarkedByGroupByUser' });
+app.use(aggregate, { name: 'answeredByThemeByUser' });
+app.use(aggregate, { name: 'answeredBySubthemeByUser' });
+app.use(aggregate, { name: 'answeredByGroupByUser' });
+
 export default app;

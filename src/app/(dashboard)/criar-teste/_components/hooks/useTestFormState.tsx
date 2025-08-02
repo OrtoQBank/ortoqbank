@@ -63,13 +63,37 @@ export function useTestFormState() {
   // Only query when user is authenticated
   const isAuthenticated = isLoaded && isSignedIn;
 
-  // Query the count of available questions based on current selection (legacy system)
-  const countQuestions = useQuery(
+  // Query the count of available questions based on current selection (optimized system)
+  // Use hierarchical selection query when themes/subthemes/groups are selected,
+  // otherwise fall back to global filter query
+  const hasHierarchicalSelections =
+    selectedThemes.length > 0 ||
+    selectedSubthemes.length > 0 ||
+    selectedGroups.length > 0;
+
+  const countWithSelections = useQuery(
+    api.aggregateQueries.getQuestionCountBySelection,
+    isAuthenticated && hasHierarchicalSelections
+      ? {
+          filter: mapQuestionMode(questionMode || 'all'),
+          selectedThemes: selectedThemes as Id<'themes'>[],
+          selectedSubthemes: selectedSubthemes as Id<'subthemes'>[],
+          selectedGroups: selectedGroups as Id<'groups'>[],
+        }
+      : 'skip',
+  );
+
+  const countWithoutSelections = useQuery(
     api.aggregateQueries.getQuestionCountByFilter,
-    isAuthenticated
+    isAuthenticated && !hasHierarchicalSelections
       ? { filter: mapQuestionMode(questionMode || 'all') }
       : 'skip',
   );
+
+  // Use the appropriate count based on whether hierarchical selections are made
+  const countQuestions = hasHierarchicalSelections
+    ? countWithSelections
+    : countWithoutSelections;
 
   // Fetch hierarchical data only when authenticated
   const hierarchicalData = useQuery(

@@ -15,6 +15,16 @@ import {
   randomQuestionsByTheme,
   randomQuestionsBySubtheme,
   randomQuestionsByGroup,
+  // Hierarchical user-specific aggregates
+  incorrectByThemeByUser,
+  incorrectBySubthemeByUser,
+  incorrectByGroupByUser,
+  bookmarkedByThemeByUser,
+  bookmarkedBySubthemeByUser,
+  bookmarkedByGroupByUser,
+  answeredByThemeByUser,
+  answeredBySubthemeByUser,
+  answeredByGroupByUser,
 } from './aggregates';
 
 // Create the workflow manager
@@ -547,6 +557,7 @@ export const comprehensiveRepairWorkflow = workflow.define({
     questionsProcessed: number;
     userStatsProcessed: number;
     bookmarksProcessed: number;
+    hierarchicalStatsProcessed: number;
     totalUsers: number;
   }> => {
     console.log('🔧 Workflow: Starting comprehensive aggregate repair...');
@@ -554,6 +565,12 @@ export const comprehensiveRepairWorkflow = workflow.define({
     // PHASE 1: Clear all aggregates safely
     await step.runMutation(
       internal.aggregateWorkflows.clearAllAggregatesStep,
+      {},
+    );
+
+    // PHASE 1.5: Clear hierarchical user-specific aggregates
+    await step.runMutation(
+      internal.aggregateWorkflows.clearHierarchicalAggregatesStep,
       {},
     );
 
@@ -623,6 +640,28 @@ export const comprehensiveRepairWorkflow = workflow.define({
       batchNumber++;
     }
 
+    // PHASE 4.5: Repair hierarchical user-specific aggregates (paginated)
+    cursor = undefined;
+    batchNumber = 1;
+    let hierarchicalStatsProcessed = 0;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.processHierarchicalAggregatesBatchStep,
+        { cursor, batchSize: 50 },
+      );
+
+      console.log(
+        `🏗️ Workflow: Hierarchical batch ${batchNumber} completed - ${result.processed} stats processed`,
+      );
+
+      hierarchicalStatsProcessed += result.processed;
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
     // PHASE 5: Verify final counts
     const finalCounts: any = await step.runMutation(
       internal.aggregateWorkflows.verifyAllAggregatesStep,
@@ -633,6 +672,7 @@ export const comprehensiveRepairWorkflow = workflow.define({
       questionsProcessed,
       userStatsProcessed,
       bookmarksProcessed,
+      hierarchicalStatsProcessed,
       finalCounts,
     });
 
@@ -640,6 +680,7 @@ export const comprehensiveRepairWorkflow = workflow.define({
       questionsProcessed,
       userStatsProcessed,
       bookmarksProcessed,
+      hierarchicalStatsProcessed,
       totalUsers: finalCounts.userCount,
     };
   },
@@ -945,5 +986,239 @@ export const emergencyRepairUserStats = mutation({
       `✅ Emergency user repair completed! Stats: ${statsProcessed}, Bookmarks: ${bookmarksProcessed}`,
     );
     return null;
+  },
+});
+
+// ============================================================================
+// HIERARCHICAL AGGREGATE REPAIR STEPS
+// ============================================================================
+
+/**
+ * CLEAR HIERARCHICAL AGGREGATES STEP - Clear all hierarchical user-specific aggregates
+ */
+export const clearHierarchicalAggregatesStep = internalMutation({
+  args: {},
+  returns: v.object({
+    totalCombinationsCleared: v.number(),
+  }),
+  handler: async ctx => {
+    console.log('🧹 Step: Clearing hierarchical user-specific aggregates...');
+
+    let totalCombinationsCleared = 0;
+
+    // Get all users, themes, subthemes, and groups to clear all possible combinations
+    const [users, themes, subthemes, groups] = await Promise.all([
+      ctx.db.query('users').collect(),
+      ctx.db.query('themes').collect(),
+      ctx.db.query('subthemes').collect(),
+      ctx.db.query('groups').collect(),
+    ]);
+
+    console.log(
+      `🧹 Found ${users.length} users, ${themes.length} themes, ${subthemes.length} subthemes, ${groups.length} groups`,
+    );
+
+    // Clear theme-level hierarchical aggregates
+    for (const user of users) {
+      for (const theme of themes) {
+        const namespace = `${user._id}_${theme._id}`;
+        try {
+          await incorrectByThemeByUser.clear(ctx, { namespace });
+          await bookmarkedByThemeByUser.clear(ctx, { namespace });
+          await answeredByThemeByUser.clear(ctx, { namespace });
+          totalCombinationsCleared += 3;
+        } catch (error) {
+          // Ignore errors for non-existent namespaces
+        }
+      }
+    }
+
+    // Clear subtheme-level hierarchical aggregates
+    for (const user of users) {
+      for (const subtheme of subthemes) {
+        const namespace = `${user._id}_${subtheme._id}`;
+        try {
+          await incorrectBySubthemeByUser.clear(ctx, { namespace });
+          await bookmarkedBySubthemeByUser.clear(ctx, { namespace });
+          await answeredBySubthemeByUser.clear(ctx, { namespace });
+          totalCombinationsCleared += 3;
+        } catch (error) {
+          // Ignore errors for non-existent namespaces
+        }
+      }
+    }
+
+    // Clear group-level hierarchical aggregates
+    for (const user of users) {
+      for (const group of groups) {
+        const namespace = `${user._id}_${group._id}`;
+        try {
+          await incorrectByGroupByUser.clear(ctx, { namespace });
+          await bookmarkedByGroupByUser.clear(ctx, { namespace });
+          await answeredByGroupByUser.clear(ctx, { namespace });
+          totalCombinationsCleared += 3;
+        } catch (error) {
+          // Ignore errors for non-existent namespaces
+        }
+      }
+    }
+
+    console.log(
+      `✅ Step: Cleared ${totalCombinationsCleared} hierarchical aggregate combinations`,
+    );
+    return { totalCombinationsCleared };
+  },
+});
+
+/**
+ * PROCESS HIERARCHICAL AGGREGATES BATCH - Repair hierarchical user-specific aggregates from userQuestionStats
+ */
+export const processHierarchicalAggregatesBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    hierarchicalInserts: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🏗️ Step: Processing batch of ${args.batchSize} userQuestionStats for hierarchical aggregates...`,
+    );
+
+    const result = await ctx.db.query('userQuestionStats').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    let hierarchicalInserts = 0;
+
+    for (const stat of result.page) {
+      // Get the question to find theme/subtheme/group IDs
+      const question = await ctx.db.get(stat.questionId);
+      if (!question) continue;
+
+      // Insert into hierarchical answered aggregates (all stats represent answered questions)
+      if (question.themeId) {
+        const compositeAnsweredStat = { ...stat, themeId: question.themeId };
+        await answeredByThemeByUser.insertIfDoesNotExist(
+          ctx,
+          compositeAnsweredStat,
+        );
+        hierarchicalInserts++;
+      }
+      if (question.subthemeId) {
+        const compositeAnsweredStat = {
+          ...stat,
+          subthemeId: question.subthemeId,
+        };
+        await answeredBySubthemeByUser.insertIfDoesNotExist(
+          ctx,
+          compositeAnsweredStat,
+        );
+        hierarchicalInserts++;
+      }
+      if (question.groupId) {
+        const compositeAnsweredStat = { ...stat, groupId: question.groupId };
+        await answeredByGroupByUser.insertIfDoesNotExist(
+          ctx,
+          compositeAnsweredStat,
+        );
+        hierarchicalInserts++;
+      }
+
+      // Insert into hierarchical incorrect aggregates if the answer was incorrect
+      if (stat.isIncorrect) {
+        if (question.themeId) {
+          const compositeIncorrectStat = { ...stat, themeId: question.themeId };
+          await incorrectByThemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeIncorrectStat,
+          );
+          hierarchicalInserts++;
+        }
+        if (question.subthemeId) {
+          const compositeIncorrectStat = {
+            ...stat,
+            subthemeId: question.subthemeId,
+          };
+          await incorrectBySubthemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeIncorrectStat,
+          );
+          hierarchicalInserts++;
+        }
+        if (question.groupId) {
+          const compositeIncorrectStat = { ...stat, groupId: question.groupId };
+          await incorrectByGroupByUser.insertIfDoesNotExist(
+            ctx,
+            compositeIncorrectStat,
+          );
+          hierarchicalInserts++;
+        }
+      }
+
+      processed++;
+    }
+
+    // Also process bookmarks for the same questions
+    for (const stat of result.page) {
+      // Check if this question is bookmarked by this user
+      const bookmark = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user_question', q =>
+          q.eq('userId', stat.userId).eq('questionId', stat.questionId),
+        )
+        .first();
+
+      if (bookmark) {
+        const question = await ctx.db.get(stat.questionId);
+        if (!question) continue;
+
+        // Insert into hierarchical bookmarked aggregates
+        if (question.themeId) {
+          const compositeBookmark = { ...bookmark, themeId: question.themeId };
+          await bookmarkedByThemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeBookmark,
+          );
+          hierarchicalInserts++;
+        }
+        if (question.subthemeId) {
+          const compositeBookmark = {
+            ...bookmark,
+            subthemeId: question.subthemeId,
+          };
+          await bookmarkedBySubthemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeBookmark,
+          );
+          hierarchicalInserts++;
+        }
+        if (question.groupId) {
+          const compositeBookmark = { ...bookmark, groupId: question.groupId };
+          await bookmarkedByGroupByUser.insertIfDoesNotExist(
+            ctx,
+            compositeBookmark,
+          );
+          hierarchicalInserts++;
+        }
+      }
+    }
+
+    console.log(
+      `✅ Step: Processed ${processed} stats, made ${hierarchicalInserts} hierarchical inserts. Done: ${result.isDone}`,
+    );
+
+    return {
+      processed,
+      hierarchicalInserts,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
