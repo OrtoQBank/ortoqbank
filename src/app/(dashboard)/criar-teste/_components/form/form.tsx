@@ -240,6 +240,7 @@ export default function TestForm() {
               { shouldValidate: true },
             );
           }}
+          questionMode={questionMode}
           error={form.formState.errors.selectedThemes?.message}
         />
 

@@ -18,10 +18,67 @@ type ThemeSelectorProps = {
   themes: Theme[];
   selectedThemes: string[];
   onToggleTheme: (themeId: string) => void;
+  questionMode: string;
   error?: string;
 };
 
-function ThemeQuestionCount({ themeId }: { themeId: string }) {
+function ThemeQuestionCount({
+  themeId,
+  questionMode,
+}: {
+  themeId: string;
+  questionMode: string;
+}) {
+  if (questionMode === 'incorrect') {
+    return <IncorrectThemeCount themeId={themeId} />;
+  }
+
+  if (questionMode === 'bookmarked') {
+    return <BookmarkedThemeCount themeId={themeId} />;
+  }
+
+  return <StandardThemeCount themeId={themeId} />;
+}
+
+function IncorrectThemeCount({ themeId }: { themeId: string }) {
+  const count = useQuery(
+    api.aggregateQueries.getUserIncorrectCountByThemeQuery,
+    {
+      themeId: themeId as Id<'themes'>,
+    },
+  );
+
+  if (count === undefined) {
+    return <span className="text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
+      {count}
+    </span>
+  );
+}
+
+function BookmarkedThemeCount({ themeId }: { themeId: string }) {
+  const count = useQuery(
+    api.aggregateQueries.getUserBookmarksCountByThemeQuery,
+    {
+      themeId: themeId as Id<'themes'>,
+    },
+  );
+
+  if (count === undefined) {
+    return <span className="text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">
+      {count}
+    </span>
+  );
+}
+
+function StandardThemeCount({ themeId }: { themeId: string }) {
   const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
     themeId: themeId as Id<'themes'>,
   });
@@ -41,6 +98,7 @@ export function ThemeSelector({
   themes,
   selectedThemes,
   onToggleTheme,
+  questionMode,
   error,
 }: ThemeSelectorProps) {
   return (
@@ -72,7 +130,10 @@ export function ThemeSelector({
               className="h-auto w-full justify-between py-2 text-left"
             >
               <span className="flex-1 truncate text-sm">{theme.name}</span>
-              <ThemeQuestionCount themeId={theme._id} />
+              <ThemeQuestionCount
+                themeId={theme._id}
+                questionMode={questionMode}
+              />
             </Button>
           );
         })}
