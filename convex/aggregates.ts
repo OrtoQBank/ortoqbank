@@ -64,10 +64,9 @@ export const incorrectBySubthemeByUser = new TableAggregate<{
 }>(components.incorrectBySubthemeByUser, {
   namespace: (d: unknown) => {
     const stat = d as { userId: Id<'users'>; subthemeId?: Id<'subthemes'> };
-    if (!stat.subthemeId) {
-      throw new Error('UserQuestionStat has no subthemeId');
-    }
-    return `${stat.userId}_${stat.subthemeId}`;
+    // Use "no-subtheme" for stats without subthemeId
+    const subthemeId = stat.subthemeId || 'no-subtheme';
+    return `${stat.userId}_${subthemeId}`;
   },
   sortKey: (d: unknown) => 'incorrect',
   // Filter for isIncorrect=true in the functions that use this aggregate
@@ -82,10 +81,9 @@ export const incorrectByGroupByUser = new TableAggregate<{
 }>(components.incorrectByGroupByUser, {
   namespace: (d: unknown) => {
     const stat = d as { userId: Id<'users'>; groupId?: Id<'groups'> };
-    if (!stat.groupId) {
-      throw new Error('UserQuestionStat has no groupId');
-    }
-    return `${stat.userId}_${stat.groupId}`;
+    // Use "no-group" for stats without groupId
+    const groupId = stat.groupId || 'no-group';
+    return `${stat.userId}_${groupId}`;
   },
   sortKey: (d: unknown) => 'incorrect',
   // Filter for isIncorrect=true in the functions that use this aggregate
@@ -114,10 +112,9 @@ export const bookmarkedBySubthemeByUser = new TableAggregate<{
 }>(components.bookmarkedBySubthemeByUser, {
   namespace: (d: unknown) => {
     const bookmark = d as { userId: Id<'users'>; subthemeId?: Id<'subthemes'> };
-    if (!bookmark.subthemeId) {
-      throw new Error('UserBookmark has no subthemeId');
-    }
-    return `${bookmark.userId}_${bookmark.subthemeId}`;
+    // Use "no-subtheme" for bookmarks without subthemeId
+    const subthemeId = bookmark.subthemeId || 'no-subtheme';
+    return `${bookmark.userId}_${subthemeId}`;
   },
   sortKey: (d: unknown) => 'bookmarked',
 });
@@ -131,10 +128,9 @@ export const bookmarkedByGroupByUser = new TableAggregate<{
 }>(components.bookmarkedByGroupByUser, {
   namespace: (d: unknown) => {
     const bookmark = d as { userId: Id<'users'>; groupId?: Id<'groups'> };
-    if (!bookmark.groupId) {
-      throw new Error('UserBookmark has no groupId');
-    }
-    return `${bookmark.userId}_${bookmark.groupId}`;
+    // Use "no-group" for bookmarks without groupId
+    const groupId = bookmark.groupId || 'no-group';
+    return `${bookmark.userId}_${groupId}`;
   },
   sortKey: (d: unknown) => 'bookmarked',
 });
@@ -162,10 +158,9 @@ export const answeredBySubthemeByUser = new TableAggregate<{
 }>(components.answeredBySubthemeByUser, {
   namespace: (d: unknown) => {
     const stat = d as { userId: Id<'users'>; subthemeId?: Id<'subthemes'> };
-    if (!stat.subthemeId) {
-      throw new Error('UserQuestionStat has no subthemeId');
-    }
-    return `${stat.userId}_${stat.subthemeId}`;
+    // Use "no-subtheme" for stats without subthemeId
+    const subthemeId = stat.subthemeId || 'no-subtheme';
+    return `${stat.userId}_${subthemeId}`;
   },
   sortKey: (d: unknown) => 'answered',
 });
@@ -179,10 +174,9 @@ export const answeredByGroupByUser = new TableAggregate<{
 }>(components.answeredByGroupByUser, {
   namespace: (d: unknown) => {
     const stat = d as { userId: Id<'users'>; groupId?: Id<'groups'> };
-    if (!stat.groupId) {
-      throw new Error('UserQuestionStat has no groupId');
-    }
-    return `${stat.userId}_${stat.groupId}`;
+    // Use "no-group" for stats without groupId
+    const groupId = stat.groupId || 'no-group';
+    return `${stat.userId}_${groupId}`;
   },
   sortKey: (d: unknown) => 'answered',
 });
@@ -211,34 +205,32 @@ export const questionCountByTheme = new TableAggregate<{
 
 //track total question count by subtheme (only for questions that have subthemeId)
 export const questionCountBySubtheme = new TableAggregate<{
-  Namespace: Id<'subthemes'>;
+  Namespace: string;
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.questionCountBySubtheme, {
   namespace: (d: unknown) => {
     const question = d as { subthemeId?: Id<'subthemes'> };
-    if (!question.subthemeId) {
-      throw new Error('Question has no subthemeId');
-    }
-    return question.subthemeId;
+    // Use "no-subtheme" for questions without subthemeId
+    const subthemeId = question.subthemeId || 'no-subtheme';
+    return subthemeId;
   },
   sortKey: (d: unknown) => 'question',
 });
 
 //track total question count by group (only for questions that have groupId)
 export const questionCountByGroup = new TableAggregate<{
-  Namespace: Id<'groups'>;
+  Namespace: string;
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.questionCountByGroup, {
   namespace: (d: unknown) => {
     const question = d as { groupId?: Id<'groups'> };
-    if (!question.groupId) {
-      throw new Error('Question has no groupId');
-    }
-    return question.groupId;
+    // Use "no-group" for questions without groupId
+    const groupId = question.groupId || 'no-group';
+    return groupId;
   },
   sortKey: (d: unknown) => 'question',
 });
@@ -265,17 +257,16 @@ export const randomQuestionsByTheme = new TableAggregate<{
 });
 
 export const randomQuestionsBySubtheme = new TableAggregate<{
-  Namespace: Id<'subthemes'>;
+  Namespace: string;
   Key: null;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.randomQuestionsBySubtheme, {
   namespace: (d: unknown) => {
     const question = d as { subthemeId?: Id<'subthemes'> };
-    if (!question.subthemeId) {
-      throw new Error('Question has no subthemeId');
-    }
-    return question.subthemeId;
+    // Use "no-subtheme" for questions without subthemeId
+    const subthemeId = question.subthemeId || 'no-subtheme';
+    return subthemeId;
   },
   sortKey: () => null, // No sorting = random order by _id
 });

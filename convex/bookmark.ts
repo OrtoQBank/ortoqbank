@@ -1,14 +1,25 @@
 import { v } from 'convex/values';
 
-import { mutation, query } from './_generated/server';
+import { query } from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
+import { mutation } from './triggers';
 
 export const toggleBookmark = mutation({
   args: {
     questionId: v.id('questions'),
   },
+  returns: v.object({
+    success: v.boolean(),
+    bookmarked: v.boolean(),
+  }),
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
+
+    // Get question data to extract taxonomy fields for aggregates
+    const question = await ctx.db.get(args.questionId);
+    if (!question) {
+      throw new Error('Question not found');
+    }
 
     const existingBookmark = await ctx.db
       .query('userBookmarks')
@@ -23,11 +34,17 @@ export const toggleBookmark = mutation({
       return { success: true, bookmarked: false };
     }
 
-    // Otherwise create a new bookmark
-    await ctx.db.insert('userBookmarks', {
+    // Create bookmark with available taxonomy fields
+    // Aggregates will conditionally participate based on available fields
+    const bookmarkData = {
       userId: userId._id,
       questionId: args.questionId,
-    });
+      themeId: question.themeId,
+      ...(question.subthemeId && { subthemeId: question.subthemeId }),
+      ...(question.groupId && { groupId: question.groupId }),
+    };
+
+    await ctx.db.insert('userBookmarks', bookmarkData);
 
     return { success: true, bookmarked: true };
   },

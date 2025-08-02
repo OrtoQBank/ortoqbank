@@ -180,6 +180,7 @@ export const getUserStatsSummaryWithAggregates = query({
 /**
  * Internal mutation to update question statistics when a user answers a question
  * This should only be called from the quizSessions.submitAnswerAndProgress function
+ * Updated to include taxonomy fields for aggregates
  */
 export const _updateQuestionStats = internalMutation({
   args: {
@@ -189,6 +190,12 @@ export const _updateQuestionStats = internalMutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
     const now = Date.now();
+
+    // Get question data to extract taxonomy fields for aggregates
+    const question = await ctx.db.get(args.questionId);
+    if (!question) {
+      throw new Error('Question not found');
+    }
 
     // Check if we already have a record for this user and question
     const existingStat = await ctx.db
@@ -200,39 +207,69 @@ export const _updateQuestionStats = internalMutation({
 
     if (existingStat) {
       // Update existing record
+      // Helper function to build taxonomy update data
+      const buildTaxonomyUpdate = (baseUpdate: any) => {
+        const updateData = { ...baseUpdate, themeId: question.themeId };
+        if (question.subthemeId) {
+          updateData.subthemeId = question.subthemeId;
+        }
+        if (question.groupId) {
+          updateData.groupId = question.groupId;
+        }
+        return updateData;
+      };
+
       if (args.isCorrect && existingStat.isIncorrect) {
         // If the question was previously incorrect but is now correct,
         // update the record to show it's no longer incorrect
-        await ctx.db.patch(existingStat._id, {
-          isIncorrect: false,
-          answeredAt: now,
-          // Keep the original firstAnsweredAt - don't update it
-        });
+        await ctx.db.patch(
+          existingStat._id,
+          buildTaxonomyUpdate({
+            isIncorrect: false,
+            answeredAt: now,
+          }),
+        );
       } else if (args.isCorrect) {
-        // Just update the timestamp
-        await ctx.db.patch(existingStat._id, {
-          answeredAt: now,
-          // Keep the original firstAnsweredAt - don't update it
-        });
+        // Just update the timestamp and taxonomy fields
+        await ctx.db.patch(
+          existingStat._id,
+          buildTaxonomyUpdate({
+            answeredAt: now,
+          }),
+        );
       } else {
         // If the answer is incorrect, mark it as incorrect
-        await ctx.db.patch(existingStat._id, {
-          isIncorrect: true,
-          answeredAt: now,
-          // Keep the original firstAnsweredAt - don't update it
-        });
+        await ctx.db.patch(
+          existingStat._id,
+          buildTaxonomyUpdate({
+            isIncorrect: true,
+            answeredAt: now,
+          }),
+        );
       }
 
       return { success: true, action: 'updated' };
     } else {
-      // Create a new record
+      // Skip creating stats if question lacks required taxonomy fields for aggregates
+      // The hierarchical aggregates require complete taxonomy hierarchy
+      if (!question.subthemeId || !question.groupId) {
+        return { 
+          success: false, 
+          action: 'skipped', 
+          error: 'Question lacks complete taxonomy hierarchy required for stats tracking' 
+        };
+      }
+
+      // Create a new record with complete taxonomy fields for aggregates
       await ctx.db.insert('userQuestionStats', {
         userId: userId._id,
         questionId: args.questionId,
         hasAnswered: true,
         isIncorrect: !args.isCorrect,
         answeredAt: now,
-        // _creationTime will automatically track when this was first answered
+        themeId: question.themeId,
+        subthemeId: question.subthemeId,
+        groupId: question.groupId,
       });
 
       return { success: true, action: 'created' };

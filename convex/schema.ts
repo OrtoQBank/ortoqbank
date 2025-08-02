@@ -140,6 +140,10 @@ export default defineSchema({
   userBookmarks: defineTable({
     userId: v.id('users'),
     questionId: v.id('questions'),
+    // Taxonomy fields for aggregates
+    themeId: v.optional(v.id('themes')),
+    subthemeId: v.optional(v.id('subthemes')),
+    groupId: v.optional(v.id('groups')),
   })
     .index('by_user_question', ['userId', 'questionId'])
     .index('by_user', ['userId'])
@@ -152,6 +156,10 @@ export default defineSchema({
     hasAnswered: v.boolean(), // Track if user has answered at least once
     isIncorrect: v.boolean(), // Track if the most recent answer was incorrect
     answeredAt: v.number(), // Timestamp for when the question was last answered
+    // Taxonomy fields for aggregates
+    themeId: v.optional(v.id('themes')),
+    subthemeId: v.optional(v.id('subthemes')),
+    groupId: v.optional(v.id('groups')),
   })
     .index('by_user_question', ['userId', 'questionId'])
     .index('by_user', ['userId'])

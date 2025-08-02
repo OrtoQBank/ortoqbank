@@ -1,7 +1,108 @@
+import { Migrations } from '@convex-dev/migrations';
 import { v } from 'convex/values';
 
+import { components } from './_generated/api';
 import { internal } from './_generated/api';
+import { DataModel } from './_generated/dataModel';
 import { internalAction, internalMutation } from './_generated/server';
+
+// Initialize migrations component
+export const migrations = new Migrations<DataModel>(components.migrations);
+
+// Runner functions for executing migrations
+export const run = migrations.runner();
+
+// Run taxonomy migrations for both tables
+export const runTaxonomyMigrations = migrations.runner([
+  internal.migrations.populateUserQuestionStatsTaxonomy,
+  internal.migrations.populateUserBookmarksTaxonomy,
+]);
+
+// Individual migration runners
+export const runUserStatsOnly = migrations.runner(
+  internal.migrations.populateUserQuestionStatsTaxonomy,
+);
+export const runBookmarksOnly = migrations.runner(
+  internal.migrations.populateUserBookmarksTaxonomy,
+);
+
+/**
+ * Migration to populate taxonomy fields in userQuestionStats
+ * This migration adds themeId, subthemeId, and groupId to existing records
+ */
+export const populateUserQuestionStatsTaxonomy = migrations.define({
+  table: 'userQuestionStats',
+  migrateOne: async (ctx, userStat) => {
+    // Skip if taxonomy fields are already populated
+    if (userStat.themeId) {
+      return; // No update needed
+    }
+
+    // Get the question to extract taxonomy fields
+    const question = await ctx.db.get(userStat.questionId);
+    if (!question) {
+      console.warn(
+        `Question ${userStat.questionId} not found for userStat ${userStat._id}`,
+      );
+      return;
+    }
+
+    // Return the patch data to update taxonomy fields
+    // Only include taxonomy fields that exist to avoid issues with hierarchical aggregates
+    const updateData: any = {
+      themeId: question.themeId,
+    };
+
+    // Only include optional taxonomy fields if they exist
+    if (question.subthemeId) {
+      updateData.subthemeId = question.subthemeId;
+    }
+    if (question.groupId) {
+      updateData.groupId = question.groupId;
+    }
+
+    return updateData;
+  },
+});
+
+/**
+ * Migration to populate taxonomy fields in userBookmarks
+ * This migration adds themeId, subthemeId, and groupId to existing records
+ */
+export const populateUserBookmarksTaxonomy = migrations.define({
+  table: 'userBookmarks',
+  migrateOne: async (ctx, bookmark) => {
+    // Skip if taxonomy fields are already populated
+    if (bookmark.themeId) {
+      return; // No update needed
+    }
+
+    // Get the question to extract taxonomy fields
+    const question = await ctx.db.get(bookmark.questionId);
+    if (!question) {
+      console.warn(
+        `Question ${bookmark.questionId} not found for bookmark ${bookmark._id}`,
+      );
+      return;
+    }
+
+    // Return the patch data to update taxonomy fields
+    // Only include taxonomy fields that exist to avoid issues with hierarchical aggregates
+    const updateData: any = {
+      themeId: question.themeId,
+    };
+
+    // Only include optional taxonomy fields if they exist
+    if (question.subthemeId) {
+      updateData.subthemeId = question.subthemeId;
+    }
+    if (question.groupId) {
+      updateData.groupId = question.groupId;
+    }
+
+    return updateData;
+  },
+});
 
 /**
  * Clean up old taxonomy fields using manual document replacement
