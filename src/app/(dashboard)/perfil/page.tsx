@@ -59,24 +59,23 @@ export default function ProfilePage() {
   );
   const [showThemeStats, setShowThemeStats] = useState(false);
 
-  // Only fetch full stats with theme data when requested
-  const fullStats = useQuery(
-    api.userStats.getUserStatsFromTable,
+  // Only fetch theme stats with aggregate data when requested
+  const themeStats = useQuery(
+    api.aggregateQueries.getUserThemeStatsWithAggregates,
     showThemeStats ? {} : 'skip',
   );
 
   // Determine if we're loading the initial summary data
   const isLoadingSummary = statsSummary === undefined;
 
-  // Determine if we're loading the full theme data
-  const isLoadingThemeData = showThemeStats && fullStats === undefined;
+  // Determine if we're loading the theme data
+  const isLoadingThemeData = showThemeStats && themeStats === undefined;
 
   // Check if we have theme data available
-  const hasThemeData =
-    fullStats && fullStats.byTheme && fullStats.byTheme.length > 0;
+  const hasThemeData = themeStats && themeStats.length > 0;
 
-  // Use the appropriate stats object for calculations
-  const stats = showThemeStats && fullStats ? fullStats : statsSummary;
+  // Use the summary stats for card calculations (theme stats are only for charts)
+  const stats = statsSummary;
 
   // Extract the values safely
   const values = getStatsValues(stats);
@@ -292,9 +291,9 @@ export default function ProfilePage() {
                 <Skeleton className="h-[300px] w-full rounded-lg" />
               )}
             </>
-          ) : hasThemeData && fullStats ? (
+          ) : hasThemeData && themeStats ? (
             <>
-              <ThemeBarChart themeStats={fullStats.byTheme} />
+              <ThemeBarChart themeStats={themeStats} />
               {process.env.NODE_ENV === 'development' && <ThemeRadarChart />}
             </>
           ) : (

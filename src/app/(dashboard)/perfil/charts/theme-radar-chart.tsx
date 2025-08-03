@@ -37,7 +37,9 @@ function breakThemeName(name: string): string {
 }
 
 export function ThemeRadarChart() {
-  const userStats = useQuery(api.userStats.getUserStatsFromTable);
+  const userStats = useQuery(
+    api.aggregateQueries.getUserThemeStatsWithAggregates,
+  );
 
   if (userStats === undefined) {
     return (
@@ -53,7 +55,7 @@ export function ThemeRadarChart() {
     );
   }
 
-  if (!userStats.byTheme || userStats.byTheme.length === 0) {
+  if (!userStats || userStats.length === 0) {
     return (
       <div className="bg-card text-card-foreground rounded-lg border p-3 shadow-sm">
         <div className="mb-2">
@@ -72,7 +74,7 @@ export function ThemeRadarChart() {
   }
 
   // Get top 6 themes with most questions answered (fewer for better label visibility)
-  const chartData = userStats.byTheme
+  const chartData = userStats
     .filter(theme => theme.total > 0)
     .slice(0, 6)
     .map(theme => ({
