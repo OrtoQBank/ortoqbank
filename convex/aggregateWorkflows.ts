@@ -1821,6 +1821,63 @@ export const productionProcessHierarchicalBatchStep = internalMutation({
       processed++;
     }
 
+    // Also process bookmarks for the same questions
+    for (const stat of result.page) {
+      // Check if this question is bookmarked by this user
+      const bookmark = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user_question', q =>
+          q.eq('userId', stat.userId).eq('questionId', stat.questionId),
+        )
+        .first();
+
+      if (bookmark) {
+        const question = await ctx.db.get(stat.questionId);
+        if (!question) continue;
+
+        // Insert into hierarchical bookmarked aggregates
+        if (question.themeId) {
+          const compositeBookmark = { ...bookmark, themeId: question.themeId };
+          try {
+            await bookmarkedByThemeByUser.insertIfDoesNotExist(
+              ctx,
+              compositeBookmark,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(`Failed to insert bookmark for theme:`, error);
+          }
+        }
+        if (question.subthemeId) {
+          const compositeBookmark = {
+            ...bookmark,
+            subthemeId: question.subthemeId,
+          };
+          try {
+            await bookmarkedBySubthemeByUser.insertIfDoesNotExist(
+              ctx,
+              compositeBookmark,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(`Failed to insert bookmark for subtheme:`, error);
+          }
+        }
+        if (question.groupId) {
+          const compositeBookmark = { ...bookmark, groupId: question.groupId };
+          try {
+            await bookmarkedByGroupByUser.insertIfDoesNotExist(
+              ctx,
+              compositeBookmark,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(`Failed to insert bookmark for group:`, error);
+          }
+        }
+      }
+    }
+
     return {
       processed,
       hierarchicalInserts,
