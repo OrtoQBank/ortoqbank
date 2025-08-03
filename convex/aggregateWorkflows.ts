@@ -547,6 +547,28 @@ export const startComprehensiveRepair = mutation({
 });
 
 /**
+ * PRODUCTION OPTIMIZED REPAIR - Ultra-safe with micro-batches for large datasets
+ */
+export const startProductionRepair = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    console.log(
+      '🏭 Starting PRODUCTION-OPTIMIZED aggregate repair workflow...',
+    );
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.productionRepairWorkflow,
+      {},
+    );
+
+    console.log(`✅ Production repair workflow started with ID: ${workflowId}`);
+    return workflowId as string;
+  },
+});
+
+/**
  * COMPREHENSIVE REPAIR WORKFLOW - Handles all aggregates with production-safe pagination
  */
 export const comprehensiveRepairWorkflow = workflow.define({
@@ -682,6 +704,155 @@ export const comprehensiveRepairWorkflow = workflow.define({
       bookmarksProcessed,
       hierarchicalStatsProcessed,
       totalUsers: finalCounts.userCount,
+    };
+  },
+});
+
+/**
+ * PRODUCTION REPAIR WORKFLOW - Ultra-optimized for large datasets with micro-batches
+ */
+export const productionRepairWorkflow = workflow.define({
+  args: {},
+  handler: async (
+    step,
+  ): Promise<{
+    questionsProcessed: number;
+    userStatsProcessed: number;
+    bookmarksProcessed: number;
+    hierarchicalStatsProcessed: number;
+    totalUsers: number;
+    phases: string[];
+  }> => {
+    console.log(
+      '🏭 Production Workflow: Starting ultra-safe aggregate repair...',
+    );
+    const phases: string[] = [];
+
+    // PHASE 1: Clear aggregates in micro-chunks to avoid timeouts
+    phases.push('clearing_aggregates');
+    await step.runMutation(
+      internal.aggregateWorkflows.productionClearAggregatesStep,
+      { maxUsersPerBatch: 5 }, // Very small batches
+    );
+
+    // PHASE 2: Clear hierarchical aggregates in ultra-small chunks
+    phases.push('clearing_hierarchical');
+    await step.runMutation(
+      internal.aggregateWorkflows.productionClearHierarchicalStep,
+      { maxCombinationsPerBatch: 10 }, // Ultra-small chunks
+    );
+
+    // PHASE 3: Process questions with micro-batches
+    phases.push('processing_questions');
+    let questionsProcessed = 0;
+    let cursor: string | undefined = undefined;
+    let batchNumber = 1;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessQuestionsBatchStep,
+        { cursor, batchSize: 5 }, // Micro-batches for production
+      );
+
+      console.log(
+        `🏭 Production: Questions micro-batch ${batchNumber} - ${result.processed} questions`,
+      );
+
+      questionsProcessed += result.processed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    // PHASE 4: Process user stats with micro-batches
+    phases.push('processing_user_stats');
+    cursor = undefined;
+    batchNumber = 1;
+    let userStatsProcessed = 0;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessUserStatsBatchStep,
+        { cursor, batchSize: 5 }, // Micro-batches
+      );
+
+      console.log(
+        `🏭 Production: User stats micro-batch ${batchNumber} - ${result.processed} stats`,
+      );
+
+      userStatsProcessed += result.processed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    // PHASE 5: Process bookmarks with micro-batches
+    phases.push('processing_bookmarks');
+    cursor = undefined;
+    batchNumber = 1;
+    let bookmarksProcessed = 0;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessBookmarksBatchStep,
+        { cursor, batchSize: 5 }, // Micro-batches
+      );
+
+      console.log(
+        `🏭 Production: Bookmarks micro-batch ${batchNumber} - ${result.processed} bookmarks`,
+      );
+
+      bookmarksProcessed += result.processed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    // PHASE 6: Process hierarchical aggregates with ultra-micro-batches
+    phases.push('processing_hierarchical');
+    cursor = undefined;
+    batchNumber = 1;
+    let hierarchicalStatsProcessed = 0;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessHierarchicalBatchStep,
+        { cursor, batchSize: 3 }, // Ultra-micro-batches
+      );
+
+      console.log(
+        `🏭 Production: Hierarchical micro-batch ${batchNumber} - ${result.processed} stats`,
+      );
+
+      hierarchicalStatsProcessed += result.processed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    // PHASE 7: Quick verification with sampling
+    phases.push('verification');
+    const finalCounts: any = await step.runMutation(
+      internal.aggregateWorkflows.productionVerifyStep,
+      {},
+    );
+
+    console.log('🏭 Production Workflow: Ultra-safe repair completed!', {
+      questionsProcessed,
+      userStatsProcessed,
+      bookmarksProcessed,
+      hierarchicalStatsProcessed,
+      finalCounts,
+      phases,
+    });
+
+    return {
+      questionsProcessed,
+      userStatsProcessed,
+      bookmarksProcessed,
+      hierarchicalStatsProcessed,
+      totalUsers: finalCounts.userCount,
+      phases,
     };
   },
 });
@@ -1262,5 +1433,471 @@ export const processHierarchicalAggregatesBatchStep = internalMutation({
       continueCursor: result.continueCursor,
       isDone: result.isDone,
     };
+  },
+});
+
+// ============================================================================
+// PRODUCTION-SPECIFIC STEP FUNCTIONS (Ultra-optimized for large datasets)
+// ============================================================================
+
+/**
+ * PRODUCTION CLEAR AGGREGATES - Clear with ultra-small batches
+ */
+export const productionClearAggregatesStep = internalMutation({
+  args: {
+    maxUsersPerBatch: v.number(),
+  },
+  returns: v.object({
+    totalUsersCleared: v.number(),
+    batchesProcessed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(
+      '🧹 Production Step: Clearing aggregates with micro-batches...',
+    );
+
+    // Clear global aggregates first
+    await totalQuestionCount.clear(ctx, { namespace: 'global' });
+    await randomQuestions.clear(ctx, { namespace: 'global' });
+    console.log('✅ Cleared global aggregates');
+
+    // Clear user aggregates in micro-batches
+    let cursor: string | null = null;
+    let totalUsersCleared = 0;
+    let batchesProcessed = 0;
+
+    while (true) {
+      const result = await ctx.db.query('users').paginate({
+        cursor,
+        numItems: args.maxUsersPerBatch,
+      });
+
+      for (const user of result.page) {
+        await answeredByUser.clear(ctx, { namespace: user._id });
+        await incorrectByUser.clear(ctx, { namespace: user._id });
+        await bookmarkedByUser.clear(ctx, { namespace: user._id });
+        totalUsersCleared++;
+      }
+
+      batchesProcessed++;
+      console.log(
+        `🧹 Production: Cleared batch ${batchesProcessed} - ${result.page.length} users (total: ${totalUsersCleared})`,
+      );
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+
+    return { totalUsersCleared, batchesProcessed };
+  },
+});
+
+/**
+ * PRODUCTION CLEAR HIERARCHICAL - Clear hierarchical aggregates in ultra-small chunks
+ */
+export const productionClearHierarchicalStep = internalMutation({
+  args: {
+    maxCombinationsPerBatch: v.number(),
+  },
+  returns: v.object({
+    totalCombinationsCleared: v.number(),
+    userBatchesProcessed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    console.log('🧹 Production Step: Clearing hierarchical aggregates...');
+
+    let totalCombinationsCleared = 0;
+    let userBatchesProcessed = 0;
+
+    // Process users in small batches to avoid timeouts
+    let userCursor: string | null = null;
+
+    while (true) {
+      const userResult = await ctx.db.query('users').paginate({
+        cursor: userCursor,
+        numItems: Math.max(1, Math.floor(args.maxCombinationsPerBatch / 10)), // Even smaller user batches
+      });
+
+      if (userResult.page.length === 0) break;
+
+      // For each user batch, clear their hierarchical aggregates
+      for (const user of userResult.page) {
+        // Clear theme-level aggregates for this user
+        const themes = await ctx.db.query('themes').take(100); // Limit themes per iteration
+        for (const theme of themes) {
+          const namespace = `${user._id}_${theme._id}`;
+          try {
+            await incorrectByThemeByUser.clear(ctx, { namespace });
+            await bookmarkedByThemeByUser.clear(ctx, { namespace });
+            await answeredByThemeByUser.clear(ctx, { namespace });
+            totalCombinationsCleared += 3;
+          } catch (error) {
+            // Ignore errors for non-existent namespaces
+          }
+        }
+      }
+
+      userBatchesProcessed++;
+      console.log(
+        `🧹 Production: Cleared hierarchical batch ${userBatchesProcessed} - ${userResult.page.length} users`,
+      );
+
+      if (userResult.isDone) break;
+      userCursor = userResult.continueCursor;
+    }
+
+    return { totalCombinationsCleared, userBatchesProcessed };
+  },
+});
+
+/**
+ * PRODUCTION PROCESS QUESTIONS - Handle questions with micro-batches
+ */
+export const productionProcessQuestionsBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🏭 Production Step: Processing ${args.batchSize} questions...`,
+    );
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    for (const question of result.page) {
+      // Insert into all relevant question aggregates
+      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+      await randomQuestions.insertIfDoesNotExist(ctx, question);
+      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+
+      if (question.themeId) {
+        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
+      }
+      if (question.subthemeId) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+      if (question.groupId) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+    }
+
+    return {
+      processed,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * PRODUCTION PROCESS USER STATS - Handle user stats with micro-batches
+ */
+export const productionProcessUserStatsBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    answeredCount: v.number(),
+    incorrectCount: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🏭 Production Step: Processing ${args.batchSize} user stats...`,
+    );
+
+    const result = await ctx.db.query('userQuestionStats').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    let answeredCount = 0;
+    let incorrectCount = 0;
+
+    for (const stat of result.page) {
+      await answeredByUser.insertIfDoesNotExist(ctx, stat);
+      answeredCount++;
+
+      if (stat.isIncorrect) {
+        await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+        incorrectCount++;
+      }
+
+      processed++;
+    }
+
+    return {
+      processed,
+      answeredCount,
+      incorrectCount,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * PRODUCTION PROCESS BOOKMARKS - Handle bookmarks with micro-batches
+ */
+export const productionProcessBookmarksBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    bookmarkedCount: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🏭 Production Step: Processing ${args.batchSize} bookmarks...`,
+    );
+
+    const result = await ctx.db.query('userBookmarks').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    let bookmarkedCount = 0;
+
+    for (const bookmark of result.page) {
+      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+      bookmarkedCount++;
+      processed++;
+    }
+
+    return {
+      processed,
+      bookmarkedCount,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * PRODUCTION PROCESS HIERARCHICAL - Handle hierarchical aggregates with ultra-micro-batches
+ */
+export const productionProcessHierarchicalBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    hierarchicalInserts: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🏭 Production Step: Processing ${args.batchSize} hierarchical stats...`,
+    );
+
+    const result = await ctx.db.query('userQuestionStats').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    let hierarchicalInserts = 0;
+
+    for (const stat of result.page) {
+      const question = await ctx.db.get(stat.questionId);
+      if (!question) continue;
+
+      // Insert into hierarchical answered aggregates
+      if (question.themeId) {
+        const compositeAnsweredStat = { ...stat, themeId: question.themeId };
+        try {
+          await answeredByThemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeAnsweredStat,
+          );
+          hierarchicalInserts++;
+        } catch (error) {
+          console.warn(`Failed to insert answered stat for theme:`, error);
+        }
+      }
+
+      if (question.subthemeId) {
+        const compositeAnsweredStat = {
+          ...stat,
+          subthemeId: question.subthemeId,
+        };
+        try {
+          await answeredBySubthemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeAnsweredStat,
+          );
+          hierarchicalInserts++;
+        } catch (error) {
+          console.warn(`Failed to insert answered stat for subtheme:`, error);
+        }
+      }
+
+      if (question.groupId) {
+        const compositeAnsweredStat = { ...stat, groupId: question.groupId };
+        try {
+          await answeredByGroupByUser.insertIfDoesNotExist(
+            ctx,
+            compositeAnsweredStat,
+          );
+          hierarchicalInserts++;
+        } catch (error) {
+          console.warn(`Failed to insert answered stat for group:`, error);
+        }
+      }
+
+      // Insert into hierarchical incorrect aggregates if applicable
+      if (stat.isIncorrect) {
+        if (question.themeId) {
+          const compositeIncorrectStat = { ...stat, themeId: question.themeId };
+          try {
+            await incorrectByThemeByUser.insertIfDoesNotExist(
+              ctx,
+              compositeIncorrectStat,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(`Failed to insert incorrect stat for theme:`, error);
+          }
+        }
+
+        if (question.subthemeId) {
+          const compositeIncorrectStat = {
+            ...stat,
+            subthemeId: question.subthemeId,
+          };
+          try {
+            await incorrectBySubthemeByUser.insertIfDoesNotExist(
+              ctx,
+              compositeIncorrectStat,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(
+              `Failed to insert incorrect stat for subtheme:`,
+              error,
+            );
+          }
+        }
+
+        if (question.groupId) {
+          const compositeIncorrectStat = { ...stat, groupId: question.groupId };
+          try {
+            await incorrectByGroupByUser.insertIfDoesNotExist(
+              ctx,
+              compositeIncorrectStat,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(`Failed to insert incorrect stat for group:`, error);
+          }
+        }
+      }
+
+      processed++;
+    }
+
+    return {
+      processed,
+      hierarchicalInserts,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * PRODUCTION VERIFY - Quick verification with sampling for performance
+ */
+export const productionVerifyStep = internalMutation({
+  args: {},
+  returns: v.object({
+    totalQuestions: v.number(),
+    totalAnswered: v.number(),
+    totalIncorrect: v.number(),
+    totalBookmarked: v.number(),
+    userCount: v.number(),
+    sampleSize: v.number(),
+  }),
+  handler: async ctx => {
+    console.log('🔍 Production Step: Quick verification with sampling...');
+
+    // Verify global question count
+    const totalQuestions = await totalQuestionCount.count(ctx, {
+      namespace: 'global',
+      bounds: {},
+    });
+
+    // Sample a smaller subset of users for verification to avoid timeouts
+    const allUsers = await ctx.db.query('users').take(50); // Sample only first 50 users
+    let totalAnswered = 0;
+    let totalIncorrect = 0;
+    let totalBookmarked = 0;
+
+    // Use parallel processing for the sample
+    const userCounts = await Promise.all(
+      allUsers.map(async user => {
+        const [answered, incorrect, bookmarked] = await Promise.all([
+          (answeredByUser.count as any)(ctx, {
+            namespace: user._id,
+            bounds: {},
+          }),
+          (incorrectByUser.count as any)(ctx, {
+            namespace: user._id,
+            bounds: {},
+          }),
+          (bookmarkedByUser.count as any)(ctx, {
+            namespace: user._id,
+            bounds: {},
+          }),
+        ]);
+        return { answered, incorrect, bookmarked };
+      }),
+    );
+
+    for (const counts of userCounts) {
+      totalAnswered += counts.answered;
+      totalIncorrect += counts.incorrect;
+      totalBookmarked += counts.bookmarked;
+    }
+
+    const result = {
+      totalQuestions,
+      totalAnswered,
+      totalIncorrect,
+      totalBookmarked,
+      userCount: allUsers.length,
+      sampleSize: 50,
+    };
+
+    console.log(
+      '✅ Production Step: Verification completed (sampled):',
+      result,
+    );
+    return result;
   },
 });
