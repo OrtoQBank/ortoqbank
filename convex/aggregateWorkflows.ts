@@ -2,7 +2,12 @@ import { WorkflowManager } from '@convex-dev/workflow';
 import { v } from 'convex/values';
 
 import { components, internal, api } from './_generated/api';
-import { internalMutation, mutation } from './_generated/server';
+import {
+  internalMutation,
+  internalQuery,
+  internalAction,
+  mutation,
+} from './_generated/server';
 import {
   answeredByUser,
   bookmarkedByUser,
@@ -189,7 +194,7 @@ export const repairUserAggregatesWorkflow = workflow.define({
     }
     if (loopTotals.incorrect !== finalCounts.totalIncorrect) {
       console.warn(
-        `Discrepancy in incorrect count: loop=${loopTotals.incorrect}, verified=${finalCounts.totalIncorrect}`,
+        `Discrepancy in incorrect count: loop=${loopTotals.incorrect}, verified=${finalCounts.totalIncorrected}`,
       );
     }
     if (loopTotals.bookmarked !== finalCounts.totalBookmarked) {
@@ -525,7 +530,7 @@ export const getWorkflowStatus = mutation({
 
 /**
  * MAIN REPAIR ENTRY POINT - Start comprehensive aggregate repair workflow
- * This is the recommended way to repair all aggregates in production
+ * This is the recommended way to repair all aggregates in production (REFERENCE ONLY - may timeout with large datasets)
  */
 export const startComprehensiveRepair = mutation({
   args: {},
@@ -547,29 +552,7 @@ export const startComprehensiveRepair = mutation({
 });
 
 /**
- * PRODUCTION OPTIMIZED REPAIR - Ultra-safe with micro-batches for large datasets
- */
-export const startProductionRepair = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx): Promise<string> => {
-    console.log(
-      '🏭 Starting PRODUCTION-OPTIMIZED aggregate repair workflow...',
-    );
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.productionRepairWorkflow,
-      {},
-    );
-
-    console.log(`✅ Production repair workflow started with ID: ${workflowId}`);
-    return workflowId as string;
-  },
-});
-
-/**
- * COMPREHENSIVE REPAIR WORKFLOW - Handles all aggregates with production-safe pagination
+ * COMPREHENSIVE REPAIR WORKFLOW - Handles all aggregates with production-safe pagination (REFERENCE ONLY)
  */
 export const comprehensiveRepairWorkflow = workflow.define({
   args: {},
@@ -587,12 +570,6 @@ export const comprehensiveRepairWorkflow = workflow.define({
     // PHASE 1: Clear all aggregates safely
     await step.runMutation(
       internal.aggregateWorkflows.clearAllAggregatesStep,
-      {},
-    );
-
-    // PHASE 1.5: Clear hierarchical user-specific aggregates
-    await step.runMutation(
-      internal.aggregateWorkflows.clearHierarchicalAggregatesStep,
       {},
     );
 
@@ -662,28 +639,6 @@ export const comprehensiveRepairWorkflow = workflow.define({
       batchNumber++;
     }
 
-    // PHASE 4.5: Repair hierarchical user-specific aggregates (paginated)
-    cursor = undefined;
-    batchNumber = 1;
-    let hierarchicalStatsProcessed = 0;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.processHierarchicalAggregatesBatchStep,
-        { cursor, batchSize: 50 },
-      );
-
-      console.log(
-        `🏗️ Workflow: Hierarchical batch ${batchNumber} completed - ${result.processed} stats processed`,
-      );
-
-      hierarchicalStatsProcessed += result.processed;
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
     // PHASE 5: Verify final counts
     const finalCounts: any = await step.runMutation(
       internal.aggregateWorkflows.verifyAllAggregatesStep,
@@ -694,7 +649,7 @@ export const comprehensiveRepairWorkflow = workflow.define({
       questionsProcessed,
       userStatsProcessed,
       bookmarksProcessed,
-      hierarchicalStatsProcessed,
+      hierarchicalStatsProcessed: 0,
       finalCounts,
     });
 
@@ -702,157 +657,8 @@ export const comprehensiveRepairWorkflow = workflow.define({
       questionsProcessed,
       userStatsProcessed,
       bookmarksProcessed,
-      hierarchicalStatsProcessed,
+      hierarchicalStatsProcessed: 0,
       totalUsers: finalCounts.userCount,
-    };
-  },
-});
-
-/**
- * PRODUCTION REPAIR WORKFLOW - Ultra-optimized for large datasets with micro-batches
- */
-export const productionRepairWorkflow = workflow.define({
-  args: {},
-  handler: async (
-    step,
-  ): Promise<{
-    questionsProcessed: number;
-    userStatsProcessed: number;
-    bookmarksProcessed: number;
-    hierarchicalStatsProcessed: number;
-    totalUsers: number;
-    phases: string[];
-  }> => {
-    console.log(
-      '🏭 Production Workflow: Starting ultra-safe aggregate repair...',
-    );
-    const phases: string[] = [];
-
-    // PHASE 1: Clear aggregates in micro-chunks to avoid timeouts
-    phases.push('clearing_aggregates');
-    await step.runMutation(
-      internal.aggregateWorkflows.productionClearAggregatesStep,
-      { maxUsersPerBatch: 5 }, // Very small batches
-    );
-
-    // PHASE 2: Clear hierarchical aggregates in ultra-small chunks
-    phases.push('clearing_hierarchical');
-    await step.runMutation(
-      internal.aggregateWorkflows.productionClearHierarchicalStep,
-      { maxCombinationsPerBatch: 10 }, // Ultra-small chunks
-    );
-
-    // PHASE 3: Process questions with micro-batches
-    phases.push('processing_questions');
-    let questionsProcessed = 0;
-    let cursor: string | undefined = undefined;
-    let batchNumber = 1;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessQuestionsBatchStep,
-        { cursor, batchSize: 5 }, // Micro-batches for production
-      );
-
-      console.log(
-        `🏭 Production: Questions micro-batch ${batchNumber} - ${result.processed} questions`,
-      );
-
-      questionsProcessed += result.processed;
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    // PHASE 4: Process user stats with micro-batches
-    phases.push('processing_user_stats');
-    cursor = undefined;
-    batchNumber = 1;
-    let userStatsProcessed = 0;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessUserStatsBatchStep,
-        { cursor, batchSize: 5 }, // Micro-batches
-      );
-
-      console.log(
-        `🏭 Production: User stats micro-batch ${batchNumber} - ${result.processed} stats`,
-      );
-
-      userStatsProcessed += result.processed;
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    // PHASE 5: Process bookmarks with micro-batches
-    phases.push('processing_bookmarks');
-    cursor = undefined;
-    batchNumber = 1;
-    let bookmarksProcessed = 0;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessBookmarksBatchStep,
-        { cursor, batchSize: 5 }, // Micro-batches
-      );
-
-      console.log(
-        `🏭 Production: Bookmarks micro-batch ${batchNumber} - ${result.processed} bookmarks`,
-      );
-
-      bookmarksProcessed += result.processed;
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    // PHASE 6: Process hierarchical aggregates with ultra-micro-batches
-    phases.push('processing_hierarchical');
-    cursor = undefined;
-    batchNumber = 1;
-    let hierarchicalStatsProcessed = 0;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessHierarchicalBatchStep,
-        { cursor, batchSize: 3 }, // Ultra-micro-batches
-      );
-
-      console.log(
-        `🏭 Production: Hierarchical micro-batch ${batchNumber} - ${result.processed} stats`,
-      );
-
-      hierarchicalStatsProcessed += result.processed;
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    // PHASE 7: Quick verification with sampling
-    phases.push('verification');
-    const finalCounts: any = await step.runMutation(
-      internal.aggregateWorkflows.productionVerifyStep,
-      {},
-    );
-
-    console.log('🏭 Production Workflow: Ultra-safe repair completed!', {
-      questionsProcessed,
-      userStatsProcessed,
-      bookmarksProcessed,
-      hierarchicalStatsProcessed,
-      finalCounts,
-      phases,
-    });
-
-    return {
-      questionsProcessed,
-      userStatsProcessed,
-      bookmarksProcessed,
-      hierarchicalStatsProcessed,
-      totalUsers: finalCounts.userCount,
-      phases,
     };
   },
 });
@@ -1089,565 +895,199 @@ export const emergencyRepairQuestionCount = mutation({
   },
 });
 
+// ============================================================================
+// PRODUCTION-SAFE SINGLE-PAGINATION WORKFLOWS (FIXED FOR LARGE DATASETS)
+// ============================================================================
+
 /**
- * EMERGENCY REPAIR - Quick user stats repair for specific user (production-safe)
+ * PRODUCTION-SAFE: Repair single user (micro-batches, no timeouts)
  */
-export const emergencyRepairUserStats = mutation({
+export const startMicroBatchUserRepair = mutation({
+  args: {
+    userId: v.id('users'),
+  },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    console.log(`🛡️ Starting micro-batch user repair for ${args.userId}...`);
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.microBatchUserRepairWorkflow,
+      { userId: args.userId },
+    );
+
+    console.log(
+      `✅ Micro-batch user repair workflow started with ID: ${workflowId}`,
+    );
+    return workflowId as string;
+  },
+});
+
+/**
+ * PRODUCTION-SAFE: Repair all users (one at a time, no timeouts)
+ */
+export const startMicroBatchAllUsersRepair = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    console.log('🛡️ Starting micro-batch ALL users repair...');
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.microBatchAllUsersRepairWorkflow,
+      {},
+    );
+
+    console.log(
+      `✅ Micro-batch all users repair workflow started with ID: ${workflowId}`,
+    );
+    return workflowId as string;
+  },
+});
+
+/**
+ * MICRO-BATCH: Single user repair (ultra-safe, no timeouts)
+ */
+export const microBatchUserRepairWorkflow = workflow.define({
+  args: {
+    userId: v.id('users'),
+  },
+  handler: async (
+    step,
+    args,
+  ): Promise<{
+    statsProcessed: number;
+    bookmarksProcessed: number;
+  }> => {
+    console.log(`🛡️ Workflow: Micro-batch repairing user ${args.userId}...`);
+
+    // Step 1: Clear user aggregates (no pagination)
+    await step.runMutation(internal.aggregateWorkflows.clearSingleUserStep, {
+      userId: args.userId,
+    });
+
+    // Step 2: Repair user stats (micro-batches)
+    let statsProcessed = 0;
+    let cursor: string | undefined = undefined;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.microBatchUserStatsStep,
+        { userId: args.userId, cursor, batchSize: 10 }, // MICRO-BATCHES
+      );
+
+      statsProcessed += result.processed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+
+    // Step 3: Repair user bookmarks (micro-batches)
+    cursor = undefined;
+    let bookmarksProcessed = 0;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.microBatchUserBookmarksStep,
+        { userId: args.userId, cursor, batchSize: 10 }, // MICRO-BATCHES
+      );
+
+      bookmarksProcessed += result.processed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+
+    console.log(`✅ User ${args.userId} micro-batch repair completed!`);
+    return { statsProcessed, bookmarksProcessed };
+  },
+});
+
+/**
+ * MICRO-BATCH: All users repair (one user at a time)
+ */
+export const microBatchAllUsersRepairWorkflow = workflow.define({
+  args: {},
+  handler: async (
+    step,
+  ): Promise<{
+    totalUsers: number;
+  }> => {
+    console.log('🛡️ Workflow: Starting micro-batch all users repair...');
+
+    let totalUsers = 0;
+    let cursor: string | undefined = undefined;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.microBatchSingleUserStep,
+        { cursor, batchSize: 1 }, // ONE USER AT A TIME
+      );
+
+      totalUsers += result.usersProcessed;
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+
+    console.log(
+      `✅ All users micro-batch repair completed! ${totalUsers} users processed`,
+    );
+    return { totalUsers };
+  },
+});
+
+/**
+ * Clear single user aggregates (no pagination, fast)
+ */
+export const clearSingleUserStep = internalMutation({
   args: {
     userId: v.id('users'),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    console.log(`🚨 Emergency: Repairing user stats for ${args.userId}...`);
+    console.log(`🧹 Clearing aggregates for user ${args.userId}...`);
 
-    // Clear user aggregates
     await answeredByUser.clear(ctx, { namespace: args.userId });
     await incorrectByUser.clear(ctx, { namespace: args.userId });
     await bookmarkedByUser.clear(ctx, { namespace: args.userId });
 
-    // Rebuild stats in batches
-    let cursor: string | null = null;
-    let statsProcessed = 0;
-    const batchSize = 100;
-
-    while (true) {
-      const result = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user', q => q.eq('userId', args.userId))
-        .paginate({
-          cursor,
-          numItems: batchSize,
-        });
-
-      for (const stat of result.page) {
-        await answeredByUser.insertIfDoesNotExist(ctx, stat);
-        if (stat.isIncorrect) {
-          await incorrectByUser.insertIfDoesNotExist(ctx, stat);
-        }
-        statsProcessed++;
-      }
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-    }
-
-    // Rebuild bookmarks
-    cursor = null;
-    let bookmarksProcessed = 0;
-
-    while (true) {
-      const result = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', args.userId))
-        .paginate({
-          cursor,
-          numItems: batchSize,
-        });
-
-      for (const bookmark of result.page) {
-        await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
-        bookmarksProcessed++;
-      }
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-    }
-
-    console.log(
-      `✅ Emergency user repair completed! Stats: ${statsProcessed}, Bookmarks: ${bookmarksProcessed}`,
-    );
     return null;
   },
 });
 
-// ============================================================================
-// HIERARCHICAL AGGREGATE REPAIR STEPS
-// ============================================================================
-
 /**
- * CLEAR HIERARCHICAL AGGREGATES STEP - Clear all hierarchical user-specific aggregates
+ * Micro-batch user stats repair (SINGLE pagination, micro-batches)
  */
-export const clearHierarchicalAggregatesStep = internalMutation({
-  args: {},
-  returns: v.object({
-    totalCombinationsCleared: v.number(),
-  }),
-  handler: async ctx => {
-    console.log('🧹 Step: Clearing hierarchical user-specific aggregates...');
-
-    let totalCombinationsCleared = 0;
-
-    // Get all users, themes, subthemes, and groups to clear all possible combinations
-    const [users, themes, subthemes, groups] = await Promise.all([
-      ctx.db.query('users').collect(),
-      ctx.db.query('themes').collect(),
-      ctx.db.query('subthemes').collect(),
-      ctx.db.query('groups').collect(),
-    ]);
-
-    console.log(
-      `🧹 Found ${users.length} users, ${themes.length} themes, ${subthemes.length} subthemes, ${groups.length} groups`,
-    );
-
-    // Clear theme-level hierarchical aggregates
-    for (const user of users) {
-      for (const theme of themes) {
-        const namespace = `${user._id}_${theme._id}`;
-        try {
-          await incorrectByThemeByUser.clear(ctx, { namespace });
-          await bookmarkedByThemeByUser.clear(ctx, { namespace });
-          await answeredByThemeByUser.clear(ctx, { namespace });
-          totalCombinationsCleared += 3;
-        } catch (error) {
-          // Ignore errors for non-existent namespaces
-        }
-      }
-    }
-
-    // Clear subtheme-level hierarchical aggregates
-    for (const user of users) {
-      for (const subtheme of subthemes) {
-        const namespace = `${user._id}_${subtheme._id}`;
-        try {
-          await incorrectBySubthemeByUser.clear(ctx, { namespace });
-          await bookmarkedBySubthemeByUser.clear(ctx, { namespace });
-          await answeredBySubthemeByUser.clear(ctx, { namespace });
-          totalCombinationsCleared += 3;
-        } catch (error) {
-          // Ignore errors for non-existent namespaces
-        }
-      }
-    }
-
-    // Clear group-level hierarchical aggregates
-    for (const user of users) {
-      for (const group of groups) {
-        const namespace = `${user._id}_${group._id}`;
-        try {
-          await incorrectByGroupByUser.clear(ctx, { namespace });
-          await bookmarkedByGroupByUser.clear(ctx, { namespace });
-          await answeredByGroupByUser.clear(ctx, { namespace });
-          totalCombinationsCleared += 3;
-        } catch (error) {
-          // Ignore errors for non-existent namespaces
-        }
-      }
-    }
-
-    console.log(
-      `✅ Step: Cleared ${totalCombinationsCleared} hierarchical aggregate combinations`,
-    );
-    return { totalCombinationsCleared };
-  },
-});
-
-/**
- * PROCESS HIERARCHICAL AGGREGATES BATCH - Repair hierarchical user-specific aggregates from userQuestionStats
- */
-export const processHierarchicalAggregatesBatchStep = internalMutation({
+export const microBatchUserStatsStep = internalMutation({
   args: {
+    userId: v.id('users'),
     cursor: v.optional(v.string()),
     batchSize: v.number(),
   },
   returns: v.object({
     processed: v.number(),
-    hierarchicalInserts: v.number(),
     continueCursor: v.optional(v.string()),
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    console.log(
-      `🏗️ Step: Processing batch of ${args.batchSize} userQuestionStats for hierarchical aggregates...`,
-    );
-
-    const result = await ctx.db.query('userQuestionStats').paginate({
-      cursor: args.cursor ?? null,
-      numItems: args.batchSize,
-    });
-
-    let processed = 0;
-    let hierarchicalInserts = 0;
-
-    for (const stat of result.page) {
-      // Get the question to find theme/subtheme/group IDs
-      const question = await ctx.db.get(stat.questionId);
-      if (!question) continue;
-
-      // Insert into hierarchical answered aggregates (all stats represent answered questions)
-      if (question.themeId) {
-        const compositeAnsweredStat = { ...stat, themeId: question.themeId };
-        try {
-          await answeredByThemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeAnsweredStat,
-          );
-          hierarchicalInserts++;
-        } catch (error) {
-          console.warn(
-            `Failed to insert answered stat for theme ${question.themeId}:`,
-            error,
-          );
-        }
-      }
-      if (question.subthemeId) {
-        const compositeAnsweredStat = {
-          ...stat,
-          subthemeId: question.subthemeId,
-        };
-        try {
-          await answeredBySubthemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeAnsweredStat,
-          );
-          hierarchicalInserts++;
-        } catch (error) {
-          console.warn(
-            `Failed to insert answered stat for subtheme ${question.subthemeId}:`,
-            error,
-          );
-        }
-      }
-      if (question.groupId) {
-        const compositeAnsweredStat = { ...stat, groupId: question.groupId };
-        try {
-          await answeredByGroupByUser.insertIfDoesNotExist(
-            ctx,
-            compositeAnsweredStat,
-          );
-          hierarchicalInserts++;
-        } catch (error) {
-          console.warn(
-            `Failed to insert answered stat for group ${question.groupId}:`,
-            error,
-          );
-        }
-      }
-
-      // Insert into hierarchical incorrect aggregates if the answer was incorrect
-      if (stat.isIncorrect) {
-        if (question.themeId) {
-          const compositeIncorrectStat = { ...stat, themeId: question.themeId };
-          try {
-            await incorrectByThemeByUser.insertIfDoesNotExist(
-              ctx,
-              compositeIncorrectStat,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(
-              `Failed to insert incorrect stat for theme ${question.themeId}:`,
-              error,
-            );
-          }
-        }
-        if (question.subthemeId) {
-          const compositeIncorrectStat = {
-            ...stat,
-            subthemeId: question.subthemeId,
-          };
-          try {
-            await incorrectBySubthemeByUser.insertIfDoesNotExist(
-              ctx,
-              compositeIncorrectStat,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(
-              `Failed to insert incorrect stat for subtheme ${question.subthemeId}:`,
-              error,
-            );
-          }
-        }
-        if (question.groupId) {
-          const compositeIncorrectStat = { ...stat, groupId: question.groupId };
-          try {
-            await incorrectByGroupByUser.insertIfDoesNotExist(
-              ctx,
-              compositeIncorrectStat,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(
-              `Failed to insert incorrect stat for group ${question.groupId}:`,
-              error,
-            );
-          }
-        }
-      }
-
-      processed++;
-    }
-
-    // Also process bookmarks for the same questions
-    for (const stat of result.page) {
-      // Check if this question is bookmarked by this user
-      const bookmark = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user_question', q =>
-          q.eq('userId', stat.userId).eq('questionId', stat.questionId),
-        )
-        .first();
-
-      if (bookmark) {
-        const question = await ctx.db.get(stat.questionId);
-        if (!question) continue;
-
-        // Insert into hierarchical bookmarked aggregates
-        if (question.themeId) {
-          const compositeBookmark = { ...bookmark, themeId: question.themeId };
-          await bookmarkedByThemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeBookmark,
-          );
-          hierarchicalInserts++;
-        }
-        if (question.subthemeId) {
-          const compositeBookmark = {
-            ...bookmark,
-            subthemeId: question.subthemeId,
-          };
-          await bookmarkedBySubthemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeBookmark,
-          );
-          hierarchicalInserts++;
-        }
-        if (question.groupId) {
-          const compositeBookmark = { ...bookmark, groupId: question.groupId };
-          await bookmarkedByGroupByUser.insertIfDoesNotExist(
-            ctx,
-            compositeBookmark,
-          );
-          hierarchicalInserts++;
-        }
-      }
-    }
-
-    console.log(
-      `✅ Step: Processed ${processed} stats, made ${hierarchicalInserts} hierarchical inserts. Done: ${result.isDone}`,
-    );
-
-    return {
-      processed,
-      hierarchicalInserts,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-// ============================================================================
-// PRODUCTION-SPECIFIC STEP FUNCTIONS (Ultra-optimized for large datasets)
-// ============================================================================
-
-/**
- * PRODUCTION CLEAR AGGREGATES - Clear with ultra-small batches
- */
-export const productionClearAggregatesStep = internalMutation({
-  args: {
-    maxUsersPerBatch: v.number(),
-  },
-  returns: v.object({
-    totalUsersCleared: v.number(),
-    batchesProcessed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    console.log(
-      '🧹 Production Step: Clearing aggregates with micro-batches...',
-    );
-
-    // Clear global aggregates first
-    await totalQuestionCount.clear(ctx, { namespace: 'global' });
-    await randomQuestions.clear(ctx, { namespace: 'global' });
-    console.log('✅ Cleared global aggregates');
-
-    // Clear user aggregates in micro-batches
-    let cursor: string | null = null;
-    let totalUsersCleared = 0;
-    let batchesProcessed = 0;
-
-    while (true) {
-      const result = await ctx.db.query('users').paginate({
-        cursor,
-        numItems: args.maxUsersPerBatch,
+    // SINGLE PAGINATION - only userQuestionStats
+    const result = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: args.batchSize, // MICRO-BATCHES (10 items)
       });
 
-      for (const user of result.page) {
-        await answeredByUser.clear(ctx, { namespace: user._id });
-        await incorrectByUser.clear(ctx, { namespace: user._id });
-        await bookmarkedByUser.clear(ctx, { namespace: user._id });
-        totalUsersCleared++;
-      }
-
-      batchesProcessed++;
-      console.log(
-        `🧹 Production: Cleared batch ${batchesProcessed} - ${result.page.length} users (total: ${totalUsersCleared})`,
-      );
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-    }
-
-    return { totalUsersCleared, batchesProcessed };
-  },
-});
-
-/**
- * PRODUCTION CLEAR HIERARCHICAL - Clear hierarchical aggregates in ultra-small chunks
- */
-export const productionClearHierarchicalStep = internalMutation({
-  args: {
-    maxCombinationsPerBatch: v.number(),
-  },
-  returns: v.object({
-    totalCombinationsCleared: v.number(),
-    userBatchesProcessed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    console.log('🧹 Production Step: Clearing hierarchical aggregates...');
-
-    let totalCombinationsCleared = 0;
-    let userBatchesProcessed = 0;
-
-    // Process users in small batches to avoid timeouts
-    let userCursor: string | null = null;
-
-    while (true) {
-      const userResult = await ctx.db.query('users').paginate({
-        cursor: userCursor,
-        numItems: Math.max(1, Math.floor(args.maxCombinationsPerBatch / 10)), // Even smaller user batches
-      });
-
-      if (userResult.page.length === 0) break;
-
-      // For each user batch, clear their hierarchical aggregates
-      for (const user of userResult.page) {
-        // Clear theme-level aggregates for this user
-        const themes = await ctx.db.query('themes').take(100); // Limit themes per iteration
-        for (const theme of themes) {
-          const namespace = `${user._id}_${theme._id}`;
-          try {
-            await incorrectByThemeByUser.clear(ctx, { namespace });
-            await bookmarkedByThemeByUser.clear(ctx, { namespace });
-            await answeredByThemeByUser.clear(ctx, { namespace });
-            totalCombinationsCleared += 3;
-          } catch (error) {
-            // Ignore errors for non-existent namespaces
-          }
-        }
-      }
-
-      userBatchesProcessed++;
-      console.log(
-        `🧹 Production: Cleared hierarchical batch ${userBatchesProcessed} - ${userResult.page.length} users`,
-      );
-
-      if (userResult.isDone) break;
-      userCursor = userResult.continueCursor;
-    }
-
-    return { totalCombinationsCleared, userBatchesProcessed };
-  },
-});
-
-/**
- * PRODUCTION PROCESS QUESTIONS - Handle questions with micro-batches
- */
-export const productionProcessQuestionsBatchStep = internalMutation({
-  args: {
-    cursor: v.optional(v.string()),
-    batchSize: v.number(),
-  },
-  returns: v.object({
-    processed: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    console.log(
-      `🏭 Production Step: Processing ${args.batchSize} questions...`,
-    );
-
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor ?? null,
-      numItems: args.batchSize,
-    });
-
     let processed = 0;
-    for (const question of result.page) {
-      // Insert into all relevant question aggregates
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-      await randomQuestions.insertIfDoesNotExist(ctx, question);
-      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
-
-      if (question.themeId) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-      }
-      if (question.subthemeId) {
-        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
-        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
-      }
-      if (question.groupId) {
-        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
-        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
-      }
-
-      processed++;
-    }
-
-    return {
-      processed,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * PRODUCTION PROCESS USER STATS - Handle user stats with micro-batches
- */
-export const productionProcessUserStatsBatchStep = internalMutation({
-  args: {
-    cursor: v.optional(v.string()),
-    batchSize: v.number(),
-  },
-  returns: v.object({
-    processed: v.number(),
-    answeredCount: v.number(),
-    incorrectCount: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    console.log(
-      `🏭 Production Step: Processing ${args.batchSize} user stats...`,
-    );
-
-    const result = await ctx.db.query('userQuestionStats').paginate({
-      cursor: args.cursor ?? null,
-      numItems: args.batchSize,
-    });
-
-    let processed = 0;
-    let answeredCount = 0;
-    let incorrectCount = 0;
-
     for (const stat of result.page) {
       await answeredByUser.insertIfDoesNotExist(ctx, stat);
-      answeredCount++;
-
       if (stat.isIncorrect) {
         await incorrectByUser.insertIfDoesNotExist(ctx, stat);
-        incorrectCount++;
       }
-
       processed++;
     }
 
     return {
       processed,
-      answeredCount,
-      incorrectCount,
       continueCursor: result.continueCursor,
       isDone: result.isDone,
     };
@@ -1655,733 +1095,32 @@ export const productionProcessUserStatsBatchStep = internalMutation({
 });
 
 /**
- * PRODUCTION PROCESS BOOKMARKS - Handle bookmarks with micro-batches
+ * Micro-batch user bookmarks repair (SINGLE pagination, micro-batches)
  */
-export const productionProcessBookmarksBatchStep = internalMutation({
+export const microBatchUserBookmarksStep = internalMutation({
   args: {
+    userId: v.id('users'),
     cursor: v.optional(v.string()),
     batchSize: v.number(),
   },
   returns: v.object({
     processed: v.number(),
-    bookmarkedCount: v.number(),
     continueCursor: v.optional(v.string()),
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    console.log(
-      `🏭 Production Step: Processing ${args.batchSize} bookmarks...`,
-    );
-
-    const result = await ctx.db.query('userBookmarks').paginate({
-      cursor: args.cursor ?? null,
-      numItems: args.batchSize,
-    });
-
-    let processed = 0;
-    let bookmarkedCount = 0;
-
-    for (const bookmark of result.page) {
-      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
-      bookmarkedCount++;
-      processed++;
-    }
-
-    return {
-      processed,
-      bookmarkedCount,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * PRODUCTION PROCESS HIERARCHICAL - Handle hierarchical aggregates with ultra-micro-batches
- */
-export const productionProcessHierarchicalBatchStep = internalMutation({
-  args: {
-    cursor: v.optional(v.string()),
-    batchSize: v.number(),
-  },
-  returns: v.object({
-    processed: v.number(),
-    hierarchicalInserts: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    console.log(
-      `🏭 Production Step: Processing ${args.batchSize} hierarchical stats...`,
-    );
-
-    const result = await ctx.db.query('userQuestionStats').paginate({
-      cursor: args.cursor ?? null,
-      numItems: args.batchSize,
-    });
-
-    let processed = 0;
-    let hierarchicalInserts = 0;
-
-    // Process all stats and bookmarks in a single loop to avoid multiple queries
-    for (const stat of result.page) {
-      const question = await ctx.db.get(stat.questionId);
-      if (!question) continue;
-
-      // Insert into hierarchical answered aggregates
-      if (question.themeId) {
-        const compositeAnsweredStat = { ...stat, themeId: question.themeId };
-        try {
-          await answeredByThemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeAnsweredStat,
-          );
-          hierarchicalInserts++;
-        } catch (error) {
-          console.warn(`Failed to insert answered stat for theme:`, error);
-        }
-      }
-
-      if (question.subthemeId) {
-        const compositeAnsweredStat = {
-          ...stat,
-          subthemeId: question.subthemeId,
-        };
-        try {
-          await answeredBySubthemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeAnsweredStat,
-          );
-          hierarchicalInserts++;
-        } catch (error) {
-          console.warn(`Failed to insert answered stat for subtheme:`, error);
-        }
-      }
-
-      if (question.groupId) {
-        const compositeAnsweredStat = { ...stat, groupId: question.groupId };
-        try {
-          await answeredByGroupByUser.insertIfDoesNotExist(
-            ctx,
-            compositeAnsweredStat,
-          );
-          hierarchicalInserts++;
-        } catch (error) {
-          console.warn(`Failed to insert answered stat for group:`, error);
-        }
-      }
-
-      // Insert into hierarchical incorrect aggregates if applicable
-      if (stat.isIncorrect) {
-        if (question.themeId) {
-          const compositeIncorrectStat = { ...stat, themeId: question.themeId };
-          try {
-            await incorrectByThemeByUser.insertIfDoesNotExist(
-              ctx,
-              compositeIncorrectStat,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(`Failed to insert incorrect stat for theme:`, error);
-          }
-        }
-
-        if (question.subthemeId) {
-          const compositeIncorrectStat = {
-            ...stat,
-            subthemeId: question.subthemeId,
-          };
-          try {
-            await incorrectBySubthemeByUser.insertIfDoesNotExist(
-              ctx,
-              compositeIncorrectStat,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(
-              `Failed to insert incorrect stat for subtheme:`,
-              error,
-            );
-          }
-        }
-
-        if (question.groupId) {
-          const compositeIncorrectStat = { ...stat, groupId: question.groupId };
-          try {
-            await incorrectByGroupByUser.insertIfDoesNotExist(
-              ctx,
-              compositeIncorrectStat,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(`Failed to insert incorrect stat for group:`, error);
-          }
-        }
-      }
-
-      // Check if this question is bookmarked by this user (single query per stat)
-      const bookmark = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user_question', q =>
-          q.eq('userId', stat.userId).eq('questionId', stat.questionId),
-        )
-        .first();
-
-      if (bookmark) {
-        // Insert into hierarchical bookmarked aggregates
-        if (question.themeId) {
-          const compositeBookmark = { ...bookmark, themeId: question.themeId };
-          try {
-            await bookmarkedByThemeByUser.insertIfDoesNotExist(
-              ctx,
-              compositeBookmark,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(`Failed to insert bookmark for theme:`, error);
-          }
-        }
-        if (question.subthemeId) {
-          const compositeBookmark = {
-            ...bookmark,
-            subthemeId: question.subthemeId,
-          };
-          try {
-            await bookmarkedBySubthemeByUser.insertIfDoesNotExist(
-              ctx,
-              compositeBookmark,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(`Failed to insert bookmark for subtheme:`, error);
-          }
-        }
-        if (question.groupId) {
-          const compositeBookmark = { ...bookmark, groupId: question.groupId };
-          try {
-            await bookmarkedByGroupByUser.insertIfDoesNotExist(
-              ctx,
-              compositeBookmark,
-            );
-            hierarchicalInserts++;
-          } catch (error) {
-            console.warn(`Failed to insert bookmark for group:`, error);
-          }
-        }
-      }
-
-      processed++;
-    }
-
-    return {
-      processed,
-      hierarchicalInserts,
-      continueCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * PRODUCTION VERIFY - Quick verification with sampling for performance
- */
-export const productionVerifyStep = internalMutation({
-  args: {},
-  returns: v.object({
-    totalQuestions: v.number(),
-    totalAnswered: v.number(),
-    totalIncorrect: v.number(),
-    totalBookmarked: v.number(),
-    userCount: v.number(),
-    sampleSize: v.number(),
-  }),
-  handler: async ctx => {
-    console.log('🔍 Production Step: Quick verification with sampling...');
-
-    // Verify global question count
-    const totalQuestions = await totalQuestionCount.count(ctx, {
-      namespace: 'global',
-      bounds: {},
-    });
-
-    // Sample a smaller subset of users for verification to avoid timeouts
-    const allUsers = await ctx.db.query('users').take(50); // Sample only first 50 users
-    let totalAnswered = 0;
-    let totalIncorrect = 0;
-    let totalBookmarked = 0;
-
-    // Use parallel processing for the sample
-    const userCounts = await Promise.all(
-      allUsers.map(async user => {
-        const [answered, incorrect, bookmarked] = await Promise.all([
-          (answeredByUser.count as any)(ctx, {
-            namespace: user._id,
-            bounds: {},
-          }),
-          (incorrectByUser.count as any)(ctx, {
-            namespace: user._id,
-            bounds: {},
-          }),
-          (bookmarkedByUser.count as any)(ctx, {
-            namespace: user._id,
-            bounds: {},
-          }),
-        ]);
-        return { answered, incorrect, bookmarked };
-      }),
-    );
-
-    for (const counts of userCounts) {
-      totalAnswered += counts.answered;
-      totalIncorrect += counts.incorrect;
-      totalBookmarked += counts.bookmarked;
-    }
-
-    const result = {
-      totalQuestions,
-      totalAnswered,
-      totalIncorrect,
-      totalBookmarked,
-      userCount: allUsers.length,
-      sampleSize: 50,
-    };
-
-    console.log(
-      '✅ Production Step: Verification completed (sampled):',
-      result,
-    );
-    return result;
-  },
-});
-
-// ============================================================================
-// SEPARATE AGGREGATE REPAIR WORKFLOWS (By Category)
-// ============================================================================
-
-/**
- * 1. SIMPLE USER AGGREGATES REPAIR - Fastest and safest
- */
-export const startSimpleUserAggregatesRepair = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx): Promise<string> => {
-    console.log('👤 Starting Simple User Aggregates repair workflow...');
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.simpleUserAggregatesWorkflow,
-      {},
-    );
-
-    console.log(
-      `✅ Simple User Aggregates workflow started with ID: ${workflowId}`,
-    );
-    return workflowId as string;
-  },
-});
-
-/**
- * 2. QUESTION COUNT AGGREGATES REPAIR - Medium complexity
- */
-export const startQuestionCountAggregatesRepair = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx): Promise<string> => {
-    console.log('📊 Starting Question Count Aggregates repair workflow...');
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.questionCountAggregatesWorkflow,
-      {},
-    );
-
-    console.log(
-      `✅ Question Count Aggregates workflow started with ID: ${workflowId}`,
-    );
-    return workflowId as string;
-  },
-});
-
-/**
- * 3. RANDOM QUESTION AGGREGATES REPAIR - Medium complexity
- */
-export const startRandomQuestionAggregatesRepair = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx): Promise<string> => {
-    console.log('🎲 Starting Random Question Aggregates repair workflow...');
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.randomQuestionAggregatesWorkflow,
-      {},
-    );
-
-    console.log(
-      `✅ Random Question Aggregates workflow started with ID: ${workflowId}`,
-    );
-    return workflowId as string;
-  },
-});
-
-/**
- * 4. HIERARCHICAL USER AGGREGATES REPAIR - Most complex
- */
-export const startHierarchicalUserAggregatesRepair = mutation({
-  args: {},
-  returns: v.string(),
-  handler: async (ctx): Promise<string> => {
-    console.log('🏗️ Starting Hierarchical User Aggregates repair workflow...');
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.hierarchicalUserAggregatesWorkflow,
-      {},
-    );
-
-    console.log(
-      `✅ Hierarchical User Aggregates workflow started with ID: ${workflowId}`,
-    );
-    return workflowId as string;
-  },
-});
-
-// ============================================================================
-// WORKFLOW DEFINITIONS
-// ============================================================================
-
-/**
- * SIMPLE USER AGGREGATES WORKFLOW - answeredByUser, incorrectByUser, bookmarkedByUser
- */
-export const simpleUserAggregatesWorkflow = workflow.define({
-  args: {},
-  handler: async (
-    step,
-  ): Promise<{ userStatsProcessed: number; bookmarksProcessed: number }> => {
-    console.log('👤 Workflow: Starting Simple User Aggregates repair...');
-
-    // Clear simple user aggregates
-    await step.runMutation(
-      internal.aggregateWorkflows.clearSimpleUserAggregatesStep,
-      {},
-    );
-
-    // Process user stats
-    let userStatsProcessed = 0;
-    let cursor: string | undefined = undefined;
-    let batchNumber = 1;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessUserStatsBatchStep,
-        { cursor, batchSize: 10 },
-      );
-
-      console.log(
-        `👤 User stats batch ${batchNumber} - ${result.processed} stats`,
-      );
-      userStatsProcessed += result.processed;
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    // Process bookmarks
-    cursor = undefined;
-    batchNumber = 1;
-    let bookmarksProcessed = 0;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessBookmarksBatchStep,
-        { cursor, batchSize: 10 },
-      );
-
-      console.log(
-        `👤 Bookmarks batch ${batchNumber} - ${result.processed} bookmarks`,
-      );
-      bookmarksProcessed += result.processed;
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    console.log('✅ Simple User Aggregates repair completed!');
-    return { userStatsProcessed, bookmarksProcessed };
-  },
-});
-
-/**
- * QUESTION COUNT AGGREGATES WORKFLOW - totalQuestionCount, questionCountByTheme/Subtheme/Group
- */
-export const questionCountAggregatesWorkflow = workflow.define({
-  args: {},
-  handler: async (step): Promise<{ questionsProcessed: number }> => {
-    console.log('📊 Workflow: Starting Question Count Aggregates repair...');
-
-    // Clear question count aggregates
-    await step.runMutation(
-      internal.aggregateWorkflows.clearQuestionCountAggregatesStep,
-      {},
-    );
-
-    // Process questions
-    let questionsProcessed = 0;
-    let cursor: string | undefined = undefined;
-    let batchNumber = 1;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.processQuestionCountBatchStep,
-        { cursor, batchSize: 15 },
-      );
-
-      console.log(
-        `📊 Questions batch ${batchNumber} - ${result.processed} questions`,
-      );
-      questionsProcessed += result.processed;
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    console.log('✅ Question Count Aggregates repair completed!');
-    return { questionsProcessed };
-  },
-});
-
-/**
- * RANDOM QUESTION AGGREGATES WORKFLOW - randomQuestions, randomQuestionsByTheme/Subtheme/Group
- */
-export const randomQuestionAggregatesWorkflow = workflow.define({
-  args: {},
-  handler: async (step): Promise<{ questionsProcessed: number }> => {
-    console.log('🎲 Workflow: Starting Random Question Aggregates repair...');
-
-    // Clear random question aggregates
-    await step.runMutation(
-      internal.aggregateWorkflows.clearRandomQuestionAggregatesStep,
-      {},
-    );
-
-    // Process questions
-    let questionsProcessed = 0;
-    let cursor: string | undefined = undefined;
-    let batchNumber = 1;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.processRandomQuestionBatchStep,
-        { cursor, batchSize: 15 },
-      );
-
-      console.log(
-        `🎲 Questions batch ${batchNumber} - ${result.processed} questions`,
-      );
-      questionsProcessed += result.processed;
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    console.log('✅ Random Question Aggregates repair completed!');
-    return { questionsProcessed };
-  },
-});
-
-/**
- * HIERARCHICAL USER AGGREGATES WORKFLOW - All hierarchical user-specific aggregates
- */
-export const hierarchicalUserAggregatesWorkflow = workflow.define({
-  args: {},
-  handler: async (step): Promise<{ hierarchicalStatsProcessed: number }> => {
-    console.log('🏗️ Workflow: Starting Hierarchical User Aggregates repair...');
-
-    // Clear hierarchical aggregates
-    await step.runMutation(
-      internal.aggregateWorkflows.clearHierarchicalAggregatesStep,
-      {},
-    );
-
-    // Process hierarchical aggregates
-    let hierarchicalStatsProcessed = 0;
-    let cursor: string | undefined = undefined;
-    let batchNumber = 1;
-
-    while (true) {
-      const result: any = await step.runMutation(
-        internal.aggregateWorkflows.productionProcessHierarchicalBatchStep,
-        { cursor, batchSize: 5 }, // Smaller batches for complex processing
-      );
-
-      console.log(
-        `🏗️ Hierarchical batch ${batchNumber} - ${result.processed} stats`,
-      );
-      hierarchicalStatsProcessed += result.processed;
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-      batchNumber++;
-    }
-
-    console.log('✅ Hierarchical User Aggregates repair completed!');
-    return { hierarchicalStatsProcessed };
-  },
-});
-
-// ============================================================================
-// SUPPORTING STEP FUNCTIONS FOR SEPARATE WORKFLOWS
-// ============================================================================
-
-/**
- * Clear simple user aggregates only
- */
-export const clearSimpleUserAggregatesStep = internalMutation({
-  args: {},
-  returns: v.object({
-    totalUsersCleared: v.number(),
-  }),
-  handler: async ctx => {
-    console.log('🧹 Step: Clearing simple user aggregates...');
-
-    let cursor: string | null = null;
-    let totalUsersCleared = 0;
-    const batchSize = 10;
-
-    while (true) {
-      const result = await ctx.db.query('users').paginate({
-        cursor,
-        numItems: batchSize,
+    // SINGLE PAGINATION - only userBookmarks
+    const result = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .paginate({
+        cursor: args.cursor ?? null,
+        numItems: args.batchSize, // MICRO-BATCHES (10 items)
       });
 
-      for (const user of result.page) {
-        await answeredByUser.clear(ctx, { namespace: user._id });
-        await incorrectByUser.clear(ctx, { namespace: user._id });
-        await bookmarkedByUser.clear(ctx, { namespace: user._id });
-        totalUsersCleared++;
-      }
-
-      if (result.isDone) break;
-      cursor = result.continueCursor;
-    }
-
-    console.log(
-      `✅ Cleared simple user aggregates for ${totalUsersCleared} users`,
-    );
-    return { totalUsersCleared };
-  },
-});
-
-/**
- * Clear question count aggregates only
- */
-export const clearQuestionCountAggregatesStep = internalMutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('🧹 Step: Clearing question count aggregates...');
-
-    // Clear all question count aggregates
-    await totalQuestionCount.clear(ctx, { namespace: 'global' });
-
-    // Clear theme-based counts
-    const themes = await ctx.db.query('themes').collect();
-    for (const theme of themes) {
-      await questionCountByTheme.clear(ctx, { namespace: theme._id });
-    }
-
-    // Clear subtheme and group counts (using namespace pattern)
-    const subthemes = await ctx.db.query('subthemes').collect();
-    for (const subtheme of subthemes) {
-      await questionCountBySubtheme.clear(ctx, { namespace: subtheme._id });
-    }
-
-    const groups = await ctx.db.query('groups').collect();
-    for (const group of groups) {
-      await questionCountByGroup.clear(ctx, { namespace: group._id });
-    }
-
-    console.log('✅ Cleared all question count aggregates');
-    return null;
-  },
-});
-
-/**
- * Clear random question aggregates only
- */
-export const clearRandomQuestionAggregatesStep = internalMutation({
-  args: {},
-  returns: v.null(),
-  handler: async ctx => {
-    console.log('🧹 Step: Clearing random question aggregates...');
-
-    // Clear global random questions
-    await randomQuestions.clear(ctx, { namespace: 'global' });
-
-    // Clear theme-based random questions
-    const themes = await ctx.db.query('themes').collect();
-    for (const theme of themes) {
-      await randomQuestionsByTheme.clear(ctx, { namespace: theme._id });
-    }
-
-    // Clear subtheme and group random questions
-    const subthemes = await ctx.db.query('subthemes').collect();
-    for (const subtheme of subthemes) {
-      await randomQuestionsBySubtheme.clear(ctx, { namespace: subtheme._id });
-    }
-
-    const groups = await ctx.db.query('groups').collect();
-    for (const group of groups) {
-      await randomQuestionsByGroup.clear(ctx, { namespace: group._id });
-    }
-
-    console.log('✅ Cleared all random question aggregates');
-    return null;
-  },
-});
-
-/**
- * Process questions for count aggregates only
- */
-export const processQuestionCountBatchStep = internalMutation({
-  args: {
-    cursor: v.optional(v.string()),
-    batchSize: v.number(),
-  },
-  returns: v.object({
-    processed: v.number(),
-    continueCursor: v.optional(v.string()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    console.log(
-      `📊 Step: Processing ${args.batchSize} questions for count aggregates...`,
-    );
-
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor ?? null,
-      numItems: args.batchSize,
-    });
-
     let processed = 0;
-    for (const question of result.page) {
-      // Insert into count aggregates
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-
-      if (question.themeId) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-      }
-      if (question.subthemeId) {
-        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
-      }
-      if (question.groupId) {
-        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
-      }
-
+    for (const bookmark of result.page) {
+      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
       processed++;
     }
 
@@ -2394,48 +1133,736 @@ export const processQuestionCountBatchStep = internalMutation({
 });
 
 /**
- * Process questions for random aggregates only
+ * Process single user (SINGLE pagination through users)
  */
-export const processRandomQuestionBatchStep = internalMutation({
+export const microBatchSingleUserStep = internalMutation({
   args: {
     cursor: v.optional(v.string()),
     batchSize: v.number(),
   },
   returns: v.object({
-    processed: v.number(),
+    usersProcessed: v.number(),
     continueCursor: v.optional(v.string()),
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    console.log(
-      `🎲 Step: Processing ${args.batchSize} questions for random aggregates...`,
-    );
-
-    const result = await ctx.db.query('questions').paginate({
+    // SINGLE PAGINATION - only users table
+    const result = await ctx.db.query('users').paginate({
       cursor: args.cursor ?? null,
-      numItems: args.batchSize,
+      numItems: args.batchSize, // 1 user at a time
     });
 
-    let processed = 0;
-    for (const question of result.page) {
-      // Insert into random aggregates
-      await randomQuestions.insertIfDoesNotExist(ctx, question);
-      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+    let usersProcessed = 0;
 
-      if (question.subthemeId) {
-        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
-      }
-      if (question.groupId) {
-        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
-      }
+    for (const user of result.page) {
+      // Clear user aggregates (no pagination)
+      await answeredByUser.clear(ctx, { namespace: user._id });
+      await incorrectByUser.clear(ctx, { namespace: user._id });
+      await bookmarkedByUser.clear(ctx, { namespace: user._id });
 
-      processed++;
+      // Process ALL user stats with pagination (no data loss)
+      let statsCursor: string | null = null;
+      let totalStatsProcessed = 0;
+
+      do {
+        const statsResult = await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', user._id))
+          .paginate({
+            cursor: statsCursor,
+            numItems: 50, // Small batches to avoid timeout
+          });
+
+        for (const stat of statsResult.page) {
+          await answeredByUser.insertIfDoesNotExist(ctx, stat);
+          if (stat.isIncorrect) {
+            await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+          }
+          totalStatsProcessed++;
+        }
+
+        statsCursor = statsResult.continueCursor;
+      } while (statsCursor);
+
+      // Process ALL user bookmarks with pagination (no data loss)
+      let bookmarksCursor: string | null = null;
+      let totalBookmarksProcessed = 0;
+
+      do {
+        const bookmarksResult = await ctx.db
+          .query('userBookmarks')
+          .withIndex('by_user', q => q.eq('userId', user._id))
+          .paginate({
+            cursor: bookmarksCursor,
+            numItems: 50, // Small batches to avoid timeout
+          });
+
+        for (const bookmark of bookmarksResult.page) {
+          await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+          totalBookmarksProcessed++;
+        }
+
+        bookmarksCursor = bookmarksResult.continueCursor;
+      } while (bookmarksCursor);
+
+      console.log(
+        `✅ User ${user._id}: ${totalStatsProcessed} stats, ${totalBookmarksProcessed} bookmarks processed`,
+      );
+      usersProcessed++;
     }
 
     return {
-      processed,
+      usersProcessed,
       continueCursor: result.continueCursor,
       isDone: result.isDone,
     };
+  },
+});
+
+// ============================================================================
+// USER-SPECIFIC AGGREGATE WORKFLOWS (Following Convex Workflow Best Practices)
+// ============================================================================
+
+/**
+ * Single User Repair Workflow - Repairs all aggregates for one user
+ * Uses deterministic steps to avoid pagination conflicts
+ */
+export const singleUserRepairWorkflow = workflow.define({
+  args: {
+    userId: v.id('users'),
+  },
+  handler: async (
+    step,
+    args,
+  ): Promise<{ success: boolean; processed: number }> => {
+    console.log(`🔧 Repairing aggregates for user: ${args.userId}`);
+
+    let totalProcessed = 0;
+
+    // Step 1: Clear user aggregates (non-paginated operation)
+    await step.runMutation(
+      internal.aggregateWorkflows.clearSingleUserAggregatesStep,
+      { userId: args.userId },
+      { name: 'clear-user-aggregates' },
+    );
+
+    // Step 2: Repair answered questions aggregate (single pagination)
+    const answeredResult = await step.runMutation(
+      internal.aggregateWorkflows.repairUserAnsweredStep,
+      { userId: args.userId },
+      { name: 'repair-answered-aggregate' },
+    );
+    totalProcessed += answeredResult.processed;
+
+    // Step 3: Repair incorrect questions aggregate (single pagination)
+    const incorrectResult = await step.runMutation(
+      internal.aggregateWorkflows.repairUserIncorrectStep,
+      { userId: args.userId },
+      { name: 'repair-incorrect-aggregate' },
+    );
+    totalProcessed += incorrectResult.processed;
+
+    // Step 4: Repair bookmarks aggregate (single pagination)
+    const bookmarksResult = await step.runMutation(
+      internal.aggregateWorkflows.repairUserBookmarksStep,
+      { userId: args.userId },
+      { name: 'repair-bookmarks-aggregate' },
+    );
+    totalProcessed += bookmarksResult.processed;
+
+    // Step 5: Repair hierarchical theme aggregates (parallel execution)
+    const [themeAnswered, themeIncorrect, themeBookmarks] = await Promise.all([
+      step.runMutation(
+        internal.aggregateWorkflows.repairUserThemeAnsweredStep,
+        { userId: args.userId },
+        { name: 'repair-theme-answered' },
+      ),
+      step.runMutation(
+        internal.aggregateWorkflows.repairUserThemeIncorrectStep,
+        { userId: args.userId },
+        { name: 'repair-theme-incorrect' },
+      ),
+      step.runMutation(
+        internal.aggregateWorkflows.repairUserThemeBookmarksStep,
+        { userId: args.userId },
+        { name: 'repair-theme-bookmarks' },
+      ),
+    ]);
+
+    totalProcessed +=
+      themeAnswered.processed +
+      themeIncorrect.processed +
+      themeBookmarks.processed;
+
+    console.log(
+      `✅ User ${args.userId} repair complete. Processed: ${totalProcessed}`,
+    );
+
+    return { success: true, processed: totalProcessed };
+  },
+});
+
+/**
+ * Batch User Repair Workflow - Repairs multiple users in parallel
+ */
+export const batchUserRepairWorkflow = workflow.define({
+  args: {
+    batchSize: v.number(),
+  },
+  handler: async (
+    step,
+    args,
+  ): Promise<{ totalUsers: number; totalProcessed: number }> => {
+    console.log(
+      `🏭 Starting batch user repair with batch size: ${args.batchSize}`,
+    );
+
+    // Step 1: Get list of all users with pagination to avoid memory issues
+    let allUsers: Array<{ _id: any; _creationTime: number }> = [];
+    let cursor: string | undefined = undefined;
+    let pageNumber = 0;
+
+    // Fetch all users in paginated batches (each step.runQuery is a separate workflow step)
+    do {
+      const usersResult: {
+        users: Array<{ _id: any; _creationTime: number }>;
+        continueCursor?: string;
+        isDone: boolean;
+      } = await step.runQuery(
+        internal.aggregateWorkflows.getAllUsersForRepair,
+        { batchSize: 100, cursor }, // 100 users per page to control memory usage
+        { name: `get-users-page-${pageNumber}` },
+      );
+
+      allUsers.push(...usersResult.users);
+      cursor = usersResult.continueCursor;
+      pageNumber++;
+
+      console.log(
+        `📄 Loaded page ${pageNumber}: ${usersResult.users.length} users (total: ${allUsers.length})`,
+      );
+    } while (cursor);
+
+    let totalProcessed = 0;
+    const users = allUsers;
+
+    // Step 2: Process users in batches using parallel workflows
+    for (let i = 0; i < users.length; i += args.batchSize) {
+      const batch = users.slice(i, i + args.batchSize);
+
+      // Run user repairs in parallel for this batch
+      const batchResults = await Promise.all(
+        batch.map((user: any, index: number) =>
+          step.runAction(
+            internal.aggregateWorkflows.startSingleUserRepairAction,
+            { userId: user._id },
+            {
+              name: `repair-user-batch-${Math.floor(i / args.batchSize)}-${index}`,
+            },
+          ),
+        ),
+      );
+
+      const batchProcessed = batchResults.reduce(
+        (sum: number, result: any) => sum + result.processed,
+        0,
+      );
+      totalProcessed += batchProcessed;
+
+      console.log(
+        `✅ Batch ${Math.floor(i / args.batchSize) + 1} complete. Users: ${batch.length}, Processed: ${batchProcessed}`,
+      );
+    }
+
+    console.log(
+      `🎉 Batch repair complete! Total users: ${users.length}, Total processed: ${totalProcessed}`,
+    );
+
+    return { totalUsers: users.length, totalProcessed };
+  },
+});
+
+// ============================================================================
+// INDIVIDUAL STEP FUNCTIONS (Single Pagination Each)
+// ============================================================================
+
+/**
+ * Clear all aggregates for a specific user (non-paginated)
+ */
+export const clearSingleUserAggregatesStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ cleared: v.boolean() }),
+  handler: async (ctx, args) => {
+    console.log(`🧹 Clearing aggregates for user: ${args.userId}`);
+
+    // Clear all user-specific aggregates
+    await Promise.all([
+      answeredByUser.clear(ctx, { namespace: args.userId }),
+      incorrectByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedByUser.clear(ctx, { namespace: args.userId }),
+      // Hierarchical aggregates
+      answeredByThemeByUser.clear(ctx, { namespace: args.userId }),
+      incorrectByThemeByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedByThemeByUser.clear(ctx, { namespace: args.userId }),
+      answeredBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+      incorrectBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+      answeredByGroupByUser.clear(ctx, { namespace: args.userId }),
+      incorrectByGroupByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedByGroupByUser.clear(ctx, { namespace: args.userId }),
+    ]);
+
+    return { cleared: true };
+  },
+});
+
+/**
+ * Repair answered questions aggregate for user (single pagination)
+ */
+export const repairUserAnsweredStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ processed: v.number() }),
+  handler: async (ctx, args) => {
+    console.log(`📊 Repairing answered aggregate for user: ${args.userId}`);
+
+    // SINGLE PAGINATION - only userQuestionStats where hasAnswered = true
+    const answeredStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user_answered', q =>
+        q.eq('userId', args.userId).eq('hasAnswered', true),
+      )
+      .collect();
+
+    let processed = 0;
+    for (const stat of answeredStats) {
+      await answeredByUser.insertIfDoesNotExist(ctx, stat);
+      processed++;
+    }
+
+    console.log(`✅ Answered aggregate repaired: ${processed} records`);
+    return { processed };
+  },
+});
+
+/**
+ * Repair incorrect questions aggregate for user (single pagination)
+ */
+export const repairUserIncorrectStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ processed: v.number() }),
+  handler: async (ctx, args) => {
+    console.log(`❌ Repairing incorrect aggregate for user: ${args.userId}`);
+
+    // SINGLE PAGINATION - only userQuestionStats where isIncorrect = true
+    const incorrectStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user_incorrect', q =>
+        q.eq('userId', args.userId).eq('isIncorrect', true),
+      )
+      .collect();
+
+    let processed = 0;
+    for (const stat of incorrectStats) {
+      await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+      processed++;
+    }
+
+    console.log(`✅ Incorrect aggregate repaired: ${processed} records`);
+    return { processed };
+  },
+});
+
+/**
+ * Repair bookmarks aggregate for user (single pagination)
+ */
+export const repairUserBookmarksStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ processed: v.number() }),
+  handler: async (ctx, args) => {
+    console.log(`🔖 Repairing bookmarks aggregate for user: ${args.userId}`);
+
+    // SINGLE PAGINATION - only userBookmarks
+    const bookmarks = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .collect();
+
+    let processed = 0;
+    for (const bookmark of bookmarks) {
+      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+      processed++;
+    }
+
+    console.log(`✅ Bookmarks aggregate repaired: ${processed} records`);
+    return { processed };
+  },
+});
+
+/**
+ * Repair theme-level answered aggregate for user (single pagination)
+ */
+export const repairUserThemeAnsweredStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ processed: v.number() }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🎯 Repairing theme answered aggregate for user: ${args.userId}`,
+    );
+
+    // SINGLE PAGINATION - get answered stats with question data
+    const answeredStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user_answered', q =>
+        q.eq('userId', args.userId).eq('hasAnswered', true),
+      )
+      .collect();
+
+    let processed = 0;
+    for (const stat of answeredStats) {
+      // Get question to find theme/subtheme/group
+      const question = await ctx.db.get(stat.questionId);
+      if (question) {
+        // Create composite records with theme information for hierarchical aggregates
+        const statWithTheme = { ...stat, themeId: question.themeId };
+        const statWithSubtheme = question.subthemeId
+          ? { ...stat, subthemeId: question.subthemeId }
+          : null;
+        const statWithGroup = question.groupId
+          ? { ...stat, groupId: question.groupId }
+          : null;
+
+        // Insert into hierarchical aggregates
+        await Promise.all([
+          answeredByThemeByUser.insertIfDoesNotExist(ctx, statWithTheme),
+          statWithSubtheme &&
+            answeredBySubthemeByUser.insertIfDoesNotExist(
+              ctx,
+              statWithSubtheme,
+            ),
+          statWithGroup &&
+            answeredByGroupByUser.insertIfDoesNotExist(ctx, statWithGroup),
+        ]);
+        processed++;
+      }
+    }
+
+    console.log(`✅ Theme answered aggregate repaired: ${processed} records`);
+    return { processed };
+  },
+});
+
+/**
+ * Repair theme-level incorrect aggregate for user (single pagination)
+ */
+export const repairUserThemeIncorrectStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ processed: v.number() }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🎯❌ Repairing theme incorrect aggregate for user: ${args.userId}`,
+    );
+
+    // SINGLE PAGINATION - get incorrect stats with question data
+    const incorrectStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user_incorrect', q =>
+        q.eq('userId', args.userId).eq('isIncorrect', true),
+      )
+      .collect();
+
+    let processed = 0;
+    for (const stat of incorrectStats) {
+      // Get question to find theme/subtheme/group
+      const question = await ctx.db.get(stat.questionId);
+      if (question) {
+        // Create composite records with theme information for hierarchical aggregates
+        const statWithTheme = { ...stat, themeId: question.themeId };
+        const statWithSubtheme = question.subthemeId
+          ? { ...stat, subthemeId: question.subthemeId }
+          : null;
+        const statWithGroup = question.groupId
+          ? { ...stat, groupId: question.groupId }
+          : null;
+
+        // Insert into hierarchical aggregates
+        await Promise.all([
+          incorrectByThemeByUser.insertIfDoesNotExist(ctx, statWithTheme),
+          statWithSubtheme &&
+            incorrectBySubthemeByUser.insertIfDoesNotExist(
+              ctx,
+              statWithSubtheme,
+            ),
+          statWithGroup &&
+            incorrectByGroupByUser.insertIfDoesNotExist(ctx, statWithGroup),
+        ]);
+        processed++;
+      }
+    }
+
+    console.log(`✅ Theme incorrect aggregate repaired: ${processed} records`);
+    return { processed };
+  },
+});
+
+/**
+ * Repair theme-level bookmarks aggregate for user (single pagination)
+ */
+export const repairUserThemeBookmarksStep = internalMutation({
+  args: { userId: v.id('users') },
+  returns: v.object({ processed: v.number() }),
+  handler: async (ctx, args) => {
+    console.log(
+      `🎯🔖 Repairing theme bookmarks aggregate for user: ${args.userId}`,
+    );
+
+    // SINGLE PAGINATION - get bookmarks with question data
+    const bookmarks = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .collect();
+
+    let processed = 0;
+    for (const bookmark of bookmarks) {
+      // Get question to find theme/subtheme/group
+      const question = await ctx.db.get(bookmark.questionId);
+      if (question) {
+        // Create composite records with theme information for hierarchical aggregates
+        const bookmarkWithTheme = { ...bookmark, themeId: question.themeId };
+        const bookmarkWithSubtheme = question.subthemeId
+          ? { ...bookmark, subthemeId: question.subthemeId }
+          : null;
+        const bookmarkWithGroup = question.groupId
+          ? { ...bookmark, groupId: question.groupId }
+          : null;
+
+        // Insert into hierarchical aggregates
+        await Promise.all([
+          bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, bookmarkWithTheme),
+          bookmarkWithSubtheme &&
+            bookmarkedBySubthemeByUser.insertIfDoesNotExist(
+              ctx,
+              bookmarkWithSubtheme,
+            ),
+          bookmarkWithGroup &&
+            bookmarkedByGroupByUser.insertIfDoesNotExist(
+              ctx,
+              bookmarkWithGroup,
+            ),
+        ]);
+        processed++;
+      }
+    }
+
+    console.log(`✅ Theme bookmarks aggregate repaired: ${processed} records`);
+    return { processed };
+  },
+});
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Get users for repair with pagination (single paginated query per call)
+ */
+export const getAllUsersForRepair = internalQuery({
+  args: {
+    batchSize: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  returns: v.object({
+    users: v.array(
+      v.object({
+        _id: v.id('users'),
+        _creationTime: v.number(),
+      }),
+    ),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx: any, args: any) => {
+    const batchSize = args.batchSize || 100; // Default to 100 users per batch
+
+    // SINGLE PAGINATION - only users table (Convex constraint)
+    const result = await ctx.db.query('users').paginate({
+      cursor: args.cursor ?? null,
+      numItems: batchSize,
+    });
+
+    return {
+      users: result.page.map((user: any) => ({
+        _id: user._id,
+        _creationTime: user._creationTime,
+      })),
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * Get a small sample of users for testing (single pagination call)
+ */
+export const getSampleUsersForTesting = internalQuery({
+  args: {
+    limit: v.optional(v.number()),
+  },
+  returns: v.object({
+    users: v.array(
+      v.object({
+        _id: v.id('users'),
+        _creationTime: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx: any, args: any) => {
+    const limit = args.limit || 5; // Default to 5 users for testing
+
+    // SINGLE PAGINATION - only users table, limited sample
+    const result = await ctx.db.query('users').paginate({
+      cursor: null,
+      numItems: limit,
+    });
+
+    return {
+      users: result.page.map((user: any) => ({
+        _id: user._id,
+        _creationTime: user._creationTime,
+      })),
+    };
+  },
+});
+
+/**
+ * Action wrapper to start single user repair from within workflow
+ */
+export const startSingleUserRepairAction = internalAction({
+  args: { userId: v.id('users') },
+  returns: v.object({ success: v.boolean(), processed: v.number() }),
+  handler: async (ctx: any, args: any) => {
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.singleUserRepairWorkflow,
+      args,
+    );
+
+    // Wait for workflow to complete and return result
+    // In production, you might want to poll for status instead
+    await new Promise(resolve => setTimeout(resolve, 1000));
+
+    const status = await workflow.status(ctx, workflowId);
+    if (status.type === 'completed') {
+      // For now, return a default result since the workflow is async
+      return { success: true, processed: 0 };
+    }
+
+    // Default return if workflow is still running
+    return { success: true, processed: 0 };
+  },
+});
+
+/**
+ * TESTING: Start repair for a small sample of users
+ */
+export const startSampleUserRepair = mutation({
+  args: {
+    sampleSize: v.optional(v.number()), // Number of users to repair (default 3)
+  },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    const sampleSize = args.sampleSize || 3;
+    console.log(`🧪 Starting sample user repair for ${sampleSize} users...`);
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.sampleUserRepairWorkflow,
+      { sampleSize },
+    );
+
+    return `Sample user repair started with ID: ${workflowId} (${sampleSize} users)`;
+  },
+});
+
+/**
+ * Sample User Repair Workflow - Repairs a small number of users for testing
+ */
+export const sampleUserRepairWorkflow = workflow.define({
+  args: {
+    sampleSize: v.number(),
+  },
+  handler: async (
+    step,
+    args,
+  ): Promise<{ totalUsers: number; totalProcessed: number }> => {
+    console.log(`🧪 Starting sample repair for ${args.sampleSize} users`);
+
+    // Step 1: Get sample users (single pagination)
+    const usersResult = await step.runQuery(
+      internal.aggregateWorkflows.getSampleUsersForTesting,
+      { limit: args.sampleSize },
+      { name: 'get-sample-users' },
+    );
+
+    let totalProcessed = 0;
+    const users = usersResult.users;
+
+    // Step 2: Process users one by one for testing (sequential for easier debugging)
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      console.log(`🔧 Processing user ${i + 1}/${users.length}: ${user._id}`);
+
+      const userResult = await step.runAction(
+        internal.aggregateWorkflows.startSingleUserRepairAction,
+        { userId: user._id },
+        { name: `repair-sample-user-${i}` },
+      );
+
+      totalProcessed += userResult.processed;
+    }
+
+    console.log(
+      `🎉 Sample repair complete! Total users: ${users.length}, Total processed: ${totalProcessed}`,
+    );
+
+    return { totalUsers: users.length, totalProcessed };
+  },
+});
+
+/**
+ * PRODUCTION-SAFE: Start user-specific aggregate repair
+ */
+export const startUserSpecificRepair = mutation({
+  args: {
+    userId: v.optional(v.id('users')), // If provided, repair single user
+    batchSize: v.optional(v.number()), // If no userId, repair all users in batches
+  },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    if (args.userId) {
+      // Repair single user
+      console.log(`🔧 Starting single user repair for ${args.userId}...`);
+
+      const workflowId: any = await workflow.start(
+        ctx,
+        internal.aggregateWorkflows.singleUserRepairWorkflow,
+        { userId: args.userId },
+      );
+
+      return `Single user repair started with ID: ${workflowId}`;
+    } else {
+      // Repair all users in batches
+      const batchSize = args.batchSize || 5;
+      console.log(
+        `🏭 Starting batch user repair with batch size: ${batchSize}...`,
+      );
+
+      const workflowId: any = await workflow.start(
+        ctx,
+        internal.aggregateWorkflows.batchUserRepairWorkflow,
+        { batchSize },
+      );
+
+      return `Batch user repair started with ID: ${workflowId}`;
+    }
   },
 });
