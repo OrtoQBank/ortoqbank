@@ -1160,29 +1160,54 @@ export const microBatchSingleUserStep = internalMutation({
       await incorrectByUser.clear(ctx, { namespace: user._id });
       await bookmarkedByUser.clear(ctx, { namespace: user._id });
 
-      // Get FIRST 100 stats for this user (to avoid timeout)
-      const userStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user', q => q.eq('userId', user._id))
-        .take(100); // LIMIT to avoid timeout
+      // Process ALL user stats with pagination (no data loss)
+      let statsCursor: string | null = null;
+      let totalStatsProcessed = 0;
 
-      for (const stat of userStats) {
-        await answeredByUser.insertIfDoesNotExist(ctx, stat);
-        if (stat.isIncorrect) {
-          await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+      do {
+        const statsResult = await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', user._id))
+          .paginate({
+            cursor: statsCursor,
+            numItems: 50, // Small batches to avoid timeout
+          });
+
+        for (const stat of statsResult.page) {
+          await answeredByUser.insertIfDoesNotExist(ctx, stat);
+          if (stat.isIncorrect) {
+            await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+          }
+          totalStatsProcessed++;
         }
-      }
 
-      // Get FIRST 100 bookmarks for this user (to avoid timeout)
-      const userBookmarks = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', user._id))
-        .take(100); // LIMIT to avoid timeout
+        statsCursor = statsResult.continueCursor;
+      } while (statsCursor);
 
-      for (const bookmark of userBookmarks) {
-        await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
-      }
+      // Process ALL user bookmarks with pagination (no data loss)
+      let bookmarksCursor: string | null = null;
+      let totalBookmarksProcessed = 0;
 
+      do {
+        const bookmarksResult = await ctx.db
+          .query('userBookmarks')
+          .withIndex('by_user', q => q.eq('userId', user._id))
+          .paginate({
+            cursor: bookmarksCursor,
+            numItems: 50, // Small batches to avoid timeout
+          });
+
+        for (const bookmark of bookmarksResult.page) {
+          await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+          totalBookmarksProcessed++;
+        }
+
+        bookmarksCursor = bookmarksResult.continueCursor;
+      } while (bookmarksCursor);
+
+      console.log(
+        `✅ User ${user._id}: ${totalStatsProcessed} stats, ${totalBookmarksProcessed} bookmarks processed`,
+      );
       usersProcessed++;
     }
 
