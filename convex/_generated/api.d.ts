@@ -8,7 +8,9 @@
  * @module
  */
 
+import type * as aggregateMonitoring from "../aggregateMonitoring.js";
 import type * as aggregateQueries from "../aggregateQueries.js";
+import type * as aggregateRepairs from "../aggregateRepairs.js";
 import type * as aggregateWorkflows from "../aggregateWorkflows.js";
 import type * as aggregates from "../aggregates.js";
 import type * as bookmark from "../bookmark.js";
@@ -44,7 +46,9 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  aggregateMonitoring: typeof aggregateMonitoring;
   aggregateQueries: typeof aggregateQueries;
+  aggregateRepairs: typeof aggregateRepairs;
   aggregateWorkflows: typeof aggregateWorkflows;
   aggregates: typeof aggregates;
   bookmark: typeof bookmark;
