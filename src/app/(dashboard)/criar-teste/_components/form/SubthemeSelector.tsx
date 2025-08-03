@@ -6,6 +6,7 @@ import { useCallback, useMemo, useState } from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 
@@ -157,22 +158,6 @@ function BookmarkedGroupCount({ groupId }: { groupId: string }) {
 function StandardGroupCount({ groupId }: { groupId: string }) {
   const count = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
     groupId: groupId as Id<'groups'>,
-  });
-
-  if (count === undefined) {
-    return <span className="ml-1 text-xs text-gray-400">...</span>;
-  }
-
-  return (
-    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
-      {count}
-    </span>
-  );
-}
-
-function StandardThemeCount({ themeId }: { themeId: string }) {
-  const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
-    themeId: themeId as Id<'themes'>,
   });
 
   if (count === undefined) {
