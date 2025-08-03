@@ -1723,6 +1723,7 @@ export const productionProcessHierarchicalBatchStep = internalMutation({
     let processed = 0;
     let hierarchicalInserts = 0;
 
+    // Process all stats and bookmarks in a single loop to avoid multiple queries
     for (const stat of result.page) {
       const question = await ctx.db.get(stat.questionId);
       if (!question) continue;
@@ -1818,12 +1819,7 @@ export const productionProcessHierarchicalBatchStep = internalMutation({
         }
       }
 
-      processed++;
-    }
-
-    // Also process bookmarks for the same questions
-    for (const stat of result.page) {
-      // Check if this question is bookmarked by this user
+      // Check if this question is bookmarked by this user (single query per stat)
       const bookmark = await ctx.db
         .query('userBookmarks')
         .withIndex('by_user_question', q =>
@@ -1832,9 +1828,6 @@ export const productionProcessHierarchicalBatchStep = internalMutation({
         .first();
 
       if (bookmark) {
-        const question = await ctx.db.get(stat.questionId);
-        if (!question) continue;
-
         // Insert into hierarchical bookmarked aggregates
         if (question.themeId) {
           const compositeBookmark = { ...bookmark, themeId: question.themeId };
@@ -1876,6 +1869,8 @@ export const productionProcessHierarchicalBatchStep = internalMutation({
           }
         }
       }
+
+      processed++;
     }
 
     return {
@@ -1956,5 +1951,453 @@ export const productionVerifyStep = internalMutation({
       result,
     );
     return result;
+  },
+});
+
+// ============================================================================
+// SEPARATE AGGREGATE REPAIR WORKFLOWS (By Category)
+// ============================================================================
+
+/**
+ * 1. SIMPLE USER AGGREGATES REPAIR - Fastest and safest
+ */
+export const startSimpleUserAggregatesRepair = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    console.log('👤 Starting Simple User Aggregates repair workflow...');
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.simpleUserAggregatesWorkflow,
+      {},
+    );
+
+    console.log(`✅ Simple User Aggregates workflow started with ID: ${workflowId}`);
+    return workflowId as string;
+  },
+});
+
+/**
+ * 2. QUESTION COUNT AGGREGATES REPAIR - Medium complexity
+ */
+export const startQuestionCountAggregatesRepair = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    console.log('📊 Starting Question Count Aggregates repair workflow...');
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.questionCountAggregatesWorkflow,
+      {},
+    );
+
+    console.log(`✅ Question Count Aggregates workflow started with ID: ${workflowId}`);
+    return workflowId as string;
+  },
+});
+
+/**
+ * 3. RANDOM QUESTION AGGREGATES REPAIR - Medium complexity
+ */
+export const startRandomQuestionAggregatesRepair = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    console.log('🎲 Starting Random Question Aggregates repair workflow...');
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.randomQuestionAggregatesWorkflow,
+      {},
+    );
+
+    console.log(`✅ Random Question Aggregates workflow started with ID: ${workflowId}`);
+    return workflowId as string;
+  },
+});
+
+/**
+ * 4. HIERARCHICAL USER AGGREGATES REPAIR - Most complex
+ */
+export const startHierarchicalUserAggregatesRepair = mutation({
+  args: {},
+  returns: v.string(),
+  handler: async (ctx): Promise<string> => {
+    console.log('🏗️ Starting Hierarchical User Aggregates repair workflow...');
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.hierarchicalUserAggregatesWorkflow,
+      {},
+    );
+
+    console.log(`✅ Hierarchical User Aggregates workflow started with ID: ${workflowId}`);
+    return workflowId as string;
+  },
+});
+
+// ============================================================================
+// WORKFLOW DEFINITIONS
+// ============================================================================
+
+/**
+ * SIMPLE USER AGGREGATES WORKFLOW - answeredByUser, incorrectByUser, bookmarkedByUser
+ */
+export const simpleUserAggregatesWorkflow = workflow.define({
+  args: {},
+  handler: async (step): Promise<{ userStatsProcessed: number; bookmarksProcessed: number }> => {
+    console.log('👤 Workflow: Starting Simple User Aggregates repair...');
+
+    // Clear simple user aggregates
+    await step.runMutation(internal.aggregateWorkflows.clearSimpleUserAggregatesStep, {});
+
+    // Process user stats
+    let userStatsProcessed = 0;
+    let cursor: string | undefined = undefined;
+    let batchNumber = 1;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessUserStatsBatchStep,
+        { cursor, batchSize: 10 },
+      );
+
+      console.log(`👤 User stats batch ${batchNumber} - ${result.processed} stats`);
+      userStatsProcessed += result.processed;
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    // Process bookmarks
+    cursor = undefined;
+    batchNumber = 1;
+    let bookmarksProcessed = 0;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessBookmarksBatchStep,
+        { cursor, batchSize: 10 },
+      );
+
+      console.log(`👤 Bookmarks batch ${batchNumber} - ${result.processed} bookmarks`);
+      bookmarksProcessed += result.processed;
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    console.log('✅ Simple User Aggregates repair completed!');
+    return { userStatsProcessed, bookmarksProcessed };
+  },
+});
+
+/**
+ * QUESTION COUNT AGGREGATES WORKFLOW - totalQuestionCount, questionCountByTheme/Subtheme/Group
+ */
+export const questionCountAggregatesWorkflow = workflow.define({
+  args: {},
+  handler: async (step): Promise<{ questionsProcessed: number }> => {
+    console.log('📊 Workflow: Starting Question Count Aggregates repair...');
+
+    // Clear question count aggregates
+    await step.runMutation(internal.aggregateWorkflows.clearQuestionCountAggregatesStep, {});
+
+    // Process questions
+    let questionsProcessed = 0;
+    let cursor: string | undefined = undefined;
+    let batchNumber = 1;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.processQuestionCountBatchStep,
+        { cursor, batchSize: 15 },
+      );
+
+      console.log(`📊 Questions batch ${batchNumber} - ${result.processed} questions`);
+      questionsProcessed += result.processed;
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    console.log('✅ Question Count Aggregates repair completed!');
+    return { questionsProcessed };
+  },
+});
+
+/**
+ * RANDOM QUESTION AGGREGATES WORKFLOW - randomQuestions, randomQuestionsByTheme/Subtheme/Group
+ */
+export const randomQuestionAggregatesWorkflow = workflow.define({
+  args: {},
+  handler: async (step): Promise<{ questionsProcessed: number }> => {
+    console.log('🎲 Workflow: Starting Random Question Aggregates repair...');
+
+    // Clear random question aggregates
+    await step.runMutation(internal.aggregateWorkflows.clearRandomQuestionAggregatesStep, {});
+
+    // Process questions
+    let questionsProcessed = 0;
+    let cursor: string | undefined = undefined;
+    let batchNumber = 1;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.processRandomQuestionBatchStep,
+        { cursor, batchSize: 15 },
+      );
+
+      console.log(`🎲 Questions batch ${batchNumber} - ${result.processed} questions`);
+      questionsProcessed += result.processed;
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    console.log('✅ Random Question Aggregates repair completed!');
+    return { questionsProcessed };
+  },
+});
+
+/**
+ * HIERARCHICAL USER AGGREGATES WORKFLOW - All hierarchical user-specific aggregates
+ */
+export const hierarchicalUserAggregatesWorkflow = workflow.define({
+  args: {},
+  handler: async (step): Promise<{ hierarchicalStatsProcessed: number }> => {
+    console.log('🏗️ Workflow: Starting Hierarchical User Aggregates repair...');
+
+    // Clear hierarchical aggregates
+    await step.runMutation(internal.aggregateWorkflows.clearHierarchicalAggregatesStep, {});
+
+    // Process hierarchical aggregates
+    let hierarchicalStatsProcessed = 0;
+    let cursor: string | undefined = undefined;
+    let batchNumber = 1;
+
+    while (true) {
+      const result: any = await step.runMutation(
+        internal.aggregateWorkflows.productionProcessHierarchicalBatchStep,
+        { cursor, batchSize: 5 }, // Smaller batches for complex processing
+      );
+
+      console.log(`🏗️ Hierarchical batch ${batchNumber} - ${result.processed} stats`);
+      hierarchicalStatsProcessed += result.processed;
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+      batchNumber++;
+    }
+
+    console.log('✅ Hierarchical User Aggregates repair completed!');
+    return { hierarchicalStatsProcessed };
+  },
+});
+
+// ============================================================================
+// SUPPORTING STEP FUNCTIONS FOR SEPARATE WORKFLOWS
+// ============================================================================
+
+/**
+ * Clear simple user aggregates only
+ */
+export const clearSimpleUserAggregatesStep = internalMutation({
+  args: {},
+  returns: v.object({
+    totalUsersCleared: v.number(),
+  }),
+  handler: async (ctx) => {
+    console.log('🧹 Step: Clearing simple user aggregates...');
+
+    let cursor: string | null = null;
+    let totalUsersCleared = 0;
+    const batchSize = 10;
+
+    while (true) {
+      const result = await ctx.db.query('users').paginate({
+        cursor,
+        numItems: batchSize,
+      });
+
+      for (const user of result.page) {
+        await answeredByUser.clear(ctx, { namespace: user._id });
+        await incorrectByUser.clear(ctx, { namespace: user._id });
+        await bookmarkedByUser.clear(ctx, { namespace: user._id });
+        totalUsersCleared++;
+      }
+
+      if (result.isDone) break;
+      cursor = result.continueCursor;
+    }
+
+    console.log(`✅ Cleared simple user aggregates for ${totalUsersCleared} users`);
+    return { totalUsersCleared };
+  },
+});
+
+/**
+ * Clear question count aggregates only
+ */
+export const clearQuestionCountAggregatesStep = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    console.log('🧹 Step: Clearing question count aggregates...');
+
+    // Clear all question count aggregates
+    await totalQuestionCount.clear(ctx, { namespace: 'global' });
+    
+    // Clear theme-based counts
+    const themes = await ctx.db.query('themes').collect();
+    for (const theme of themes) {
+      await questionCountByTheme.clear(ctx, { namespace: theme._id });
+    }
+
+    // Clear subtheme and group counts (using namespace pattern)
+    const subthemes = await ctx.db.query('subthemes').collect();
+    for (const subtheme of subthemes) {
+      await questionCountBySubtheme.clear(ctx, { namespace: subtheme._id });
+    }
+
+    const groups = await ctx.db.query('groups').collect();
+    for (const group of groups) {
+      await questionCountByGroup.clear(ctx, { namespace: group._id });
+    }
+
+    console.log('✅ Cleared all question count aggregates');
+    return null;
+  },
+});
+
+/**
+ * Clear random question aggregates only
+ */
+export const clearRandomQuestionAggregatesStep = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async (ctx) => {
+    console.log('🧹 Step: Clearing random question aggregates...');
+
+    // Clear global random questions
+    await randomQuestions.clear(ctx, { namespace: 'global' });
+    
+    // Clear theme-based random questions
+    const themes = await ctx.db.query('themes').collect();
+    for (const theme of themes) {
+      await randomQuestionsByTheme.clear(ctx, { namespace: theme._id });
+    }
+
+    // Clear subtheme and group random questions
+    const subthemes = await ctx.db.query('subthemes').collect();
+    for (const subtheme of subthemes) {
+      await randomQuestionsBySubtheme.clear(ctx, { namespace: subtheme._id });
+    }
+
+    const groups = await ctx.db.query('groups').collect();
+    for (const group of groups) {
+      await randomQuestionsByGroup.clear(ctx, { namespace: group._id });
+    }
+
+    console.log('✅ Cleared all random question aggregates');
+    return null;
+  },
+});
+
+/**
+ * Process questions for count aggregates only
+ */
+export const processQuestionCountBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(`📊 Step: Processing ${args.batchSize} questions for count aggregates...`);
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    for (const question of result.page) {
+      // Insert into count aggregates
+      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+
+      if (question.themeId) {
+        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
+      }
+      if (question.subthemeId) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+      if (question.groupId) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+    }
+
+    return {
+      processed,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * Process questions for random aggregates only
+ */
+export const processRandomQuestionBatchStep = internalMutation({
+  args: {
+    cursor: v.optional(v.string()),
+    batchSize: v.number(),
+  },
+  returns: v.object({
+    processed: v.number(),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    console.log(`🎲 Step: Processing ${args.batchSize} questions for random aggregates...`);
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor ?? null,
+      numItems: args.batchSize,
+    });
+
+    let processed = 0;
+    for (const question of result.page) {
+      // Insert into random aggregates
+      await randomQuestions.insertIfDoesNotExist(ctx, question);
+      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+
+      if (question.subthemeId) {
+        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+      if (question.groupId) {
+        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+    }
+
+    return {
+      processed,
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
