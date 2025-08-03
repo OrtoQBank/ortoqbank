@@ -3,7 +3,7 @@ import { TableAggregate } from '@convex-dev/aggregate';
 import { components } from './_generated/api';
 import { DataModel, Id } from './_generated/dataModel';
 
-// Track questions answered by each user
+// Track total questions answered by each user
 export const answeredByUser = new TableAggregate<{
   Namespace: Id<'users'>;
   Key: string;
@@ -15,7 +15,7 @@ export const answeredByUser = new TableAggregate<{
   // Filter in the functions that use this aggregate
 });
 
-// Track incorrect answers by each user
+// Track total incorrect answers by each user
 export const incorrectByUser = new TableAggregate<{
   Namespace: Id<'users'>;
   Key: string;
@@ -27,7 +27,7 @@ export const incorrectByUser = new TableAggregate<{
   // Filter in the functions that use this aggregate
 });
 
-// Track bookmarks by each user
+// Track total bookmarks by each user
 export const bookmarkedByUser = new TableAggregate<{
   Namespace: Id<'users'>;
   Key: string;
@@ -38,15 +38,147 @@ export const bookmarkedByUser = new TableAggregate<{
   sortKey: (d: unknown) => 'bookmarked',
 });
 
-// Track question count by theme
-export const questionCountByTheme = new TableAggregate<{
-  Namespace: Id<'themes'>;
+// Hierarchical user-specific question mode aggregates - COUNT ONLY
+
+// Track incorrect questions by user within each theme
+export const incorrectByThemeByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${themeId}`
   Key: string;
   DataModel: DataModel;
-  TableName: 'questions';
-}>(components.questionCountByTheme, {
-  namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
-  sortKey: (d: unknown) => 'question',
+  TableName: 'userQuestionStats';
+}>(components.incorrectByThemeByUser, {
+  namespace: (d: unknown) => {
+    const stat = d as { userId: Id<'users'>; themeId: Id<'themes'> };
+    return `${stat.userId}_${stat.themeId}`;
+  },
+  sortKey: (d: unknown) => 'incorrect',
+  // Filter for isIncorrect=true in the functions that use this aggregate
+});
+
+// Track incorrect questions by user within each subtheme
+export const incorrectBySubthemeByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${subthemeId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userQuestionStats';
+}>(components.incorrectBySubthemeByUser, {
+  namespace: (d: unknown) => {
+    const stat = d as { userId: Id<'users'>; subthemeId?: Id<'subthemes'> };
+    // Use "no-subtheme" for stats without subthemeId
+    const subthemeId = stat.subthemeId || 'no-subtheme';
+    return `${stat.userId}_${subthemeId}`;
+  },
+  sortKey: (d: unknown) => 'incorrect',
+  // Filter for isIncorrect=true in the functions that use this aggregate
+});
+
+// Track incorrect questions by user within each group
+export const incorrectByGroupByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${groupId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userQuestionStats';
+}>(components.incorrectByGroupByUser, {
+  namespace: (d: unknown) => {
+    const stat = d as { userId: Id<'users'>; groupId?: Id<'groups'> };
+    // Use "no-group" for stats without groupId
+    const groupId = stat.groupId || 'no-group';
+    return `${stat.userId}_${groupId}`;
+  },
+  sortKey: (d: unknown) => 'incorrect',
+  // Filter for isIncorrect=true in the functions that use this aggregate
+});
+
+// Track bookmarked questions by user within each theme
+export const bookmarkedByThemeByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${themeId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userBookmarks';
+}>(components.bookmarkedByThemeByUser, {
+  namespace: (d: unknown) => {
+    const bookmark = d as { userId: Id<'users'>; themeId: Id<'themes'> };
+    return `${bookmark.userId}_${bookmark.themeId}`;
+  },
+  sortKey: (d: unknown) => 'bookmarked',
+});
+
+// Track bookmarked questions by user within each subtheme
+export const bookmarkedBySubthemeByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${subthemeId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userBookmarks';
+}>(components.bookmarkedBySubthemeByUser, {
+  namespace: (d: unknown) => {
+    const bookmark = d as { userId: Id<'users'>; subthemeId?: Id<'subthemes'> };
+    // Use "no-subtheme" for bookmarks without subthemeId
+    const subthemeId = bookmark.subthemeId || 'no-subtheme';
+    return `${bookmark.userId}_${subthemeId}`;
+  },
+  sortKey: (d: unknown) => 'bookmarked',
+});
+
+// Track bookmarked questions by user within each group
+export const bookmarkedByGroupByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${groupId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userBookmarks';
+}>(components.bookmarkedByGroupByUser, {
+  namespace: (d: unknown) => {
+    const bookmark = d as { userId: Id<'users'>; groupId?: Id<'groups'> };
+    // Use "no-group" for bookmarks without groupId
+    const groupId = bookmark.groupId || 'no-group';
+    return `${bookmark.userId}_${groupId}`;
+  },
+  sortKey: (d: unknown) => 'bookmarked',
+});
+
+// Track answered questions by user within each theme
+export const answeredByThemeByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${themeId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userQuestionStats';
+}>(components.answeredByThemeByUser, {
+  namespace: (d: unknown) => {
+    const stat = d as { userId: Id<'users'>; themeId: Id<'themes'> };
+    return `${stat.userId}_${stat.themeId}`;
+  },
+  sortKey: (d: unknown) => 'answered',
+});
+
+// Track answered questions by user within each subtheme
+export const answeredBySubthemeByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${subthemeId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userQuestionStats';
+}>(components.answeredBySubthemeByUser, {
+  namespace: (d: unknown) => {
+    const stat = d as { userId: Id<'users'>; subthemeId?: Id<'subthemes'> };
+    // Use "no-subtheme" for stats without subthemeId
+    const subthemeId = stat.subthemeId || 'no-subtheme';
+    return `${stat.userId}_${subthemeId}`;
+  },
+  sortKey: (d: unknown) => 'answered',
+});
+
+// Track answered questions by user within each group
+export const answeredByGroupByUser = new TableAggregate<{
+  Namespace: string; // Composite: `${userId}_${groupId}`
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'userQuestionStats';
+}>(components.answeredByGroupByUser, {
+  namespace: (d: unknown) => {
+    const stat = d as { userId: Id<'users'>; groupId?: Id<'groups'> };
+    // Use "no-group" for stats without groupId
+    const groupId = stat.groupId || 'no-group';
+    return `${stat.userId}_${groupId}`;
+  },
+  sortKey: (d: unknown) => 'answered',
 });
 
 // Track total question count globally
@@ -58,4 +190,98 @@ export const totalQuestionCount = new TableAggregate<{
 }>(components.questionCountTotal, {
   namespace: () => 'global',
   sortKey: () => 'question',
+});
+
+// Track total question count by theme
+export const questionCountByTheme = new TableAggregate<{
+  Namespace: Id<'themes'>;
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.questionCountByTheme, {
+  namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
+  sortKey: (d: unknown) => 'question',
+});
+
+//track total question count by subtheme (only for questions that have subthemeId)
+export const questionCountBySubtheme = new TableAggregate<{
+  Namespace: string;
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.questionCountBySubtheme, {
+  namespace: (d: unknown) => {
+    const question = d as { subthemeId?: Id<'subthemes'> };
+    // Use "no-subtheme" for questions without subthemeId
+    const subthemeId = question.subthemeId || 'no-subtheme';
+    return subthemeId;
+  },
+  sortKey: (d: unknown) => 'question',
+});
+
+//track total question count by group (only for questions that have groupId)
+export const questionCountByGroup = new TableAggregate<{
+  Namespace: string;
+  Key: string;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.questionCountByGroup, {
+  namespace: (d: unknown) => {
+    const question = d as { groupId?: Id<'groups'> };
+    // Use "no-group" for questions without groupId
+    const groupId = question.groupId || 'no-group';
+    return groupId;
+  },
+  sortKey: (d: unknown) => 'question',
+});
+
+// Random question selection aggregates for efficient randomization
+export const randomQuestions = new TableAggregate<{
+  Namespace: string;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestions, {
+  namespace: () => 'global',
+  sortKey: () => null, // No sorting = random order by _id
+});
+
+export const randomQuestionsByTheme = new TableAggregate<{
+  Namespace: Id<'themes'>;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestionsByTheme, {
+  namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
+  sortKey: () => null, // No sorting = random order by _id
+});
+
+export const randomQuestionsBySubtheme = new TableAggregate<{
+  Namespace: string;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestionsBySubtheme, {
+  namespace: (d: unknown) => {
+    const question = d as { subthemeId?: Id<'subthemes'> };
+    // Use "no-subtheme" for questions without subthemeId
+    const subthemeId = question.subthemeId || 'no-subtheme';
+    return subthemeId;
+  },
+  sortKey: () => null, // No sorting = random order by _id
+});
+
+export const randomQuestionsByGroup = new TableAggregate<{
+  Namespace: string;
+  Key: null;
+  DataModel: DataModel;
+  TableName: 'questions';
+}>(components.randomQuestionsByGroup, {
+  namespace: (d: unknown) => {
+    const question = d as { groupId?: Id<'groups'> };
+    // Use "no-group" for questions without groupId
+    const groupId = question.groupId || 'no-group';
+    return groupId;
+  },
+  sortKey: () => null, // No sorting = random order by _id
 });

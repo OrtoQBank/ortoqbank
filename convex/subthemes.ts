@@ -1,7 +1,5 @@
 import { v } from 'convex/values';
 
-import { internal } from './_generated/api';
-import { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
@@ -117,20 +115,6 @@ export const remove = mutation({
 
     // Check if subtheme can be safely deleted
     await canSafelyDelete(context, id, 'subthemes', dependencies);
-
-    // Clean up question counts before deleting the subtheme
-    try {
-      await context.runMutation(
-        internal.questions.cleanupQuestionCountsForSubtheme,
-        { subthemeId: id },
-      );
-    } catch (error) {
-      console.warn(
-        `Error cleaning up question counts for subtheme ${id}:`,
-        error,
-      );
-      // Continue with deletion even if cleanup fails
-    }
 
     // If we get here, it means the subtheme can be safely deleted
     await context.db.delete(id);

@@ -239,6 +239,7 @@ export default function TestForm() {
               { shouldValidate: true },
             );
           }}
+          questionMode={questionMode}
           error={form.formState.errors.selectedThemes?.message}
         />
 
@@ -257,6 +258,7 @@ export default function TestForm() {
             selectedThemes={selectedThemes}
             selectedSubthemes={selectedSubthemes}
             selectedGroups={selectedGroups}
+            questionMode={questionMode}
             onToggleSubtheme={subthemeId => {
               const current = selectedSubthemes || [];
               form.setValue(

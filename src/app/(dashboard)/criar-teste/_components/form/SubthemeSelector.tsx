@@ -1,10 +1,14 @@
 'use client';
 
+import { useQuery } from 'convex/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
+
+import { api } from '../../../../../../convex/_generated/api';
+import { Id } from '../../../../../../convex/_generated/dataModel';
 
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };
@@ -17,10 +21,155 @@ type SubthemeSelectorProps = {
   selectedThemes: string[];
   selectedSubthemes: string[];
   selectedGroups: string[];
+  questionMode: string;
   onToggleSubtheme: (subthemeId: string) => void;
   onToggleGroup: (groupId: string) => void;
   onToggleMultipleGroups?: (groupIds: string[]) => void;
 };
+
+function SubthemeQuestionCount({
+  subthemeId,
+  questionMode,
+}: {
+  subthemeId: string;
+  questionMode: string;
+}) {
+  if (questionMode === 'incorrect') {
+    return <IncorrectSubthemeCount subthemeId={subthemeId} />;
+  }
+
+  if (questionMode === 'bookmarked') {
+    return <BookmarkedSubthemeCount subthemeId={subthemeId} />;
+  }
+
+  return <StandardSubthemeCount subthemeId={subthemeId} />;
+}
+
+function IncorrectSubthemeCount({ subthemeId }: { subthemeId: string }) {
+  const count = useQuery(
+    api.aggregateQueries.getUserIncorrectCountBySubthemeQuery,
+    {
+      subthemeId: subthemeId as Id<'subthemes'>,
+    },
+  );
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
+      {count}
+    </span>
+  );
+}
+
+function BookmarkedSubthemeCount({ subthemeId }: { subthemeId: string }) {
+  const count = useQuery(
+    api.aggregateQueries.getUserBookmarksCountBySubthemeQuery,
+    {
+      subthemeId: subthemeId as Id<'subthemes'>,
+    },
+  );
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">
+      {count}
+    </span>
+  );
+}
+
+function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
+  const count = useQuery(api.aggregateQueries.getSubthemeQuestionCountQuery, {
+    subthemeId: subthemeId as Id<'subthemes'>,
+  });
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {count}
+    </span>
+  );
+}
+
+function GroupQuestionCount({
+  groupId,
+  questionMode,
+}: {
+  groupId: string;
+  questionMode: string;
+}) {
+  if (questionMode === 'incorrect') {
+    return <IncorrectGroupCount groupId={groupId} />;
+  }
+
+  if (questionMode === 'bookmarked') {
+    return <BookmarkedGroupCount groupId={groupId} />;
+  }
+
+  return <StandardGroupCount groupId={groupId} />;
+}
+
+function IncorrectGroupCount({ groupId }: { groupId: string }) {
+  const count = useQuery(
+    api.aggregateQueries.getUserIncorrectCountByGroupQuery,
+    {
+      groupId: groupId as Id<'groups'>,
+    },
+  );
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
+      {count}
+    </span>
+  );
+}
+
+function BookmarkedGroupCount({ groupId }: { groupId: string }) {
+  const count = useQuery(
+    api.aggregateQueries.getUserBookmarksCountByGroupQuery,
+    {
+      groupId: groupId as Id<'groups'>,
+    },
+  );
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">
+      {count}
+    </span>
+  );
+}
+
+function StandardGroupCount({ groupId }: { groupId: string }) {
+  const count = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
+    groupId: groupId as Id<'groups'>,
+  });
+
+  if (count === undefined) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {count}
+    </span>
+  );
+}
 
 export function SubthemeSelector({
   themes,
@@ -29,6 +178,7 @@ export function SubthemeSelector({
   selectedThemes,
   selectedSubthemes,
   selectedGroups,
+  questionMode,
   onToggleSubtheme,
   onToggleGroup,
   onToggleMultipleGroups,
@@ -143,13 +293,17 @@ export function SubthemeSelector({
               onCheckedChange={() => handleSubthemeToggle(subtheme)}
               className="mt-0.5 flex-shrink-0"
             />
-            <div className="min-w-0">
+            <div className="flex min-w-0 flex-1 items-center">
               <Label
                 htmlFor={subtheme._id}
                 className="text-sm font-medium hyphens-auto"
               >
                 {subtheme.name}
               </Label>
+              <SubthemeQuestionCount
+                subthemeId={subtheme._id}
+                questionMode={questionMode}
+              />
             </div>
             {hasGroups && (
               <button
@@ -177,12 +331,15 @@ export function SubthemeSelector({
                     onCheckedChange={() => onToggleGroup(group._id)}
                     className="mt-0.5 flex-shrink-0"
                   />
-                  <Label
-                    htmlFor={group._id}
-                    className="min-w-0 flex-1 text-sm hyphens-auto"
-                  >
-                    {group.name}
-                  </Label>
+                  <div className="flex min-w-0 flex-1 items-center">
+                    <Label htmlFor={group._id} className="text-sm hyphens-auto">
+                      {group.name}
+                    </Label>
+                    <GroupQuestionCount
+                      groupId={group._id}
+                      questionMode={questionMode}
+                    />
+                  </div>
                 </div>
               ))}
             </div>
@@ -198,6 +355,7 @@ export function SubthemeSelector({
       handleSubthemeToggle,
       toggleExpanded,
       onToggleGroup,
+      questionMode,
     ],
   );
 
@@ -209,9 +367,11 @@ export function SubthemeSelector({
 
       return themeSubthemesList.length > 0 ? (
         <div key={themeId} className="space-y-3">
-          <h4 className="text-muted-foreground text-sm font-medium hyphens-auto">
-            {theme?.name}
-          </h4>
+          <div className="flex items-center gap-2">
+            <h4 className="text-muted-foreground text-sm font-medium hyphens-auto">
+              {theme?.name}
+            </h4>
+          </div>
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
             {themeSubthemesList.map(subtheme => (
               <SubthemeItem key={subtheme._id} subtheme={subtheme} />
@@ -220,7 +380,7 @@ export function SubthemeSelector({
         </div>
       ) : undefined;
     });
-  }, [selectedThemes, themes, themeSubthemes, SubthemeItem]);
+  }, [selectedThemes, themes, themeSubthemes, SubthemeItem, questionMode]);
 
   return (
     <div className="space-y-6">

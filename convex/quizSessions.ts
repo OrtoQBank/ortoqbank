@@ -2,8 +2,9 @@ import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
-import { mutation, query } from './_generated/server';
+import { query } from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
+import { mutation } from './triggers';
 
 /**
  * Quiz Sessions
@@ -111,6 +112,8 @@ export const submitAnswerAndProgress = mutation({
     ),
   },
   handler: async (ctx, args) => {
+    // Performance monitoring: Track submission timing
+    const startTime = Date.now();
     const userId = await getCurrentUserOrThrow(ctx);
 
     // 1. Get current session
@@ -126,52 +129,72 @@ export const submitAnswerAndProgress = mutation({
 
     if (!session) throw new Error('No active quiz progress found');
 
-    // 2. Get quiz and current question
+    // 2. Get quiz and batch fetch question data for better performance
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
-    const currentQuestion = await ctx.db.get(
-      quiz.questions[session.currentQuestionIndex],
-    );
+    // Batch fetch current and next question to reduce database calls
+    const currentQuestionId = quiz.questions[session.currentQuestionIndex];
+    const nextQuestionId = quiz.questions[session.currentQuestionIndex + 1];
+
+    const [currentQuestion, nextQuestion] = await Promise.all([
+      ctx.db.get(currentQuestionId),
+      nextQuestionId ? ctx.db.get(nextQuestionId) : Promise.resolve(null),
+    ]);
+
     if (!currentQuestion) throw new Error('Question not found');
 
-    // 3. Check if answer is correct and get explanation
+    // Optional: Cache next question data in session for even faster subsequent access
+    // This is a trade-off between memory usage and performance
+
+    // 3. Pre-compute values for efficient session update
     const isAnswerCorrect =
       args.selectedAlternativeIndex === currentQuestion.correctAlternativeIndex;
 
-    // 4. Save answer and feedback for current question - ensure explanation is a string
     const explanationString =
       typeof currentQuestion.explanationTextString === 'string'
         ? currentQuestion.explanationTextString
         : JSON.stringify(currentQuestion.explanationTextString);
 
+    const nextQuestionIndex = session.currentQuestionIndex + 1;
+    const isQuizComplete = nextQuestionIndex >= quiz.questions.length;
+
+    // Pre-build feedback object to avoid inline object creation
+    const feedbackEntry = {
+      isCorrect: isAnswerCorrect,
+      explanation: explanationString,
+      correctAlternative: currentQuestion.correctAlternativeIndex,
+    };
+
+    // 4. Update session with optimized single patch operation
     await ctx.db.patch(session._id, {
       answers: [...session.answers, args.selectedAlternativeIndex],
-      answerFeedback: [
-        ...session.answerFeedback,
-        {
-          isCorrect: isAnswerCorrect,
-          explanation: explanationString,
-          correctAlternative: currentQuestion.correctAlternativeIndex,
-        },
-      ],
-      currentQuestionIndex: session.currentQuestionIndex + 1,
-      isComplete: session.currentQuestionIndex + 1 >= quiz.questions.length,
+      answerFeedback: [...session.answerFeedback, feedbackEntry],
+      currentQuestionIndex: nextQuestionIndex,
+      isComplete: isQuizComplete,
     });
 
-    // 5. Update user stats for this question
-    await ctx.runMutation(internal.userStats._updateQuestionStats, {
+    // 5. Schedule user stats update asynchronously (non-blocking)
+    await ctx.scheduler.runAfter(0, internal.userStats._updateQuestionStats, {
+      userId: userId._id,
       questionId: currentQuestion._id,
       isCorrect: isAnswerCorrect,
     });
+
+    // Performance monitoring: Log submission timing
+    const endTime = Date.now();
+    const duration = endTime - startTime;
+    console.log(
+      `🚀 Quiz submission performance: ${duration}ms (quizId: ${args.quizId}, questionIndex: ${session.currentQuestionIndex})`,
+    );
 
     return {
       isAnswerCorrect,
       feedback: isAnswerCorrect ? 'Correct!' : 'Incorrect',
       explanation: explanationString,
       correctAlternative: currentQuestion.correctAlternativeIndex,
-      nextQuestionIndex: session.currentQuestionIndex + 1,
-      isComplete: session.currentQuestionIndex + 1 >= quiz.questions.length,
+      nextQuestionIndex,
+      isComplete: isQuizComplete,
     };
   },
 });

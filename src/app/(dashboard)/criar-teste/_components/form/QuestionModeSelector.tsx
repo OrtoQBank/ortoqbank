@@ -27,7 +27,7 @@ export function QuestionModeSelector({
   error,
 }: QuestionModeSelectorProps) {
   // Fetch counts for all question modes
-  const counts = useQuery(api.countFunctions.getAllQuestionCounts, {});
+  const counts = useQuery(api.aggregateQueries.getAllQuestionCounts, {});
   const loading = counts === undefined;
 
   const options: { id: string; label: string; apiKey: ModeKey }[] = [

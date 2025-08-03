@@ -2,9 +2,24 @@ import { v } from 'convex/values';
 
 import { api } from './_generated/api';
 import { Doc, Id } from './_generated/dataModel';
-import { internalMutation, query } from './_generated/server';
-import * as aggregateHelpers from './aggregateHelpers';
+import { query, internalMutation } from './_generated/server';
+import {
+  getTotalQuestionCount,
+  getUserAnsweredCount,
+  getUserIncorrectCount,
+  getUserBookmarksCount,
+} from './aggregateQueries.js';
 import { getCurrentUserOrThrow } from './users';
+import {
+  answeredByUser,
+  incorrectByUser,
+  answeredByThemeByUser,
+  answeredBySubthemeByUser,
+  answeredByGroupByUser,
+  incorrectByThemeByUser,
+  incorrectBySubthemeByUser,
+  incorrectByGroupByUser,
+} from './aggregates';
 
 type UserStats = {
   overall: {
@@ -42,36 +57,23 @@ export const getUserStatsFromTable = query({
   handler: async (ctx): Promise<UserStats> => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // We'll skip the aggregate for now until we properly set it up
-    // Just go directly to more efficient queries
+    // Use efficient aggregates for user stats
+    const [totalAnswered, totalIncorrect, totalBookmarked] = await Promise.all([
+      getUserAnsweredCount(ctx, userId._id),
+      getUserIncorrectCount(ctx, userId._id),
+      getUserBookmarksCount(ctx, userId._id),
+    ]);
 
-    // Get user stats efficiently with a single query using aggregation
+    const totalCorrect = totalAnswered - totalIncorrect;
+
+    // Still need to collect user stats for theme breakdown
     const userStatsSummary = await ctx.db
       .query('userQuestionStats')
       .withIndex('by_user', q => q.eq('userId', userId._id))
       .collect();
 
-    // Count the totals from the summary rather than making individual queries
-    const totalAnswered = userStatsSummary.filter(
-      stat => stat.hasAnswered,
-    ).length;
-    const totalIncorrect = userStatsSummary.filter(
-      stat => stat.isIncorrect,
-    ).length;
-    const totalCorrect = totalAnswered - totalIncorrect;
-
-    // Get bookmarks count (can't be avoided, but this is a smaller query)
-    const bookmarks = await ctx.db
-      .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
-    const totalBookmarked = bookmarks.length;
-
     // Get total questions count using aggregate
-    const totalQuestions = await ctx.runQuery(
-      api.questionStats.getTotalQuestionCount,
-      {},
-    );
+    const totalQuestions = await getTotalQuestionCount(ctx);
 
     // Efficiently process theme stats using a group approach
     // We'll use a Map to store stats by theme
@@ -163,10 +165,10 @@ export const getUserStatsSummaryWithAggregates = query({
     // Using our aggregate helpers for efficient counting
     const [totalQuestions, totalAnswered, totalIncorrect, totalBookmarked] =
       await Promise.all([
-        aggregateHelpers.getTotalQuestionCount(ctx),
-        aggregateHelpers.getUserAnsweredCount(ctx, userId._id),
-        aggregateHelpers.getUserIncorrectCount(ctx, userId._id),
-        aggregateHelpers.getUserBookmarksCount(ctx, userId._id),
+        getTotalQuestionCount(ctx),
+        getUserAnsweredCount(ctx, userId._id),
+        getUserIncorrectCount(ctx, userId._id),
+        getUserBookmarksCount(ctx, userId._id),
       ]);
 
     // Calculate derived values
@@ -188,63 +190,144 @@ export const getUserStatsSummaryWithAggregates = query({
 /**
  * Internal mutation to update question statistics when a user answers a question
  * This should only be called from the quizSessions.submitAnswerAndProgress function
+ *
+ * NOTE: Uses raw internalMutation + manual aggregate updates to avoid DELETE_MISSING_KEY errors
+ * while still keeping aggregates in sync in real-time.
  */
 export const _updateQuestionStats = internalMutation({
   args: {
+    userId: v.id('users'),
     questionId: v.id('questions'),
     isCorrect: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = args.userId; // Use passed userId instead of getCurrentUserOrThrow
     const now = Date.now();
+
+    // Get question data to extract taxonomy fields for aggregates
+    const question = await ctx.db.get(args.questionId);
+    if (!question) {
+      throw new Error('Question not found');
+    }
 
     // Check if we already have a record for this user and question
     const existingStat = await ctx.db
       .query('userQuestionStats')
       .withIndex('by_user_question', q =>
-        q.eq('userId', userId._id).eq('questionId', args.questionId),
+        q.eq('userId', userId).eq('questionId', args.questionId),
       )
       .first();
 
+    const wasIncorrectBefore = existingStat?.isIncorrect || false;
+    let statRecord;
+
     if (existingStat) {
-      // Update existing record
-      if (args.isCorrect && existingStat.isIncorrect) {
-        // If the question was previously incorrect but is now correct,
-        // update the record to show it's no longer incorrect
-        await ctx.db.patch(existingStat._id, {
-          isIncorrect: false,
-          answeredAt: now,
-          // Keep the original firstAnsweredAt - don't update it
-        });
-      } else if (args.isCorrect) {
-        // Just update the timestamp
-        await ctx.db.patch(existingStat._id, {
-          answeredAt: now,
-          // Keep the original firstAnsweredAt - don't update it
-        });
-      } else {
-        // If the answer is incorrect, mark it as incorrect
-        await ctx.db.patch(existingStat._id, {
-          isIncorrect: true,
-          answeredAt: now,
-          // Keep the original firstAnsweredAt - don't update it
-        });
+      // Update existing record with taxonomy fields
+      const updateData = {
+        isIncorrect: !args.isCorrect,
+        answeredAt: now,
+        themeId: question.themeId,
+        ...(question.subthemeId && { subthemeId: question.subthemeId }),
+        ...(question.groupId && { groupId: question.groupId }),
+      };
+
+      await ctx.db.patch(existingStat._id, updateData);
+      statRecord = { ...existingStat, ...updateData };
+    } else {
+      // Skip creating stats only if question lacks themeId (minimum requirement)
+      if (!question.themeId) {
+        return {
+          success: false,
+          action: 'skipped',
+          error: 'Question lacks themeId required for stats tracking',
+        };
       }
 
-      return { success: true, action: 'updated' };
-    } else {
-      // Create a new record
-      await ctx.db.insert('userQuestionStats', {
-        userId: userId._id,
+      // Create a new record with available taxonomy fields for aggregates
+      const newStatData = {
+        userId: userId,
         questionId: args.questionId,
         hasAnswered: true,
         isIncorrect: !args.isCorrect,
         answeredAt: now,
-        // _creationTime will automatically track when this was first answered
-      });
+        themeId: question.themeId,
+        subthemeId: question.subthemeId,
+        groupId: question.groupId,
+      };
 
-      return { success: true, action: 'created' };
+      const statId = await ctx.db.insert('userQuestionStats', newStatData);
+      statRecord = { ...newStatData, _id: statId, _creationTime: now };
     }
+
+    // REAL-TIME AGGREGATE UPDATES using batch processing for better performance
+
+    // Batch all answered aggregate operations
+    const answeredAggregateOps = [
+      () => answeredByUser.insertIfDoesNotExist(ctx, statRecord),
+      question.themeId
+        ? () => answeredByThemeByUser.insertIfDoesNotExist(ctx, statRecord)
+        : null,
+      question.subthemeId
+        ? () => answeredBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord)
+        : null,
+      question.groupId
+        ? () => answeredByGroupByUser.insertIfDoesNotExist(ctx, statRecord)
+        : null,
+    ].filter(Boolean) as (() => Promise<any>)[];
+
+    // Execute answered aggregates in parallel
+    await Promise.all(answeredAggregateOps.map(op => op()));
+
+    // Handle incorrect aggregates based on answer correctness
+    if (!args.isCorrect) {
+      // Batch all incorrect aggregate insert operations
+      const incorrectInsertOps = [
+        () => incorrectByUser.insertIfDoesNotExist(ctx, statRecord),
+        question.themeId
+          ? () => incorrectByThemeByUser.insertIfDoesNotExist(ctx, statRecord)
+          : null,
+        question.subthemeId
+          ? () =>
+              incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord)
+          : null,
+        question.groupId
+          ? () => incorrectByGroupByUser.insertIfDoesNotExist(ctx, statRecord)
+          : null,
+      ].filter(Boolean) as (() => Promise<any>)[];
+
+      // Execute incorrect insert aggregates in parallel
+      await Promise.all(incorrectInsertOps.map(op => op()));
+    } else if (wasIncorrectBefore && args.isCorrect) {
+      // Batch all incorrect aggregate delete operations
+      const incorrectDeleteOps = [
+        () => incorrectByUser.delete(ctx, statRecord),
+        question.themeId
+          ? () => incorrectByThemeByUser.delete(ctx, statRecord)
+          : null,
+        question.subthemeId
+          ? () => incorrectBySubthemeByUser.delete(ctx, statRecord)
+          : null,
+        question.groupId
+          ? () => incorrectByGroupByUser.delete(ctx, statRecord)
+          : null,
+      ].filter(Boolean) as (() => Promise<any>)[];
+
+      // Execute incorrect delete aggregates in parallel with error handling
+      try {
+        await Promise.all(incorrectDeleteOps.map(op => op()));
+      } catch (error) {
+        // Gracefully handle missing entries - they might not exist in aggregates
+        console.warn(
+          'Could not delete from incorrect aggregates (entry may not exist):',
+          error,
+        );
+      }
+    }
+
+    return {
+      success: true,
+      action: existingStat ? 'updated' : 'created',
+    };
   },
 });
 
