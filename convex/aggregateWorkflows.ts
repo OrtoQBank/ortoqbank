@@ -1292,15 +1292,32 @@ export const batchUserRepairWorkflow = workflow.define({
       `🏭 Starting batch user repair with batch size: ${args.batchSize}`,
     );
 
-    // Step 1: Get list of all users (single pagination)
-    const usersResult = await step.runQuery(
-      internal.aggregateWorkflows.getAllUsersForRepair,
-      {},
-      { name: 'get-all-users' },
-    );
+    // Step 1: Get list of all users with pagination to avoid memory issues
+    let allUsers: Array<{ _id: any; _creationTime: number }> = [];
+    let cursor: string | undefined = undefined;
+    let pageNumber = 0;
+    
+    // Fetch all users in paginated batches (each step.runQuery is a separate workflow step)
+    do {
+      const usersResult: {
+        users: Array<{ _id: any; _creationTime: number }>;
+        continueCursor?: string;
+        isDone: boolean;
+      } = await step.runQuery(
+        internal.aggregateWorkflows.getAllUsersForRepair,
+        { batchSize: 100, cursor }, // 100 users per page to control memory usage
+        { name: `get-users-page-${pageNumber}` },
+      );
+      
+      allUsers.push(...usersResult.users);
+      cursor = usersResult.continueCursor;
+      pageNumber++;
+      
+      console.log(`📄 Loaded page ${pageNumber}: ${usersResult.users.length} users (total: ${allUsers.length})`);
+    } while (cursor);
 
     let totalProcessed = 0;
-    const users = usersResult.users;
+    const users = allUsers;
 
     // Step 2: Process users in batches using parallel workflows
     for (let i = 0; i < users.length; i += args.batchSize) {
@@ -1619,10 +1636,50 @@ export const repairUserThemeBookmarksStep = internalMutation({
 // ============================================================================
 
 /**
- * Get all users for repair (single pagination)
+ * Get users for repair with pagination (single paginated query per call)
  */
 export const getAllUsersForRepair = internalQuery({
-  args: {},
+  args: {
+    batchSize: v.optional(v.number()),
+    cursor: v.optional(v.string()),
+  },
+  returns: v.object({
+    users: v.array(
+      v.object({
+        _id: v.id('users'),
+        _creationTime: v.number(),
+      }),
+    ),
+    continueCursor: v.optional(v.string()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx: any, args: any) => {
+    const batchSize = args.batchSize || 100; // Default to 100 users per batch
+    
+    // SINGLE PAGINATION - only users table (Convex constraint)
+    const result = await ctx.db.query('users').paginate({
+      cursor: args.cursor ?? null,
+      numItems: batchSize,
+    });
+
+    return {
+      users: result.page.map((user: any) => ({
+        _id: user._id,
+        _creationTime: user._creationTime,
+      })),
+      continueCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * Get a small sample of users for testing (single pagination call)
+ */
+export const getSampleUsersForTesting = internalQuery({
+  args: {
+    limit: v.optional(v.number()),
+  },
   returns: v.object({
     users: v.array(
       v.object({
@@ -1631,12 +1688,17 @@ export const getAllUsersForRepair = internalQuery({
       }),
     ),
   }),
-  handler: async (ctx: any) => {
-    // SINGLE PAGINATION - only users table
-    const users = await ctx.db.query('users').collect();
+  handler: async (ctx: any, args: any) => {
+    const limit = args.limit || 5; // Default to 5 users for testing
+    
+    // SINGLE PAGINATION - only users table, limited sample
+    const result = await ctx.db.query('users').paginate({
+      cursor: null,
+      numItems: limit,
+    });
 
     return {
-      users: users.map((user: any) => ({
+      users: result.page.map((user: any) => ({
         _id: user._id,
         _creationTime: user._creationTime,
       })),
@@ -1669,6 +1731,73 @@ export const startSingleUserRepairAction = internalAction({
 
     // Default return if workflow is still running
     return { success: true, processed: 0 };
+  },
+});
+
+/**
+ * TESTING: Start repair for a small sample of users
+ */
+export const startSampleUserRepair = mutation({
+  args: {
+    sampleSize: v.optional(v.number()), // Number of users to repair (default 3)
+  },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    const sampleSize = args.sampleSize || 3;
+    console.log(`🧪 Starting sample user repair for ${sampleSize} users...`);
+
+    const workflowId: any = await workflow.start(
+      ctx,
+      internal.aggregateWorkflows.sampleUserRepairWorkflow,
+      { sampleSize },
+    );
+
+    return `Sample user repair started with ID: ${workflowId} (${sampleSize} users)`;
+  },
+});
+
+/**
+ * Sample User Repair Workflow - Repairs a small number of users for testing
+ */
+export const sampleUserRepairWorkflow = workflow.define({
+  args: {
+    sampleSize: v.number(),
+  },
+  handler: async (
+    step,
+    args,
+  ): Promise<{ totalUsers: number; totalProcessed: number }> => {
+    console.log(`🧪 Starting sample repair for ${args.sampleSize} users`);
+
+    // Step 1: Get sample users (single pagination)
+    const usersResult = await step.runQuery(
+      internal.aggregateWorkflows.getSampleUsersForTesting,
+      { limit: args.sampleSize },
+      { name: 'get-sample-users' },
+    );
+
+    let totalProcessed = 0;
+    const users = usersResult.users;
+
+    // Step 2: Process users one by one for testing (sequential for easier debugging)
+    for (let i = 0; i < users.length; i++) {
+      const user = users[i];
+      console.log(`🔧 Processing user ${i + 1}/${users.length}: ${user._id}`);
+      
+      const userResult = await step.runAction(
+        internal.aggregateWorkflows.startSingleUserRepairAction,
+        { userId: user._id },
+        { name: `repair-sample-user-${i}` },
+      );
+      
+      totalProcessed += userResult.processed;
+    }
+
+    console.log(
+      `🎉 Sample repair complete! Total users: ${users.length}, Total processed: ${totalProcessed}`,
+    );
+
+    return { totalUsers: users.length, totalProcessed };
   },
 });
 
