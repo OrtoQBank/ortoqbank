@@ -1296,7 +1296,7 @@ export const batchUserRepairWorkflow = workflow.define({
     let allUsers: Array<{ _id: any; _creationTime: number }> = [];
     let cursor: string | undefined = undefined;
     let pageNumber = 0;
-    
+
     // Fetch all users in paginated batches (each step.runQuery is a separate workflow step)
     do {
       const usersResult: {
@@ -1308,12 +1308,14 @@ export const batchUserRepairWorkflow = workflow.define({
         { batchSize: 100, cursor }, // 100 users per page to control memory usage
         { name: `get-users-page-${pageNumber}` },
       );
-      
+
       allUsers.push(...usersResult.users);
       cursor = usersResult.continueCursor;
       pageNumber++;
-      
-      console.log(`📄 Loaded page ${pageNumber}: ${usersResult.users.length} users (total: ${allUsers.length})`);
+
+      console.log(
+        `📄 Loaded page ${pageNumber}: ${usersResult.users.length} users (total: ${allUsers.length})`,
+      );
     } while (cursor);
 
     let totalProcessed = 0;
@@ -1655,7 +1657,7 @@ export const getAllUsersForRepair = internalQuery({
   }),
   handler: async (ctx: any, args: any) => {
     const batchSize = args.batchSize || 100; // Default to 100 users per batch
-    
+
     // SINGLE PAGINATION - only users table (Convex constraint)
     const result = await ctx.db.query('users').paginate({
       cursor: args.cursor ?? null,
@@ -1690,7 +1692,7 @@ export const getSampleUsersForTesting = internalQuery({
   }),
   handler: async (ctx: any, args: any) => {
     const limit = args.limit || 5; // Default to 5 users for testing
-    
+
     // SINGLE PAGINATION - only users table, limited sample
     const result = await ctx.db.query('users').paginate({
       cursor: null,
@@ -1783,13 +1785,13 @@ export const sampleUserRepairWorkflow = workflow.define({
     for (let i = 0; i < users.length; i++) {
       const user = users[i];
       console.log(`🔧 Processing user ${i + 1}/${users.length}: ${user._id}`);
-      
+
       const userResult = await step.runAction(
         internal.aggregateWorkflows.startSingleUserRepairAction,
         { userId: user._id },
         { name: `repair-sample-user-${i}` },
       );
-      
+
       totalProcessed += userResult.processed;
     }
 
