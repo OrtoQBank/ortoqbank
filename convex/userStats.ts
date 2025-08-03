@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 
 import { api } from './_generated/api';
 import { Doc, Id } from './_generated/dataModel';
-import { internalMutation, query } from './_generated/server';
+import { query, internalMutation } from './_generated/server';
 import {
   getTotalQuestionCount,
   getUserAnsweredCount,
@@ -10,6 +10,16 @@ import {
   getUserBookmarksCount,
 } from './aggregateQueries.js';
 import { getCurrentUserOrThrow } from './users';
+import {
+  answeredByUser,
+  incorrectByUser,
+  answeredByThemeByUser,
+  answeredBySubthemeByUser,
+  answeredByGroupByUser,
+  incorrectByThemeByUser,
+  incorrectBySubthemeByUser,
+  incorrectByGroupByUser,
+} from './aggregates';
 
 type UserStats = {
   overall: {
@@ -180,7 +190,9 @@ export const getUserStatsSummaryWithAggregates = query({
 /**
  * Internal mutation to update question statistics when a user answers a question
  * This should only be called from the quizSessions.submitAnswerAndProgress function
- * Updated to include taxonomy fields for aggregates
+ *
+ * NOTE: Uses raw internalMutation + manual aggregate updates to avoid DELETE_MISSING_KEY errors
+ * while still keeping aggregates in sync in real-time.
  */
 export const _updateQuestionStats = internalMutation({
   args: {
@@ -205,63 +217,35 @@ export const _updateQuestionStats = internalMutation({
       )
       .first();
 
+    const wasIncorrectBefore = existingStat?.isIncorrect || false;
+    let statRecord;
+
     if (existingStat) {
-      // Update existing record
-      // Helper function to build taxonomy update data
-      const buildTaxonomyUpdate = (baseUpdate: any) => {
-        const updateData = { ...baseUpdate, themeId: question.themeId };
-        if (question.subthemeId) {
-          updateData.subthemeId = question.subthemeId;
-        }
-        if (question.groupId) {
-          updateData.groupId = question.groupId;
-        }
-        return updateData;
+      // Update existing record with taxonomy fields
+      const updateData = {
+        isIncorrect: !args.isCorrect,
+        answeredAt: now,
+        themeId: question.themeId,
+        ...(question.subthemeId && { subthemeId: question.subthemeId }),
+        ...(question.groupId && { groupId: question.groupId }),
       };
 
-      if (args.isCorrect && existingStat.isIncorrect) {
-        // If the question was previously incorrect but is now correct,
-        // update the record to show it's no longer incorrect
-        await ctx.db.patch(
-          existingStat._id,
-          buildTaxonomyUpdate({
-            isIncorrect: false,
-            answeredAt: now,
-          }),
-        );
-      } else if (args.isCorrect) {
-        // Just update the timestamp and taxonomy fields
-        await ctx.db.patch(
-          existingStat._id,
-          buildTaxonomyUpdate({
-            answeredAt: now,
-          }),
-        );
-      } else {
-        // If the answer is incorrect, mark it as incorrect
-        await ctx.db.patch(
-          existingStat._id,
-          buildTaxonomyUpdate({
-            isIncorrect: true,
-            answeredAt: now,
-          }),
-        );
-      }
-
-      return { success: true, action: 'updated' };
+      await ctx.db.patch(existingStat._id, updateData);
+      statRecord = { ...existingStat, ...updateData };
     } else {
       // Skip creating stats if question lacks required taxonomy fields for aggregates
       // The hierarchical aggregates require complete taxonomy hierarchy
       if (!question.subthemeId || !question.groupId) {
-        return { 
-          success: false, 
-          action: 'skipped', 
-          error: 'Question lacks complete taxonomy hierarchy required for stats tracking' 
+        return {
+          success: false,
+          action: 'skipped',
+          error:
+            'Question lacks complete taxonomy hierarchy required for stats tracking',
         };
       }
 
       // Create a new record with complete taxonomy fields for aggregates
-      await ctx.db.insert('userQuestionStats', {
+      const newStatData = {
         userId: userId._id,
         questionId: args.questionId,
         hasAnswered: true,
@@ -270,10 +254,68 @@ export const _updateQuestionStats = internalMutation({
         themeId: question.themeId,
         subthemeId: question.subthemeId,
         groupId: question.groupId,
-      });
+      };
 
-      return { success: true, action: 'created' };
+      const statId = await ctx.db.insert('userQuestionStats', newStatData);
+      statRecord = { ...newStatData, _id: statId, _creationTime: now };
     }
+
+    // REAL-TIME AGGREGATE UPDATES using safe methods
+
+    // Always ensure the answered aggregates exist (safe operation)
+    await answeredByUser.insertIfDoesNotExist(ctx, statRecord);
+
+    if (question.themeId) {
+      await answeredByThemeByUser.insertIfDoesNotExist(ctx, statRecord);
+    }
+    if (question.subthemeId) {
+      await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord);
+    }
+    if (question.groupId) {
+      await answeredByGroupByUser.insertIfDoesNotExist(ctx, statRecord);
+    }
+
+    // Handle incorrect aggregates based on answer correctness
+    if (!args.isCorrect) {
+      // Answer is incorrect - add to incorrect aggregates (safe operation)
+      await incorrectByUser.insertIfDoesNotExist(ctx, statRecord);
+
+      if (question.themeId) {
+        await incorrectByThemeByUser.insertIfDoesNotExist(ctx, statRecord);
+      }
+      if (question.subthemeId) {
+        await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord);
+      }
+      if (question.groupId) {
+        await incorrectByGroupByUser.insertIfDoesNotExist(ctx, statRecord);
+      }
+    } else if (wasIncorrectBefore && args.isCorrect) {
+      // Answer was incorrect before but is now correct - remove from incorrect aggregates
+      try {
+        await incorrectByUser.delete(ctx, statRecord);
+
+        if (question.themeId) {
+          await incorrectByThemeByUser.delete(ctx, statRecord);
+        }
+        if (question.subthemeId) {
+          await incorrectBySubthemeByUser.delete(ctx, statRecord);
+        }
+        if (question.groupId) {
+          await incorrectByGroupByUser.delete(ctx, statRecord);
+        }
+      } catch (error) {
+        // Gracefully handle missing entries - they might not exist in aggregates
+        console.warn(
+          'Could not delete from incorrect aggregates (entry may not exist):',
+          error,
+        );
+      }
+    }
+
+    return {
+      success: true,
+      action: existingStat ? 'updated' : 'created',
+    };
   },
 });
 

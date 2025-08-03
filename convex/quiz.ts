@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 
 import { Doc } from './_generated/dataModel';
 import { query } from './_generated/server';
-import { getCurrentUserOrThrow } from './users';
+
 import { mutation } from './triggers';
 
 export const create = mutation({

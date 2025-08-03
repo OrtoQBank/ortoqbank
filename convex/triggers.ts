@@ -7,6 +7,7 @@ import { Triggers } from 'convex-helpers/server/triggers';
 import { DataModel } from './_generated/dataModel';
 import {
   mutation as rawMutation,
+  internalMutation as rawInternalMutation,
   query as rawQuery,
 } from './_generated/server';
 import * as aggregates from './aggregates';
@@ -72,6 +73,10 @@ triggers.register('questions', aggregates.randomQuestionsByGroup.trigger());
 
 // Export custom mutation and query that wrap the triggers
 export const mutation = customMutation(rawMutation, customCtx(triggers.wrapDB));
+export const internalMutation = customMutation(
+  rawInternalMutation,
+  customCtx(triggers.wrapDB),
+);
 export const query = rawQuery; // queries don't need trigger wrapping
 
 // For comprehensive aggregate repair and testing, use aggregateWorkflows.ts functions
