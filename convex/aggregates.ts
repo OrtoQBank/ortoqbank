@@ -272,17 +272,16 @@ export const randomQuestionsBySubtheme = new TableAggregate<{
 });
 
 export const randomQuestionsByGroup = new TableAggregate<{
-  Namespace: Id<'groups'>;
+  Namespace: string;
   Key: null;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.randomQuestionsByGroup, {
   namespace: (d: unknown) => {
     const question = d as { groupId?: Id<'groups'> };
-    if (!question.groupId) {
-      throw new Error('Question has no groupId');
-    }
-    return question.groupId;
+    // Use "no-group" for questions without groupId
+    const groupId = question.groupId || 'no-group';
+    return groupId;
   },
   sortKey: () => null, // No sorting = random order by _id
 });

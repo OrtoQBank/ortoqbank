@@ -379,13 +379,13 @@ export const getUserAnsweredCountByGroupQuery = query({
 });
 
 // Helper functions that call these queries
-export async function getTotalQuestionCount(ctx: any): Promise<number> {
+export async function getTotalQuestionCount(ctx: QueryCtx): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getTotalQuestionCountQuery);
 }
 
 export async function getThemeQuestionCount(
-  ctx: any,
-  themeId: any,
+  ctx: QueryCtx,
+  themeId: Id<'themes'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
     themeId,
@@ -393,8 +393,8 @@ export async function getThemeQuestionCount(
 }
 
 export async function getSubthemeQuestionCount(
-  ctx: any,
-  subthemeId: any,
+  ctx: QueryCtx,
+  subthemeId: Id<'subthemes'>,
 ): Promise<number> {
   return await ctx.runQuery(
     api.aggregateQueries.getSubthemeQuestionCountQuery,
@@ -405,8 +405,8 @@ export async function getSubthemeQuestionCount(
 }
 
 export async function getGroupQuestionCount(
-  ctx: any,
-  groupId: any,
+  ctx: QueryCtx,
+  groupId: Id<'groups'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
     groupId,
@@ -414,8 +414,8 @@ export async function getGroupQuestionCount(
 }
 
 export async function getUserAnsweredCount(
-  ctx: any,
-  userId: any,
+  ctx: QueryCtx,
+  userId: Id<'users'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getUserAnsweredCountQuery, {
     userId,
@@ -423,8 +423,8 @@ export async function getUserAnsweredCount(
 }
 
 export async function getUserIncorrectCount(
-  ctx: any,
-  userId: any,
+  ctx: QueryCtx,
+  userId: Id<'users'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getUserIncorrectCountQuery, {
     userId,
@@ -432,8 +432,8 @@ export async function getUserIncorrectCount(
 }
 
 export async function getUserBookmarksCount(
-  ctx: any,
-  userId: any,
+  ctx: QueryCtx,
+  userId: Id<'users'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getUserBookmarksCountQuery, {
     userId,
@@ -595,8 +595,7 @@ export const getQuestionCountBySelection = query({
     for (const groupId of selectedGroups) {
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_group')
-        .filter(q => q.eq(q.field('groupId'), groupId))
+        .withIndex('by_group', q => q.eq('groupId', groupId))
         .collect();
       questions.forEach(q => questionIds.add(q._id));
     }
@@ -606,8 +605,7 @@ export const getQuestionCountBySelection = query({
       // Check if any groups from this subtheme are already selected
       const subthemeGroups = await ctx.db
         .query('groups')
-        .withIndex('by_subtheme')
-        .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
         .collect();
 
       const hasSelectedGroupsFromSubtheme = subthemeGroups.some(g =>
@@ -617,8 +615,7 @@ export const getQuestionCountBySelection = query({
       if (!hasSelectedGroupsFromSubtheme) {
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_subtheme')
-          .filter(q => q.eq(q.field('subthemeId'), subthemeId))
+          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
           .collect();
         questions.forEach(q => questionIds.add(q._id));
       }
@@ -629,8 +626,7 @@ export const getQuestionCountBySelection = query({
       // Check if any subthemes from this theme are already selected
       const themeSubthemes = await ctx.db
         .query('subthemes')
-        .withIndex('by_theme')
-        .filter(q => q.eq(q.field('themeId'), themeId))
+        .withIndex('by_theme', q => q.eq('themeId', themeId))
         .collect();
 
       const hasSelectedSubthemesFromTheme = themeSubthemes.some(s =>
@@ -640,8 +636,7 @@ export const getQuestionCountBySelection = query({
       if (!hasSelectedSubthemesFromTheme) {
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_theme')
-          .filter(q => q.eq(q.field('themeId'), themeId))
+          .withIndex('by_theme', q => q.eq('themeId', themeId))
           .collect();
         questions.forEach(q => questionIds.add(q._id));
       }
@@ -659,8 +654,7 @@ export const getQuestionCountBySelection = query({
     if (args.filter === 'unanswered') {
       const userStats = await ctx.db
         .query('userQuestionStats')
-        .withIndex('by_user')
-        .filter(q => q.eq(q.field('userId'), userId._id))
+        .withIndex('by_user', q => q.eq('userId', userId._id))
         .collect();
 
       const answeredQuestionIds = new Set(
@@ -672,9 +666,9 @@ export const getQuestionCountBySelection = query({
     if (args.filter === 'incorrect') {
       const incorrectStats = await ctx.db
         .query('userQuestionStats')
-        .withIndex('by_user')
-        .filter(q => q.eq(q.field('userId'), userId._id))
-        .filter(q => q.eq(q.field('isIncorrect'), true))
+        .withIndex('by_user_incorrect', q =>
+          q.eq('userId', userId._id).eq('isIncorrect', true),
+        )
         .collect();
 
       const incorrectQuestionIds = new Set(
@@ -686,8 +680,7 @@ export const getQuestionCountBySelection = query({
     if (args.filter === 'bookmarked') {
       const bookmarks = await ctx.db
         .query('userBookmarks')
-        .withIndex('by_user')
-        .filter(q => q.eq(q.field('userId'), userId._id))
+        .withIndex('by_user', q => q.eq('userId', userId._id))
         .collect();
 
       const bookmarkedQuestionIds = new Set(
@@ -704,7 +697,7 @@ export const getQuestionCountBySelection = query({
  * Get count for a specific filter type (all/unanswered/incorrect/bookmarked)
  */
 async function getCountForFilterType(
-  ctx: any,
+  ctx: QueryCtx,
   filter: 'all' | 'unanswered' | 'incorrect' | 'bookmarked',
   userId: Id<'users'>,
 ): Promise<number> {

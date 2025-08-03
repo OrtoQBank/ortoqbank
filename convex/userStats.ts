@@ -234,18 +234,16 @@ export const _updateQuestionStats = internalMutation({
       await ctx.db.patch(existingStat._id, updateData);
       statRecord = { ...existingStat, ...updateData };
     } else {
-      // Skip creating stats if question lacks required taxonomy fields for aggregates
-      // The hierarchical aggregates require complete taxonomy hierarchy
-      if (!question.subthemeId || !question.groupId) {
+      // Skip creating stats only if question lacks themeId (minimum requirement)
+      if (!question.themeId) {
         return {
           success: false,
           action: 'skipped',
-          error:
-            'Question lacks complete taxonomy hierarchy required for stats tracking',
+          error: 'Question lacks themeId required for stats tracking',
         };
       }
 
-      // Create a new record with complete taxonomy fields for aggregates
+      // Create a new record with available taxonomy fields for aggregates
       const newStatData = {
         userId: userId,
         questionId: args.questionId,
