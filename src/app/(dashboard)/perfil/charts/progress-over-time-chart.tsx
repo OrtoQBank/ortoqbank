@@ -18,7 +18,9 @@ import { formatWeekString } from '@/utils/dateUtils';
 import { api } from '../../../../../convex/_generated/api';
 
 export function ProgressOverTimeChart() {
-  const weeklyData = useQuery(api.userStats.getUserWeeklyProgress);
+  const weeklyData = useQuery(
+    api.aggregateQueries.getUserWeeklyProgressWithAggregates,
+  );
 
   if (weeklyData === undefined) {
     return (

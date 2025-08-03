@@ -1695,3 +1695,219 @@ export const getBatchQuestionCountsBySelection = query({
  * ✅ Memory-efficient processing
  * ✅ Automatic verification steps
  */
+
+/**
+ * Get user theme statistics using aggregates for efficient chart data
+ */
+export const getUserThemeStatsWithAggregates = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      themeId: v.id('themes'),
+      themeName: v.string(),
+      total: v.number(),
+      correct: v.number(),
+      percentage: v.number(),
+    }),
+  ),
+  handler: async (
+    ctx,
+  ): Promise<
+    Array<{
+      themeId: Id<'themes'>;
+      themeName: string;
+      total: number;
+      correct: number;
+      percentage: number;
+    }>
+  > => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Get all themes first
+    const themes = await ctx.db.query('themes').collect();
+
+    if (themes.length === 0) {
+      return [];
+    }
+
+    // Get theme statistics in parallel using aggregates
+    const themeStatsPromises: Promise<{
+      themeId: Id<'themes'>;
+      themeName: string;
+      total: number;
+      correct: number;
+      percentage: number;
+    }>[] = themes.map(
+      async (
+        theme,
+      ): Promise<{
+        themeId: Id<'themes'>;
+        themeName: string;
+        total: number;
+        correct: number;
+        percentage: number;
+      }> => {
+        const [totalAnswered, totalIncorrect]: [number, number] =
+          await Promise.all([
+            ctx.runQuery(
+              api.aggregateQueries.getUserAnsweredCountByThemeQuery,
+              {
+                themeId: theme._id,
+              },
+            ),
+            ctx.runQuery(
+              api.aggregateQueries.getUserIncorrectCountByThemeQuery,
+              {
+                themeId: theme._id,
+              },
+            ),
+          ]);
+
+        const totalCorrect = totalAnswered - totalIncorrect;
+        const percentage =
+          totalAnswered > 0
+            ? Math.round((totalCorrect / totalAnswered) * 100)
+            : 0;
+
+        return {
+          themeId: theme._id,
+          themeName: theme.name,
+          total: totalAnswered,
+          correct: totalCorrect,
+          percentage,
+        };
+      },
+    );
+
+    const themeStats: Array<{
+      themeId: Id<'themes'>;
+      themeName: string;
+      total: number;
+      correct: number;
+      percentage: number;
+    }> = await Promise.all(themeStatsPromises);
+
+    // Filter out themes with no answered questions and sort by total answered (descending)
+    return themeStats
+      .filter(
+        (stat: {
+          themeId: Id<'themes'>;
+          themeName: string;
+          total: number;
+          correct: number;
+          percentage: number;
+        }) => stat.total > 0,
+      )
+      .sort(
+        (
+          a: {
+            themeId: Id<'themes'>;
+            themeName: string;
+            total: number;
+            correct: number;
+            percentage: number;
+          },
+          b: {
+            themeId: Id<'themes'>;
+            themeName: string;
+            total: number;
+            correct: number;
+            percentage: number;
+          },
+        ) => b.total - a.total,
+      );
+  },
+});
+
+/**
+ * Get user weekly progress using aggregates for efficient chart data
+ * Note: This still uses table scan for weekly grouping but is more efficient than the old approach
+ */
+export const getUserWeeklyProgressWithAggregates = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      week: v.string(),
+      totalAnswered: v.number(),
+      weeklyAnswered: v.number(),
+    }),
+  ),
+  handler: async (
+    ctx,
+  ): Promise<
+    Array<{
+      week: string;
+      totalAnswered: number;
+      weeklyAnswered: number;
+    }>
+  > => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Get answered count using aggregate for validation
+    const totalAnsweredCount: number = await getUserAnsweredCount(
+      ctx,
+      userId._id,
+    );
+
+    if (totalAnsweredCount === 0) {
+      return [];
+    }
+
+    // Still need to scan for weekly grouping, but we can optimize the query
+    const answeredStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user_answered', q =>
+        q.eq('userId', userId._id).eq('hasAnswered', true),
+      )
+      .collect();
+
+    if (answeredStats.length === 0) {
+      return [];
+    }
+
+    // Helper function to get ISO week string from timestamp
+    function getWeekString(timestamp: number): string {
+      const date = new Date(timestamp);
+      const year = date.getFullYear();
+      const firstDayOfYear = new Date(year, 0, 1);
+      const dayOfYear = Math.floor(
+        (date.getTime() - firstDayOfYear.getTime()) / (24 * 60 * 60 * 1000),
+      );
+      const weekNumber = Math.ceil(
+        (dayOfYear + firstDayOfYear.getDay() + 1) / 7,
+      );
+      return `${year}-W${weekNumber.toString().padStart(2, '0')}`;
+    }
+
+    // Group by week and calculate cumulative totals
+    const weeklyData = new Map<string, number>();
+
+    // Count questions answered per week (using creation time - when first answered)
+    for (const stat of answeredStats) {
+      const weekString = getWeekString(stat._creationTime);
+      weeklyData.set(weekString, (weeklyData.get(weekString) || 0) + 1);
+    }
+
+    // Convert to array and sort by week
+    const sortedWeeks: [string, number][] = [...weeklyData.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .slice(-12); // Get last 12 weeks
+
+    // Calculate cumulative totals
+    let cumulativeTotal = 0;
+    const result: Array<{
+      week: string;
+      totalAnswered: number;
+      weeklyAnswered: number;
+    }> = sortedWeeks.map(([week, weeklyCount]) => {
+      cumulativeTotal += weeklyCount;
+      return {
+        week,
+        totalAnswered: cumulativeTotal,
+        weeklyAnswered: weeklyCount,
+      };
+    });
+
+    return result;
+  },
+});
