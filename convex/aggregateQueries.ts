@@ -184,10 +184,10 @@ export const getUserAnsweredCountQuery = query({
   returns: v.number(),
   handler: async (ctx, args) => {
     // Use answeredByUser aggregate for O(log n) counting
-    const count = await (answeredByUser.count as any)(ctx, {
+    const count = await answeredByUser.count(ctx, {
       namespace: args.userId,
       bounds: {},
-    });
+    } as { namespace: Id<'users'>; bounds: {} });
     return count;
   },
 });
@@ -200,10 +200,10 @@ export const getUserIncorrectCountQuery = query({
   returns: v.number(),
   handler: async (ctx, args) => {
     // Use incorrectByUser aggregate for O(log n) counting
-    const count = await (incorrectByUser.count as any)(ctx, {
+    const count = await incorrectByUser.count(ctx, {
       namespace: args.userId,
       bounds: {},
-    });
+    } as { namespace: Id<'users'>; bounds: {} });
     return count;
   },
 });
@@ -216,10 +216,10 @@ export const getUserBookmarksCountQuery = query({
   returns: v.number(),
   handler: async (ctx, args) => {
     // Use bookmarkedByUser aggregate for O(log n) counting
-    const count = await (bookmarkedByUser.count as any)(ctx, {
+    const count = await bookmarkedByUser.count(ctx, {
       namespace: args.userId,
       bounds: {},
-    });
+    } as { namespace: Id<'users'>; bounds: {} });
     return count;
   },
 });

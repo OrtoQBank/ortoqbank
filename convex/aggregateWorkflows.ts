@@ -1105,60 +1105,102 @@ export const processHierarchicalAggregatesBatchStep = internalMutation({
       // Insert into hierarchical answered aggregates (all stats represent answered questions)
       if (question.themeId) {
         const compositeAnsweredStat = { ...stat, themeId: question.themeId };
-        await answeredByThemeByUser.insertIfDoesNotExist(
-          ctx,
-          compositeAnsweredStat,
-        );
-        hierarchicalInserts++;
+        try {
+          await answeredByThemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeAnsweredStat,
+          );
+          hierarchicalInserts++;
+        } catch (error) {
+          console.warn(
+            `Failed to insert answered stat for theme ${question.themeId}:`,
+            error,
+          );
+        }
       }
       if (question.subthemeId) {
         const compositeAnsweredStat = {
           ...stat,
           subthemeId: question.subthemeId,
         };
-        await answeredBySubthemeByUser.insertIfDoesNotExist(
-          ctx,
-          compositeAnsweredStat,
-        );
-        hierarchicalInserts++;
+        try {
+          await answeredBySubthemeByUser.insertIfDoesNotExist(
+            ctx,
+            compositeAnsweredStat,
+          );
+          hierarchicalInserts++;
+        } catch (error) {
+          console.warn(
+            `Failed to insert answered stat for subtheme ${question.subthemeId}:`,
+            error,
+          );
+        }
       }
       if (question.groupId) {
         const compositeAnsweredStat = { ...stat, groupId: question.groupId };
-        await answeredByGroupByUser.insertIfDoesNotExist(
-          ctx,
-          compositeAnsweredStat,
-        );
-        hierarchicalInserts++;
+        try {
+          await answeredByGroupByUser.insertIfDoesNotExist(
+            ctx,
+            compositeAnsweredStat,
+          );
+          hierarchicalInserts++;
+        } catch (error) {
+          console.warn(
+            `Failed to insert answered stat for group ${question.groupId}:`,
+            error,
+          );
+        }
       }
 
       // Insert into hierarchical incorrect aggregates if the answer was incorrect
       if (stat.isIncorrect) {
         if (question.themeId) {
           const compositeIncorrectStat = { ...stat, themeId: question.themeId };
-          await incorrectByThemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeIncorrectStat,
-          );
-          hierarchicalInserts++;
+          try {
+            await incorrectByThemeByUser.insertIfDoesNotExist(
+              ctx,
+              compositeIncorrectStat,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(
+              `Failed to insert incorrect stat for theme ${question.themeId}:`,
+              error,
+            );
+          }
         }
         if (question.subthemeId) {
           const compositeIncorrectStat = {
             ...stat,
             subthemeId: question.subthemeId,
           };
-          await incorrectBySubthemeByUser.insertIfDoesNotExist(
-            ctx,
-            compositeIncorrectStat,
-          );
-          hierarchicalInserts++;
+          try {
+            await incorrectBySubthemeByUser.insertIfDoesNotExist(
+              ctx,
+              compositeIncorrectStat,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(
+              `Failed to insert incorrect stat for subtheme ${question.subthemeId}:`,
+              error,
+            );
+          }
         }
         if (question.groupId) {
           const compositeIncorrectStat = { ...stat, groupId: question.groupId };
-          await incorrectByGroupByUser.insertIfDoesNotExist(
-            ctx,
-            compositeIncorrectStat,
-          );
-          hierarchicalInserts++;
+          try {
+            await incorrectByGroupByUser.insertIfDoesNotExist(
+              ctx,
+              compositeIncorrectStat,
+            );
+            hierarchicalInserts++;
+          } catch (error) {
+            console.warn(
+              `Failed to insert incorrect stat for group ${question.groupId}:`,
+              error,
+            );
+          }
         }
       }
 
