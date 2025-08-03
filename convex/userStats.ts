@@ -196,11 +196,12 @@ export const getUserStatsSummaryWithAggregates = query({
  */
 export const _updateQuestionStats = internalMutation({
   args: {
+    userId: v.id('users'),
     questionId: v.id('questions'),
     isCorrect: v.boolean(),
   },
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const userId = args.userId; // Use passed userId instead of getCurrentUserOrThrow
     const now = Date.now();
 
     // Get question data to extract taxonomy fields for aggregates
@@ -213,7 +214,7 @@ export const _updateQuestionStats = internalMutation({
     const existingStat = await ctx.db
       .query('userQuestionStats')
       .withIndex('by_user_question', q =>
-        q.eq('userId', userId._id).eq('questionId', args.questionId),
+        q.eq('userId', userId).eq('questionId', args.questionId),
       )
       .first();
 
@@ -246,7 +247,7 @@ export const _updateQuestionStats = internalMutation({
 
       // Create a new record with complete taxonomy fields for aggregates
       const newStatData = {
-        userId: userId._id,
+        userId: userId,
         questionId: args.questionId,
         hasAnswered: true,
         isIncorrect: !args.isCorrect,
@@ -260,49 +261,62 @@ export const _updateQuestionStats = internalMutation({
       statRecord = { ...newStatData, _id: statId, _creationTime: now };
     }
 
-    // REAL-TIME AGGREGATE UPDATES using safe methods
+    // REAL-TIME AGGREGATE UPDATES using batch processing for better performance
 
-    // Always ensure the answered aggregates exist (safe operation)
-    await answeredByUser.insertIfDoesNotExist(ctx, statRecord);
+    // Batch all answered aggregate operations
+    const answeredAggregateOps = [
+      () => answeredByUser.insertIfDoesNotExist(ctx, statRecord),
+      question.themeId
+        ? () => answeredByThemeByUser.insertIfDoesNotExist(ctx, statRecord)
+        : null,
+      question.subthemeId
+        ? () => answeredBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord)
+        : null,
+      question.groupId
+        ? () => answeredByGroupByUser.insertIfDoesNotExist(ctx, statRecord)
+        : null,
+    ].filter(Boolean) as (() => Promise<any>)[];
 
-    if (question.themeId) {
-      await answeredByThemeByUser.insertIfDoesNotExist(ctx, statRecord);
-    }
-    if (question.subthemeId) {
-      await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord);
-    }
-    if (question.groupId) {
-      await answeredByGroupByUser.insertIfDoesNotExist(ctx, statRecord);
-    }
+    // Execute answered aggregates in parallel
+    await Promise.all(answeredAggregateOps.map(op => op()));
 
     // Handle incorrect aggregates based on answer correctness
     if (!args.isCorrect) {
-      // Answer is incorrect - add to incorrect aggregates (safe operation)
-      await incorrectByUser.insertIfDoesNotExist(ctx, statRecord);
+      // Batch all incorrect aggregate insert operations
+      const incorrectInsertOps = [
+        () => incorrectByUser.insertIfDoesNotExist(ctx, statRecord),
+        question.themeId
+          ? () => incorrectByThemeByUser.insertIfDoesNotExist(ctx, statRecord)
+          : null,
+        question.subthemeId
+          ? () =>
+              incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord)
+          : null,
+        question.groupId
+          ? () => incorrectByGroupByUser.insertIfDoesNotExist(ctx, statRecord)
+          : null,
+      ].filter(Boolean) as (() => Promise<any>)[];
 
-      if (question.themeId) {
-        await incorrectByThemeByUser.insertIfDoesNotExist(ctx, statRecord);
-      }
-      if (question.subthemeId) {
-        await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord);
-      }
-      if (question.groupId) {
-        await incorrectByGroupByUser.insertIfDoesNotExist(ctx, statRecord);
-      }
+      // Execute incorrect insert aggregates in parallel
+      await Promise.all(incorrectInsertOps.map(op => op()));
     } else if (wasIncorrectBefore && args.isCorrect) {
-      // Answer was incorrect before but is now correct - remove from incorrect aggregates
-      try {
-        await incorrectByUser.delete(ctx, statRecord);
+      // Batch all incorrect aggregate delete operations
+      const incorrectDeleteOps = [
+        () => incorrectByUser.delete(ctx, statRecord),
+        question.themeId
+          ? () => incorrectByThemeByUser.delete(ctx, statRecord)
+          : null,
+        question.subthemeId
+          ? () => incorrectBySubthemeByUser.delete(ctx, statRecord)
+          : null,
+        question.groupId
+          ? () => incorrectByGroupByUser.delete(ctx, statRecord)
+          : null,
+      ].filter(Boolean) as (() => Promise<any>)[];
 
-        if (question.themeId) {
-          await incorrectByThemeByUser.delete(ctx, statRecord);
-        }
-        if (question.subthemeId) {
-          await incorrectBySubthemeByUser.delete(ctx, statRecord);
-        }
-        if (question.groupId) {
-          await incorrectByGroupByUser.delete(ctx, statRecord);
-        }
+      // Execute incorrect delete aggregates in parallel with error handling
+      try {
+        await Promise.all(incorrectDeleteOps.map(op => op()));
       } catch (error) {
         // Gracefully handle missing entries - they might not exist in aggregates
         console.warn(
