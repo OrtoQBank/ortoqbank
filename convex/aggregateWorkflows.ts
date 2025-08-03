@@ -1973,7 +1973,9 @@ export const startSimpleUserAggregatesRepair = mutation({
       {},
     );
 
-    console.log(`✅ Simple User Aggregates workflow started with ID: ${workflowId}`);
+    console.log(
+      `✅ Simple User Aggregates workflow started with ID: ${workflowId}`,
+    );
     return workflowId as string;
   },
 });
@@ -1993,7 +1995,9 @@ export const startQuestionCountAggregatesRepair = mutation({
       {},
     );
 
-    console.log(`✅ Question Count Aggregates workflow started with ID: ${workflowId}`);
+    console.log(
+      `✅ Question Count Aggregates workflow started with ID: ${workflowId}`,
+    );
     return workflowId as string;
   },
 });
@@ -2013,7 +2017,9 @@ export const startRandomQuestionAggregatesRepair = mutation({
       {},
     );
 
-    console.log(`✅ Random Question Aggregates workflow started with ID: ${workflowId}`);
+    console.log(
+      `✅ Random Question Aggregates workflow started with ID: ${workflowId}`,
+    );
     return workflowId as string;
   },
 });
@@ -2033,7 +2039,9 @@ export const startHierarchicalUserAggregatesRepair = mutation({
       {},
     );
 
-    console.log(`✅ Hierarchical User Aggregates workflow started with ID: ${workflowId}`);
+    console.log(
+      `✅ Hierarchical User Aggregates workflow started with ID: ${workflowId}`,
+    );
     return workflowId as string;
   },
 });
@@ -2047,11 +2055,16 @@ export const startHierarchicalUserAggregatesRepair = mutation({
  */
 export const simpleUserAggregatesWorkflow = workflow.define({
   args: {},
-  handler: async (step): Promise<{ userStatsProcessed: number; bookmarksProcessed: number }> => {
+  handler: async (
+    step,
+  ): Promise<{ userStatsProcessed: number; bookmarksProcessed: number }> => {
     console.log('👤 Workflow: Starting Simple User Aggregates repair...');
 
     // Clear simple user aggregates
-    await step.runMutation(internal.aggregateWorkflows.clearSimpleUserAggregatesStep, {});
+    await step.runMutation(
+      internal.aggregateWorkflows.clearSimpleUserAggregatesStep,
+      {},
+    );
 
     // Process user stats
     let userStatsProcessed = 0;
@@ -2064,7 +2077,9 @@ export const simpleUserAggregatesWorkflow = workflow.define({
         { cursor, batchSize: 10 },
       );
 
-      console.log(`👤 User stats batch ${batchNumber} - ${result.processed} stats`);
+      console.log(
+        `👤 User stats batch ${batchNumber} - ${result.processed} stats`,
+      );
       userStatsProcessed += result.processed;
 
       if (result.isDone) break;
@@ -2083,7 +2098,9 @@ export const simpleUserAggregatesWorkflow = workflow.define({
         { cursor, batchSize: 10 },
       );
 
-      console.log(`👤 Bookmarks batch ${batchNumber} - ${result.processed} bookmarks`);
+      console.log(
+        `👤 Bookmarks batch ${batchNumber} - ${result.processed} bookmarks`,
+      );
       bookmarksProcessed += result.processed;
 
       if (result.isDone) break;
@@ -2105,7 +2122,10 @@ export const questionCountAggregatesWorkflow = workflow.define({
     console.log('📊 Workflow: Starting Question Count Aggregates repair...');
 
     // Clear question count aggregates
-    await step.runMutation(internal.aggregateWorkflows.clearQuestionCountAggregatesStep, {});
+    await step.runMutation(
+      internal.aggregateWorkflows.clearQuestionCountAggregatesStep,
+      {},
+    );
 
     // Process questions
     let questionsProcessed = 0;
@@ -2118,7 +2138,9 @@ export const questionCountAggregatesWorkflow = workflow.define({
         { cursor, batchSize: 15 },
       );
 
-      console.log(`📊 Questions batch ${batchNumber} - ${result.processed} questions`);
+      console.log(
+        `📊 Questions batch ${batchNumber} - ${result.processed} questions`,
+      );
       questionsProcessed += result.processed;
 
       if (result.isDone) break;
@@ -2140,7 +2162,10 @@ export const randomQuestionAggregatesWorkflow = workflow.define({
     console.log('🎲 Workflow: Starting Random Question Aggregates repair...');
 
     // Clear random question aggregates
-    await step.runMutation(internal.aggregateWorkflows.clearRandomQuestionAggregatesStep, {});
+    await step.runMutation(
+      internal.aggregateWorkflows.clearRandomQuestionAggregatesStep,
+      {},
+    );
 
     // Process questions
     let questionsProcessed = 0;
@@ -2153,7 +2178,9 @@ export const randomQuestionAggregatesWorkflow = workflow.define({
         { cursor, batchSize: 15 },
       );
 
-      console.log(`🎲 Questions batch ${batchNumber} - ${result.processed} questions`);
+      console.log(
+        `🎲 Questions batch ${batchNumber} - ${result.processed} questions`,
+      );
       questionsProcessed += result.processed;
 
       if (result.isDone) break;
@@ -2175,7 +2202,10 @@ export const hierarchicalUserAggregatesWorkflow = workflow.define({
     console.log('🏗️ Workflow: Starting Hierarchical User Aggregates repair...');
 
     // Clear hierarchical aggregates
-    await step.runMutation(internal.aggregateWorkflows.clearHierarchicalAggregatesStep, {});
+    await step.runMutation(
+      internal.aggregateWorkflows.clearHierarchicalAggregatesStep,
+      {},
+    );
 
     // Process hierarchical aggregates
     let hierarchicalStatsProcessed = 0;
@@ -2188,7 +2218,9 @@ export const hierarchicalUserAggregatesWorkflow = workflow.define({
         { cursor, batchSize: 5 }, // Smaller batches for complex processing
       );
 
-      console.log(`🏗️ Hierarchical batch ${batchNumber} - ${result.processed} stats`);
+      console.log(
+        `🏗️ Hierarchical batch ${batchNumber} - ${result.processed} stats`,
+      );
       hierarchicalStatsProcessed += result.processed;
 
       if (result.isDone) break;
@@ -2213,7 +2245,7 @@ export const clearSimpleUserAggregatesStep = internalMutation({
   returns: v.object({
     totalUsersCleared: v.number(),
   }),
-  handler: async (ctx) => {
+  handler: async ctx => {
     console.log('🧹 Step: Clearing simple user aggregates...');
 
     let cursor: string | null = null;
@@ -2237,7 +2269,9 @@ export const clearSimpleUserAggregatesStep = internalMutation({
       cursor = result.continueCursor;
     }
 
-    console.log(`✅ Cleared simple user aggregates for ${totalUsersCleared} users`);
+    console.log(
+      `✅ Cleared simple user aggregates for ${totalUsersCleared} users`,
+    );
     return { totalUsersCleared };
   },
 });
@@ -2248,12 +2282,12 @@ export const clearSimpleUserAggregatesStep = internalMutation({
 export const clearQuestionCountAggregatesStep = internalMutation({
   args: {},
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async ctx => {
     console.log('🧹 Step: Clearing question count aggregates...');
 
     // Clear all question count aggregates
     await totalQuestionCount.clear(ctx, { namespace: 'global' });
-    
+
     // Clear theme-based counts
     const themes = await ctx.db.query('themes').collect();
     for (const theme of themes) {
@@ -2282,12 +2316,12 @@ export const clearQuestionCountAggregatesStep = internalMutation({
 export const clearRandomQuestionAggregatesStep = internalMutation({
   args: {},
   returns: v.null(),
-  handler: async (ctx) => {
+  handler: async ctx => {
     console.log('🧹 Step: Clearing random question aggregates...');
 
     // Clear global random questions
     await randomQuestions.clear(ctx, { namespace: 'global' });
-    
+
     // Clear theme-based random questions
     const themes = await ctx.db.query('themes').collect();
     for (const theme of themes) {
@@ -2324,7 +2358,9 @@ export const processQuestionCountBatchStep = internalMutation({
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    console.log(`📊 Step: Processing ${args.batchSize} questions for count aggregates...`);
+    console.log(
+      `📊 Step: Processing ${args.batchSize} questions for count aggregates...`,
+    );
 
     const result = await ctx.db.query('questions').paginate({
       cursor: args.cursor ?? null,
@@ -2371,7 +2407,9 @@ export const processRandomQuestionBatchStep = internalMutation({
     isDone: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    console.log(`🎲 Step: Processing ${args.batchSize} questions for random aggregates...`);
+    console.log(
+      `🎲 Step: Processing ${args.batchSize} questions for random aggregates...`,
+    );
 
     const result = await ctx.db.query('questions').paginate({
       cursor: args.cursor ?? null,
