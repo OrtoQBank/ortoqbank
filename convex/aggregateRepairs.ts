@@ -4,6 +4,7 @@
 
 import { v } from 'convex/values';
 
+import { internal } from './_generated/api';
 import { internalMutation, mutation } from './_generated/server';
 import {
   answeredByGroupByUser,
@@ -18,6 +19,13 @@ import {
   incorrectBySubthemeByUser,
   incorrectByThemeByUser,
   incorrectByUser,
+  questionCountByGroup,
+  questionCountBySubtheme,
+  questionCountByTheme,
+  randomQuestions,
+  randomQuestionsByGroup,
+  randomQuestionsBySubtheme,
+  randomQuestionsByTheme,
   totalQuestionCount,
 } from './aggregates';
 
@@ -224,21 +232,27 @@ export const repairUserHierarchicalAggregates = internalMutation({
 export const repairGlobalQuestionCount = mutation({
   args: {
     batchSize: v.optional(v.number()),
+    startCursor: v.optional(v.union(v.string(), v.null())),
   },
   returns: v.object({
     totalProcessed: v.number(),
     batchCount: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isComplete: v.boolean(),
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize || 100;
 
-    // Clear existing aggregates
-    await totalQuestionCount.clear(ctx, { namespace: 'global' });
+    // Only clear existing aggregates if this is the first call (no startCursor)
+    if (!args.startCursor) {
+      await totalQuestionCount.clear(ctx, { namespace: 'global' });
+    }
 
     // Process questions in paginated batches
-    let cursor: string | null = null;
+    let cursor: string | null = args.startCursor || null;
     let totalProcessed = 0;
     let batchCount = 0;
+    let isComplete = false;
 
     do {
       const result = await ctx.db.query('questions').paginate({
@@ -259,23 +273,34 @@ export const repairGlobalQuestionCount = mutation({
         `Processed batch ${batchCount}: ${result.page.length} questions`,
       );
 
+      // Check if we're done with all data
+      if (result.isDone) {
+        isComplete = true;
+        cursor = null;
+        break;
+      }
+
       // If we have more data but this is getting large, we should break
       // and let the caller call us again with the cursor
-      if (!result.isDone && batchCount >= 10) {
+      if (batchCount >= 10) {
         console.log(
-          `Processed ${batchCount} batches, stopping to prevent timeout`,
+          `Processed ${batchCount} batches, stopping to prevent timeout. Resume with cursor: ${cursor}`,
         );
         break;
       }
     } while (cursor);
 
-    console.log(
-      `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches`,
-    );
+    const message = isComplete
+      ? `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches`
+      : `Partial repair: ${totalProcessed} questions processed in ${batchCount} batches. Resume with returned cursor.`;
+
+    console.log(message);
 
     return {
       totalProcessed,
       batchCount,
+      nextCursor: cursor,
+      isComplete,
     };
   },
 });
@@ -295,7 +320,6 @@ export const clearSection1Aggregates = internalMutation({
   args: {},
   returns: v.null(),
   handler: async ctx => {
-    const { totalQuestionCount } = await import('./aggregates');
     await totalQuestionCount.clear(ctx, { namespace: 'global' });
     console.log('Section 1 aggregates cleared');
     return null;
@@ -317,7 +341,6 @@ export const processQuestionsBatchGlobal = internalMutation({
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize || 100;
-    const { totalQuestionCount } = await import('./aggregates');
 
     const result = await ctx.db.query('questions').paginate({
       cursor: args.cursor,
@@ -350,7 +373,6 @@ export const processThemeAggregatesBatch = internalMutation({
     processed: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { questionCountByTheme } = await import('./aggregates');
     let processed = 0;
 
     for (const themeId of args.themeIds) {
@@ -386,7 +408,6 @@ export const processSubthemeAggregatesBatch = internalMutation({
     processed: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { questionCountBySubtheme } = await import('./aggregates');
     let processed = 0;
 
     for (const subthemeId of args.subthemeIds) {
@@ -425,7 +446,6 @@ export const processGroupAggregatesBatch = internalMutation({
     processed: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { questionCountByGroup } = await import('./aggregates');
     let processed = 0;
 
     for (const groupId of args.groupIds) {
@@ -498,7 +518,6 @@ export const clearSection2Aggregates = internalMutation({
   args: {},
   returns: v.null(),
   handler: async ctx => {
-    const { randomQuestions } = await import('./aggregates');
     await randomQuestions.clear(ctx, { namespace: 'global' });
     console.log('Section 2 aggregates cleared');
     return null;
@@ -520,7 +539,6 @@ export const processQuestionsBatchRandom = internalMutation({
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize || 100;
-    const { randomQuestions } = await import('./aggregates');
 
     const result = await ctx.db.query('questions').paginate({
       cursor: args.cursor,
@@ -555,7 +573,6 @@ export const processThemeRandomAggregatesBatch = internalMutation({
     processed: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { randomQuestionsByTheme } = await import('./aggregates');
     let processed = 0;
 
     for (const themeId of args.themeIds) {
@@ -593,7 +610,6 @@ export const processSubthemeRandomAggregatesBatch = internalMutation({
     processed: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { randomQuestionsBySubtheme } = await import('./aggregates');
     let processed = 0;
 
     for (const subthemeId of args.subthemeIds) {
@@ -632,7 +648,6 @@ export const processGroupRandomAggregatesBatch = internalMutation({
     processed: v.number(),
   }),
   handler: async (ctx, args) => {
-    const { randomQuestionsByGroup } = await import('./aggregates');
     let processed = 0;
 
     for (const groupId of args.groupIds) {
@@ -683,21 +698,6 @@ export const repairSection3UserSpecificAggregates = internalMutation({
     console.log(
       `Starting Section 3: User-Specific Aggregates Repair (batch size: ${batchSize})...`,
     );
-
-    const {
-      answeredByUser,
-      incorrectByUser,
-      bookmarkedByUser,
-      answeredByThemeByUser,
-      answeredBySubthemeByUser,
-      answeredByGroupByUser,
-      incorrectByThemeByUser,
-      incorrectBySubthemeByUser,
-      incorrectByGroupByUser,
-      bookmarkedByThemeByUser,
-      bookmarkedBySubthemeByUser,
-      bookmarkedByGroupByUser,
-    } = await import('./aggregates');
 
     let usersProcessed = 0;
     let totalStats = 0;
@@ -920,21 +920,6 @@ export const processUsersBatch = internalMutation({
     hierarchicalEntries: v.number(),
   }),
   handler: async (ctx, args) => {
-    const {
-      answeredByUser,
-      incorrectByUser,
-      bookmarkedByUser,
-      answeredByThemeByUser,
-      answeredBySubthemeByUser,
-      answeredByGroupByUser,
-      incorrectByThemeByUser,
-      incorrectBySubthemeByUser,
-      incorrectByGroupByUser,
-      bookmarkedByThemeByUser,
-      bookmarkedBySubthemeByUser,
-      bookmarkedByGroupByUser,
-    } = await import('./aggregates');
-
     let usersProcessed = 0;
     let totalStats = 0;
     let totalBookmarks = 0;
@@ -1094,7 +1079,7 @@ export const processUsersBatch = internalMutation({
 });
 
 /**
- * One-click repair for a user (basic + hierarchical) - inline implementation
+ * One-click repair for a user (basic + hierarchical) - delegates to tested internal mutations
  */
 export const repairUserAllAggregates = mutation({
   args: { userId: v.id('users') },
@@ -1108,137 +1093,32 @@ export const repairUserAllAggregates = mutation({
       processed: v.number(),
     }),
   }),
-  handler: async (ctx, args) => {
-    // Clear all aggregates first
-    await Promise.all([
-      // Basic aggregates
-      answeredByUser.clear(ctx, { namespace: args.userId }),
-      incorrectByUser.clear(ctx, { namespace: args.userId }),
-      bookmarkedByUser.clear(ctx, { namespace: args.userId }),
-      // Hierarchical aggregates
-      incorrectByThemeByUser.clear(ctx, { namespace: args.userId }),
-      incorrectBySubthemeByUser.clear(ctx, { namespace: args.userId }),
-      incorrectByGroupByUser.clear(ctx, { namespace: args.userId }),
-      bookmarkedByThemeByUser.clear(ctx, { namespace: args.userId }),
-      bookmarkedBySubthemeByUser.clear(ctx, { namespace: args.userId }),
-      bookmarkedByGroupByUser.clear(ctx, { namespace: args.userId }),
-      answeredByThemeByUser.clear(ctx, { namespace: args.userId }),
-      answeredBySubthemeByUser.clear(ctx, { namespace: args.userId }),
-      answeredByGroupByUser.clear(ctx, { namespace: args.userId }),
-    ]);
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
+    basic: { answered: number; incorrect: number; bookmarked: number };
+    hierarchical: { processed: number };
+  }> => {
+    // Call existing tested internal mutations instead of duplicating logic
+    const basic: { answered: number; incorrect: number; bookmarked: number } =
+      await ctx.runMutation(
+        internal.aggregateRepairs.repairUserBasicAggregates,
+        {
+          userId: args.userId,
+        },
+      );
 
-    // Repair basic aggregates
-    const stats = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user', q => q.eq('userId', args.userId))
-      .collect();
-
-    let answered = 0,
-      incorrect = 0;
-    for (const stat of stats) {
-      if (stat.hasAnswered) {
-        await answeredByUser.insertIfDoesNotExist(ctx, stat);
-        answered++;
-      }
-      if (stat.isIncorrect) {
-        await incorrectByUser.insertIfDoesNotExist(ctx, stat);
-        incorrect++;
-      }
-    }
-
-    const bookmarks = await ctx.db
-      .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', args.userId))
-      .collect();
-
-    let bookmarked = 0;
-    for (const bookmark of bookmarks) {
-      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
-      bookmarked++;
-    }
-
-    // Repair hierarchical aggregates
-    let processed = 0;
-
-    // Process stats for hierarchical
-    for (const stat of stats) {
-      const question = await ctx.db.get(stat.questionId);
-      if (question) {
-        // Answered hierarchical
-        if (stat.hasAnswered) {
-          if (question.themeId) {
-            await answeredByThemeByUser.insertIfDoesNotExist(ctx, {
-              ...stat,
-              themeId: question.themeId,
-            });
-          }
-          if (question.subthemeId) {
-            await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, {
-              ...stat,
-              subthemeId: question.subthemeId,
-            });
-          }
-          if (question.groupId) {
-            await answeredByGroupByUser.insertIfDoesNotExist(ctx, {
-              ...stat,
-              groupId: question.groupId,
-            });
-          }
-        }
-
-        // Incorrect hierarchical
-        if (stat.isIncorrect) {
-          if (question.themeId) {
-            await incorrectByThemeByUser.insertIfDoesNotExist(ctx, {
-              ...stat,
-              themeId: question.themeId,
-            });
-          }
-          if (question.subthemeId) {
-            await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, {
-              ...stat,
-              subthemeId: question.subthemeId,
-            });
-          }
-          if (question.groupId) {
-            await incorrectByGroupByUser.insertIfDoesNotExist(ctx, {
-              ...stat,
-              groupId: question.groupId,
-            });
-          }
-        }
-        processed++;
-      }
-    }
-
-    // Process bookmarks for hierarchical
-    for (const bookmark of bookmarks) {
-      const question = await ctx.db.get(bookmark.questionId);
-      if (question) {
-        if (question.themeId) {
-          await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
-            ...bookmark,
-            themeId: question.themeId,
-          });
-        }
-        if (question.subthemeId) {
-          await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
-            ...bookmark,
-            subthemeId: question.subthemeId,
-          });
-        }
-        if (question.groupId) {
-          await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
-            ...bookmark,
-            groupId: question.groupId,
-          });
-        }
-      }
-    }
+    const hierarchical: { processed: number } = await ctx.runMutation(
+      internal.aggregateRepairs.repairUserHierarchicalAggregates,
+      {
+        userId: args.userId,
+      },
+    );
 
     return {
-      basic: { answered, incorrect, bookmarked },
-      hierarchical: { processed },
+      basic,
+      hierarchical,
     };
   },
 });
