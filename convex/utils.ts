@@ -176,3 +176,15 @@ export async function canSafelyDelete(
   // If we get here, it means no dependencies were found
   return true;
 }
+
+// Helper function to get ISO week string from timestamp
+export function getWeekString(timestamp: number): string {
+  const date = new Date(timestamp);
+  const year = date.getFullYear();
+  const firstDayOfYear = new Date(year, 0, 1);
+  const dayOfYear = Math.floor(
+    (date.getTime() - firstDayOfYear.getTime()) / (24 * 60 * 60 * 1000),
+  );
+  const weekNumber = Math.ceil((dayOfYear + firstDayOfYear.getDay() + 1) / 7);
+  return `${year}-W${weekNumber.toString().padStart(2, '0')}`;
+}

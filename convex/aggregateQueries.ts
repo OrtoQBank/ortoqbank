@@ -1,34 +1,38 @@
-/* eslint-disable unicorn/no-null */
-
 import { v } from 'convex/values';
 
-import { Id } from './_generated/dataModel';
 import { api } from './_generated/api';
-import { mutation, query, QueryCtx, MutationCtx } from './_generated/server';
-import { getCurrentUserOrThrow } from './users';
+import { Id } from './_generated/dataModel';
 import {
-  questionCountByTheme,
-  questionCountBySubtheme,
-  questionCountByGroup,
-  totalQuestionCount,
+  mutation,
+  type MutationCtx,
+  query,
+  type QueryCtx,
+} from './_generated/server';
+import {
+  answeredByGroupByUser,
+  answeredBySubthemeByUser,
+  answeredByThemeByUser,
   answeredByUser,
-  incorrectByUser,
+  bookmarkedByGroupByUser,
+  bookmarkedBySubthemeByUser,
+  bookmarkedByThemeByUser,
   bookmarkedByUser,
-  randomQuestions,
-  randomQuestionsByTheme,
-  randomQuestionsBySubtheme,
-  randomQuestionsByGroup,
+  incorrectByGroupByUser,
+  incorrectBySubthemeByUser,
   // Hierarchical user-specific count aggregates
   incorrectByThemeByUser,
-  incorrectBySubthemeByUser,
-  incorrectByGroupByUser,
-  bookmarkedByThemeByUser,
-  bookmarkedBySubthemeByUser,
-  bookmarkedByGroupByUser,
-  answeredByThemeByUser,
-  answeredBySubthemeByUser,
-  answeredByGroupByUser,
+  incorrectByUser,
+  questionCountByGroup,
+  questionCountBySubtheme,
+  questionCountByTheme,
+  randomQuestions,
+  randomQuestionsByGroup,
+  randomQuestionsBySubtheme,
+  randomQuestionsByTheme,
+  totalQuestionCount,
 } from './aggregates';
+import { getCurrentUserOrThrow } from './users';
+import { getWeekString } from './utils';
 
 /**
  * UNIFIED AGGREGATE-BASED COUNTING SYSTEM
@@ -643,7 +647,7 @@ export const getQuestionCountBySelection = query({
     }
 
     // Convert to array for filtering
-    const allQuestions = Array.from(questionIds);
+    const allQuestions = [...questionIds];
 
     // Apply question mode filter
     if (args.filter === 'all') {
@@ -1590,38 +1594,60 @@ export const getBatchQuestionCountsBySelection = query({
           let count = 0;
 
           if (args.filter === 'incorrect') {
-            if (selection.type === 'theme') {
-              count = await (incorrectByThemeByUser.count as any)(ctx, {
-                namespace,
-                bounds: {},
-              });
-            } else if (selection.type === 'subtheme') {
-              count = await (incorrectBySubthemeByUser.count as any)(ctx, {
-                namespace,
-                bounds: {},
-              });
-            } else if (selection.type === 'group') {
-              count = await (incorrectByGroupByUser.count as any)(ctx, {
-                namespace,
-                bounds: {},
-              });
+            switch (selection.type) {
+              case 'theme': {
+                count = await (incorrectByThemeByUser.count as any)(ctx, {
+                  namespace,
+                  bounds: {},
+                });
+
+                break;
+              }
+              case 'subtheme': {
+                count = await (incorrectBySubthemeByUser.count as any)(ctx, {
+                  namespace,
+                  bounds: {},
+                });
+
+                break;
+              }
+              case 'group': {
+                count = await (incorrectByGroupByUser.count as any)(ctx, {
+                  namespace,
+                  bounds: {},
+                });
+
+                break;
+              }
+              // No default
             }
           } else if (args.filter === 'bookmarked') {
-            if (selection.type === 'theme') {
-              count = await (bookmarkedByThemeByUser.count as any)(ctx, {
-                namespace,
-                bounds: {},
-              });
-            } else if (selection.type === 'subtheme') {
-              count = await (bookmarkedBySubthemeByUser.count as any)(ctx, {
-                namespace,
-                bounds: {},
-              });
-            } else if (selection.type === 'group') {
-              count = await (bookmarkedByGroupByUser.count as any)(ctx, {
-                namespace,
-                bounds: {},
-              });
+            switch (selection.type) {
+              case 'theme': {
+                count = await (bookmarkedByThemeByUser.count as any)(ctx, {
+                  namespace,
+                  bounds: {},
+                });
+
+                break;
+              }
+              case 'subtheme': {
+                count = await (bookmarkedBySubthemeByUser.count as any)(ctx, {
+                  namespace,
+                  bounds: {},
+                });
+
+                break;
+              }
+              case 'group': {
+                count = await (bookmarkedByGroupByUser.count as any)(ctx, {
+                  namespace,
+                  bounds: {},
+                });
+
+                break;
+              }
+              // No default
             }
           }
 
@@ -1863,20 +1889,6 @@ export const getUserWeeklyProgressWithAggregates = query({
 
     if (answeredStats.length === 0) {
       return [];
-    }
-
-    // Helper function to get ISO week string from timestamp
-    function getWeekString(timestamp: number): string {
-      const date = new Date(timestamp);
-      const year = date.getFullYear();
-      const firstDayOfYear = new Date(year, 0, 1);
-      const dayOfYear = Math.floor(
-        (date.getTime() - firstDayOfYear.getTime()) / (24 * 60 * 60 * 1000),
-      );
-      const weekNumber = Math.ceil(
-        (dayOfYear + firstDayOfYear.getDay() + 1) / 7,
-      );
-      return `${year}-W${weekNumber.toString().padStart(2, '0')}`;
     }
 
     // Group by week and calculate cumulative totals

@@ -3,15 +3,16 @@
 // ============================================================================
 
 import { v } from 'convex/values';
-import { query, mutation } from './_generated/server';
+
 import { Id } from './_generated/dataModel';
+import { mutation, query } from './_generated/server';
 import {
   answeredByUser,
   bookmarkedByUser,
-  incorrectByUser,
-  incorrectByThemeByUser,
-  incorrectBySubthemeByUser,
   incorrectByGroupByUser,
+  incorrectBySubthemeByUser,
+  incorrectByThemeByUser,
+  incorrectByUser,
   totalQuestionCount,
 } from './aggregates';
 
@@ -222,7 +223,8 @@ export const getHealthCheck = query({
     }),
   }),
   handler: async (ctx, args) => {
-    const userId = args.userId || (await ctx.db.query('users').first())?._id;
+    const firstUser = await ctx.db.query('users').first();
+    const userId = args.userId || firstUser?._id;
 
     if (!userId) {
       return {

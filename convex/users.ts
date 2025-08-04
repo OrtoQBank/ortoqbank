@@ -1,5 +1,4 @@
-import { UserJSON } from '@clerk/backend';
-import { v, type Validator } from 'convex/values';
+import { v } from 'convex/values';
 
 import {
   internalMutation,

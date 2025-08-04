@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 
+import { api } from './_generated/api';
 import { Doc, Id } from './_generated/dataModel';
 import {
   mutation,
@@ -8,7 +9,6 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
-import { api } from './_generated/api';
 
 type QuestionMode = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
 
@@ -227,7 +227,11 @@ async function collectRandomQuestionsWithAggregates(
   for (const themeId of selectedThemes) {
     if (remainingQuestions <= 0) break;
 
-    if (!overriddenThemes.has(themeId)) {
+    if (overriddenThemes.has(themeId)) {
+      console.log(
+        `🚀 AGGREGATE: Theme ${themeId} skipped (overridden by subthemes)`,
+      );
+    } else {
       const themeQuestionIds = await ctx.runQuery(
         api.aggregateQueries.getRandomQuestionsByTheme,
         {
@@ -240,10 +244,6 @@ async function collectRandomQuestionsWithAggregates(
       remainingQuestions -= themeQuestionIds.length;
       console.log(
         `🚀 AGGREGATE: Theme ${themeId} contributed ${themeQuestionIds.length} questions`,
-      );
-    } else {
-      console.log(
-        `🚀 AGGREGATE: Theme ${themeId} skipped (overridden by subthemes)`,
       );
     }
   }

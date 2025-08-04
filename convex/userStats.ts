@@ -1,25 +1,24 @@
 import { v } from 'convex/values';
 
-import { api } from './_generated/api';
-import { Doc, Id } from './_generated/dataModel';
-import { query, internalMutation } from './_generated/server';
+import { Id } from './_generated/dataModel';
+import { internalMutation, query } from './_generated/server';
 import {
   getTotalQuestionCount,
   getUserAnsweredCount,
-  getUserIncorrectCount,
   getUserBookmarksCount,
+  getUserIncorrectCount,
 } from './aggregateQueries.js';
-import { getCurrentUserOrThrow } from './users';
 import {
-  answeredByUser,
-  incorrectByUser,
-  answeredByThemeByUser,
-  answeredBySubthemeByUser,
   answeredByGroupByUser,
-  incorrectByThemeByUser,
-  incorrectBySubthemeByUser,
+  answeredBySubthemeByUser,
+  answeredByThemeByUser,
+  answeredByUser,
   incorrectByGroupByUser,
+  incorrectBySubthemeByUser,
+  incorrectByThemeByUser,
+  incorrectByUser,
 } from './aggregates';
+import { getCurrentUserOrThrow } from './users';
 
 type UserStats = {
   overall: {

@@ -1,5 +1,3 @@
-/* eslint-disable unicorn/no-useless-undefined */
-
 import { GenericMutationCtx, paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
@@ -9,14 +7,13 @@ import {
   // Keep these for defining the actual mutations/queries
   internalAction,
   internalMutation,
-  internalQuery,
   mutation,
   query,
 } from './_generated/server';
 import {
-  questionCountByTheme,
-  questionCountBySubtheme,
   questionCountByGroup,
+  questionCountBySubtheme,
+  questionCountByTheme,
   totalQuestionCount,
 } from './aggregates';
 // Question stats are now handled by aggregates and triggers
