@@ -287,26 +287,45 @@ async function collectQuestionsOptimized(
 }
 
 /**
- * Apply hierarchical taxonomical filtering to a baseline pool (Step 2 of filtering)
+ * Hierarchical filtering criteria for applying taxonomy rules consistently
  */
-async function applyHierarchicalTaxonomicalFilters(
+interface HierarchicalFilteringCriteria {
+  // Hierarchy mappings
+  subthemeToTheme: Map<Id<'subthemes'>, Id<'themes'>>;
+  groupToSubtheme: Map<Id<'groups'>, Id<'subthemes'>>;
+  groupsBySubtheme: Map<Id<'subthemes'>, Id<'groups'>[]>;
+
+  // Processing criteria for subthemes
+  subthemesToProcess: Array<{
+    subthemeId: Id<'subthemes'>;
+    groupsForThisSubtheme: Id<'groups'>[] | undefined;
+    isExplicitlySelected: boolean;
+    shouldIncludeNonGroupQuestions: boolean;
+  }>;
+
+  // Processing criteria for themes
+  themesToProcess: Array<{
+    themeId: Id<'themes'>;
+    isOverridden: boolean;
+  }>;
+
+  // Global flags
+  hasAnyGroupsSelected: boolean;
+  selectedGroups: Id<'groups'>[];
+}
+
+/**
+ * Build hierarchical filtering criteria that can be applied as either database queries or in-memory filters
+ */
+async function buildHierarchicalFilteringCriteria(
   ctx: QueryCtx | MutationCtx,
-  baseQuestions: Doc<'questions'>[],
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
-): Promise<Doc<'questions'>[]> {
+): Promise<HierarchicalFilteringCriteria> {
   console.log(
-    `🔧 DEBUG: Applying hierarchical taxonomical filters to ${baseQuestions.length} questions`,
+    `🔧 DEBUG: Building hierarchical filtering criteria - themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
   );
-  console.log(
-    `🔧 DEBUG: Filters - themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
-  );
-
-  // Use the same hierarchical logic as collectQuestionsWithHierarchyRestriction
-  // but apply it to the baseline pool instead of querying the database directly
-  const validQuestionIds = new Set<Id<'questions'>>();
-  const processedQuestionIds = new Set<Id<'questions'>>();
 
   // Step 1: Batch fetch subtheme-to-theme relationships
   const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
@@ -324,29 +343,10 @@ async function applyHierarchicalTaxonomicalFilters(
   // Step 2: Batch fetch group-to-subtheme relationships
   const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
   if (selectedGroups.length > 0) {
-    console.log(
-      `🔧 DEBUG: Looking up ${selectedGroups.length} groups:`,
-      selectedGroups,
-    );
     const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
-    console.log(
-      `🔧 DEBUG: Found groups:`,
-      groups.map((g, idx) => ({
-        groupId: selectedGroups[idx],
-        exists: !!g,
-        subthemeId: g?.subthemeId,
-      })),
-    );
     groups.forEach((group, idx) => {
       if (group?.subthemeId) {
         groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
-        console.log(
-          `🔧 DEBUG: Mapped group ${selectedGroups[idx]} to subtheme ${group.subthemeId}`,
-        );
-      } else {
-        console.log(
-          `🔧 DEBUG: Group ${selectedGroups[idx]} has no subthemeId or doesn't exist`,
-        );
       }
     });
   }
@@ -360,53 +360,110 @@ async function applyHierarchicalTaxonomicalFilters(
         groupsBySubtheme.set(subthemeId, []);
       }
       groupsBySubtheme.get(subthemeId)!.push(groupId);
-      console.log(`🔧 DEBUG: Added group ${groupId} to subtheme ${subthemeId}`);
-    } else {
-      console.log(
-        `🔧 DEBUG: Group ${groupId} has no subthemeId mapping, skipping`,
-      );
     }
   }
-  console.log(
-    `🔧 DEBUG: Groups by subtheme:`,
-    Object.fromEntries(groupsBySubtheme),
-  );
 
-  // Step 4: Process subthemes (they override groups and may override themes)
-  const processedSubthemes = new Set<Id<'subthemes'>>();
+  // Step 4: Determine subthemes to process (including implied ones from groups)
   const hasAnyGroupsSelected = selectedGroups.length > 0;
-  console.log(`🔧 DEBUG: hasAnyGroupsSelected: ${hasAnyGroupsSelected}`);
-
-  // If groups are selected but no subthemes are explicitly selected,
-  // we need to process the implied subthemes that contain those groups
   const subthemesToProcess = new Set(selectedSubthemes);
-  console.log(`🔧 DEBUG: Initial subthemesToProcess (explicit):`, [
-    ...subthemesToProcess,
-  ]);
+
+  // Add implied subthemes from groups
   if (hasAnyGroupsSelected) {
     for (const [subthemeId] of groupsBySubtheme) {
       subthemesToProcess.add(subthemeId);
-      console.log(`🔧 DEBUG: Added implied subtheme: ${subthemeId}`);
+
+      // Add to subtheme-to-theme mapping if missing
+      if (!subthemeToTheme.has(subthemeId)) {
+        const subtheme = await ctx.db.get(subthemeId);
+        if (subtheme?.themeId) {
+          subthemeToTheme.set(subthemeId, subtheme.themeId);
+        }
+      }
     }
   }
 
-  console.log(`🔧 DEBUG: Final subthemesToProcess:`, [...subthemesToProcess]);
-
+  // Step 5: Build subtheme processing criteria
+  const subthemeProcessingCriteria = [];
   for (const subthemeId of subthemesToProcess) {
     const groupsForThisSubtheme = groupsBySubtheme.get(subthemeId);
     const isExplicitlySelected = selectedSubthemes.includes(subthemeId);
 
-    console.log(`🔧 DEBUG: Processing subtheme ${subthemeId}:`);
-    console.log(`🔧 DEBUG: - groupsForThisSubtheme:`, groupsForThisSubtheme);
-    console.log(`🔧 DEBUG: - isExplicitlySelected:`, isExplicitlySelected);
+    // Determine if we should include non-group questions from this subtheme
+    const shouldIncludeNonGroupQuestions =
+      groupsForThisSubtheme && groupsForThisSubtheme.length > 0
+        ? isExplicitlySelected // This subtheme has selected groups - only include non-group questions if explicitly selected
+        : hasAnyGroupsSelected
+          ? isExplicitlySelected // Groups are selected globally - only include if explicitly selected
+          : true; // No groups selected anywhere - include all questions
+
+    subthemeProcessingCriteria.push({
+      subthemeId,
+      groupsForThisSubtheme,
+      isExplicitlySelected,
+      shouldIncludeNonGroupQuestions,
+    });
+  }
+
+  // Step 6: Build theme processing criteria
+  const overriddenThemes = new Set(subthemeToTheme.values());
+  const themeProcessingCriteria = selectedThemes.map(themeId => ({
+    themeId,
+    isOverridden: overriddenThemes.has(themeId),
+  }));
+
+  return {
+    subthemeToTheme,
+    groupToSubtheme,
+    groupsBySubtheme,
+    subthemesToProcess: subthemeProcessingCriteria,
+    themesToProcess: themeProcessingCriteria,
+    hasAnyGroupsSelected,
+    selectedGroups,
+  };
+}
+
+/**
+ * Apply hierarchical taxonomical filtering to a baseline pool (Step 2 of filtering)
+ */
+async function applyHierarchicalTaxonomicalFilters(
+  ctx: QueryCtx | MutationCtx,
+  baseQuestions: Doc<'questions'>[],
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+): Promise<Doc<'questions'>[]> {
+  console.log(
+    `🔧 DEBUG: Applying hierarchical taxonomical filters to ${baseQuestions.length} questions`,
+  );
+
+  // Use shared hierarchical filtering criteria
+  const criteria = await buildHierarchicalFilteringCriteria(
+    ctx,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+  );
+
+  const validQuestionIds = new Set<Id<'questions'>>();
+
+  // Process groups first (highest priority)
+  for (const groupId of criteria.selectedGroups) {
+    baseQuestions.forEach(question => {
+      if (question.groupId === groupId) {
+        validQuestionIds.add(question._id);
+      }
+    });
+  }
+
+  // Process subthemes using criteria
+  for (const subthemeInfo of criteria.subthemesToProcess) {
+    const {
+      subthemeId,
+      groupsForThisSubtheme,
+      shouldIncludeNonGroupQuestions,
+    } = subthemeInfo;
 
     if (groupsForThisSubtheme && groupsForThisSubtheme.length > 0) {
-      console.log(
-        `🔧 DEBUG: Filtering ${baseQuestions.length} base questions for groups:`,
-        groupsForThisSubtheme,
-      );
-      let matchedQuestions = 0;
-
       // Add questions from selected groups in this subtheme
       baseQuestions.forEach(question => {
         if (
@@ -414,20 +471,11 @@ async function applyHierarchicalTaxonomicalFilters(
           groupsForThisSubtheme.includes(question.groupId)
         ) {
           validQuestionIds.add(question._id);
-          matchedQuestions++;
         }
       });
 
-      console.log(
-        `🔧 DEBUG: Found ${matchedQuestions} questions matching the selected groups`,
-      );
-      console.log(
-        `🔧 DEBUG: Sample question groupIds from base pool:`,
-        baseQuestions.slice(0, 5).map(q => ({ id: q._id, groupId: q.groupId })),
-      );
-
-      // Only add subtheme non-group questions if the subtheme was explicitly selected
-      if (isExplicitlySelected) {
+      // Add non-group questions if criteria indicates we should
+      if (shouldIncludeNonGroupQuestions) {
         baseQuestions.forEach(question => {
           if (
             question.subthemeId === subthemeId &&
@@ -438,25 +486,8 @@ async function applyHierarchicalTaxonomicalFilters(
         });
       }
     } else {
-      // This subtheme has no groups selected in our mapping
-      // If groups are selected globally, DO NOT add any questions from this subtheme
-      // unless the subtheme was explicitly selected
-      if (hasAnyGroupsSelected) {
-        if (isExplicitlySelected) {
-          // Add questions from this subtheme that don't belong to any group
-          baseQuestions.forEach(question => {
-            if (
-              question.subthemeId === subthemeId &&
-              (question.groupId === undefined || question.groupId === null)
-            ) {
-              validQuestionIds.add(question._id);
-            }
-          });
-        }
-        // If groups are selected but this subtheme wasn't explicitly selected,
-        // DO NOT add any questions from this subtheme to avoid the bug
-      } else {
-        // Add all questions from this subtheme ONLY if no groups are selected anywhere
+      // This subtheme has no selected groups
+      if (shouldIncludeNonGroupQuestions) {
         baseQuestions.forEach(question => {
           if (question.subthemeId === subthemeId) {
             validQuestionIds.add(question._id);
@@ -464,20 +495,13 @@ async function applyHierarchicalTaxonomicalFilters(
         });
       }
     }
-
-    processedSubthemes.add(subthemeId);
   }
 
-  // Step 5: Process themes that are NOT overridden by their subthemes
-  const overriddenThemes = new Set(subthemeToTheme.values());
-  console.log(`🔧 DEBUG: Processing themes, overridden:`, [
-    ...overriddenThemes,
-  ]);
-
-  for (const themeId of selectedThemes) {
-    if (!overriddenThemes.has(themeId)) {
+  // Process themes using criteria
+  for (const themeInfo of criteria.themesToProcess) {
+    if (!themeInfo.isOverridden) {
       baseQuestions.forEach(question => {
-        if (question.themeId === themeId) {
+        if (question.themeId === themeInfo.themeId) {
           validQuestionIds.add(question._id);
         }
       });
@@ -496,18 +520,6 @@ async function applyHierarchicalTaxonomicalFilters(
   console.log(
     `🔧 DEBUG: Final filtered questions: ${filteredQuestions.length}`,
   );
-  if (
-    filteredQuestions.length === 0 &&
-    baseQuestions.length > 0 &&
-    selectedGroups.length > 0
-  ) {
-    console.log(`🔧 DEBUG: ⚠️  NO QUESTIONS MATCHED! This likely means:`);
-    console.log(`🔧 DEBUG: - The selected group(s) don't exist, OR`);
-    console.log(`🔧 DEBUG: - The group(s) have no subthemeId, OR`);
-    console.log(
-      `🔧 DEBUG: - None of the base questions belong to the selected group(s)`,
-    );
-  }
 
   return filteredQuestions;
 }
@@ -536,100 +548,35 @@ async function collectQuestionsWithHierarchyRestriction(
   };
 
   console.log(`🔍 DEBUG: ===== HIERARCHY RESTRICTION LOGIC =====`);
-  console.log(`🔍 DEBUG: Input - Themes:`, selectedThemes);
-  console.log(`🔍 DEBUG: Input - Subthemes:`, selectedSubthemes);
-  console.log(`🔍 DEBUG: Input - Groups:`, selectedGroups);
 
-  // Step 1: Batch fetch subtheme-to-theme relationships
-  const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
-  if (selectedSubthemes.length > 0) {
-    const subthemes = await Promise.all(
-      selectedSubthemes.map(id => ctx.db.get(id)),
-    );
-    subthemes.forEach((subtheme, idx) => {
-      if (subtheme?.themeId) {
-        subthemeToTheme.set(selectedSubthemes[idx], subtheme.themeId);
-      }
-    });
-  }
-
-  // Step 2: Batch fetch group-to-subtheme relationships
-  const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
-  if (selectedGroups.length > 0) {
-    const groups = await Promise.all(selectedGroups.map(id => ctx.db.get(id)));
-    groups.forEach((group, idx) => {
-      if (group?.subthemeId) {
-        groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
-      }
-    });
-  }
-
-  // Step 3: Group selected groups by their subtheme
-  const groupsBySubtheme = new Map<Id<'subthemes'>, Id<'groups'>[]>();
-  for (const groupId of selectedGroups) {
-    const subthemeId = groupToSubtheme.get(groupId);
-    if (subthemeId) {
-      if (!groupsBySubtheme.has(subthemeId)) {
-        groupsBySubtheme.set(subthemeId, []);
-      }
-      groupsBySubtheme.get(subthemeId)!.push(groupId);
-    }
-  }
-
-  // Step 4: Process subthemes (they override groups and may override themes)
-  const processedSubthemes = new Set<Id<'subthemes'>>();
-  console.log(
-    `🔍 DEBUG: Processing ${selectedSubthemes.length} subthemes:`,
+  // Use shared hierarchical filtering criteria
+  const criteria = await buildHierarchicalFilteringCriteria(
+    ctx,
+    selectedThemes,
     selectedSubthemes,
-  );
-  console.log(
-    `🔍 DEBUG: Groups by subtheme:`,
-    Object.fromEntries(groupsBySubtheme),
+    selectedGroups,
   );
 
-  // Check if ANY groups are selected globally
-  const hasAnyGroupsSelected = selectedGroups.length > 0;
-  console.log(`🔍 DEBUG: Has any groups selected: ${hasAnyGroupsSelected}`);
-
-  // If groups are selected but no subthemes are explicitly selected,
-  // we need to process the implied subthemes that contain those groups
-  const subthemesToProcess = new Set(selectedSubthemes);
-  if (hasAnyGroupsSelected) {
-    const impliedSubthemeIds: Id<'subthemes'>[] = [];
-    for (const [subthemeId] of groupsBySubtheme) {
-      subthemesToProcess.add(subthemeId);
-      console.log(
-        `🔍 DEBUG: Adding implied subtheme ${subthemeId} because it contains selected groups`,
-      );
-
-      // Collect subtheme IDs that need theme mapping
-      if (!subthemeToTheme.has(subthemeId)) {
-        impliedSubthemeIds.push(subthemeId);
-      }
-    }
-
-    // Batch fetch implied subthemes for theme override mapping
-    if (impliedSubthemeIds.length > 0) {
-      const impliedSubthemes = await Promise.all(
-        impliedSubthemeIds.map(id => ctx.db.get(id)),
-      );
-      impliedSubthemes.forEach((subtheme, idx) => {
-        if (subtheme?.themeId) {
-          const subthemeId = impliedSubthemeIds[idx];
-          subthemeToTheme.set(subthemeId, subtheme.themeId);
-          console.log(
-            `🔍 DEBUG: Marking theme ${subtheme.themeId} as overridden by implied subtheme ${subthemeId}`,
-          );
-        }
-      });
-    }
+  // Process groups first (highest priority)
+  for (const groupId of criteria.selectedGroups) {
+    const beforeCount = allQuestions.length;
+    const groupQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_group', (q: any) => q.eq('groupId', groupId))
+      .take(maxQuestions * 2);
+    addQuestions(groupQuestions);
+    const addedFromGroup = allQuestions.length - beforeCount;
+    console.log(`🔍 DEBUG: Group ${groupId} added ${addedFromGroup} questions`);
   }
 
-  console.log(`🔍 DEBUG: Final subthemes to process:`, [...subthemesToProcess]);
-
-  for (const subthemeId of subthemesToProcess) {
-    const groupsForThisSubtheme = groupsBySubtheme.get(subthemeId);
-    const isExplicitlySelected = selectedSubthemes.includes(subthemeId);
+  // Process subthemes using criteria
+  for (const subthemeInfo of criteria.subthemesToProcess) {
+    const {
+      subthemeId,
+      groupsForThisSubtheme,
+      isExplicitlySelected,
+      shouldIncludeNonGroupQuestions,
+    } = subthemeInfo;
 
     console.log(
       `🔍 DEBUG: Processing subtheme ${subthemeId}, groups:`,
@@ -638,12 +585,8 @@ async function collectQuestionsWithHierarchyRestriction(
     );
 
     if (groupsForThisSubtheme && groupsForThisSubtheme.length > 0) {
-      console.log(
-        `🔍 DEBUG: Subtheme ${subthemeId} has groups selected - using restriction logic`,
-      );
+      // Get questions from selected groups in this subtheme
       let groupQuestionsCount = 0;
-
-      // Get questions from selected groups
       for (const groupId of groupsForThisSubtheme) {
         const beforeCount = allQuestions.length;
         const groupQuestions = await ctx.db
@@ -658,8 +601,8 @@ async function collectQuestionsWithHierarchyRestriction(
         );
       }
 
-      // Only get subtheme non-group questions if the subtheme was explicitly selected
-      if (isExplicitlySelected) {
+      // Get non-group questions if criteria indicates we should
+      if (shouldIncludeNonGroupQuestions) {
         const beforeSubthemeCount = allQuestions.length;
         const allSubthemeQuestions = await ctx.db
           .query('questions')
@@ -674,101 +617,56 @@ async function collectQuestionsWithHierarchyRestriction(
         console.log(
           `🔍 DEBUG: Subtheme ${subthemeId} (without groups) added ${addedFromSubtheme} questions`,
         );
-        console.log(
-          `🔍 DEBUG: Total for subtheme ${subthemeId}: ${groupQuestionsCount + addedFromSubtheme} questions`,
-        );
-      } else {
-        console.log(
-          `🔍 DEBUG: Subtheme ${subthemeId} was not explicitly selected - only using group questions`,
-        );
-        console.log(
-          `🔍 DEBUG: Total for subtheme ${subthemeId}: ${groupQuestionsCount} questions (groups only)`,
-        );
       }
     } else {
-      // This subtheme has no groups selected
-      if (hasAnyGroupsSelected) {
-        if (isExplicitlySelected) {
-          // Groups are selected globally, but this subtheme has none selected
-          // Still get questions from this subtheme that don't belong to any group (only if explicitly selected)
-          console.log(
-            `🔍 DEBUG: Subtheme ${subthemeId} has no groups but groups are selected elsewhere - getting non-group questions`,
-          );
-          const beforeCount = allQuestions.length;
-          const allSubthemeQuestions = await ctx.db
-            .query('questions')
-            .withIndex('by_subtheme', (q: any) =>
-              q.eq('subthemeId', subthemeId),
-            )
-            .take(maxQuestions * 2);
-
-          const subthemeQuestionsWithoutGroups = allSubthemeQuestions.filter(
-            (q: any) => q.groupId === undefined || q.groupId === null,
-          );
-          addQuestions(subthemeQuestionsWithoutGroups);
-          const addedFromSubtheme = allQuestions.length - beforeCount;
-          console.log(
-            `🔍 DEBUG: Subtheme ${subthemeId} (non-group questions only) added ${addedFromSubtheme} questions`,
-          );
-        } else {
-          console.log(
-            `🔍 DEBUG: Subtheme ${subthemeId} was not explicitly selected and has no groups - skipping`,
-          );
-        }
-      } else {
-        // Only get all subtheme questions if NO groups are selected anywhere
-        console.log(
-          `🔍 DEBUG: Subtheme ${subthemeId} has no groups and no global groups selected - getting all questions`,
-        );
+      // This subtheme has no selected groups
+      if (shouldIncludeNonGroupQuestions) {
         const beforeCount = allQuestions.length;
         const subthemeQuestions = await ctx.db
           .query('questions')
           .withIndex('by_subtheme', (q: any) => q.eq('subthemeId', subthemeId))
           .take(maxQuestions * 2);
-        addQuestions(subthemeQuestions);
+
+        // Filter to non-group questions if groups are selected globally
+        const questionsToAdd = criteria.hasAnyGroupsSelected
+          ? subthemeQuestions.filter(
+              (q: any) => q.groupId === undefined || q.groupId === null,
+            )
+          : subthemeQuestions;
+
+        addQuestions(questionsToAdd);
         const addedFromSubtheme = allQuestions.length - beforeCount;
         console.log(
-          `🔍 DEBUG: Subtheme ${subthemeId} (all) added ${addedFromSubtheme} questions`,
+          `🔍 DEBUG: Subtheme ${subthemeId} added ${addedFromSubtheme} questions`,
         );
       }
     }
-
-    processedSubthemes.add(subthemeId);
   }
 
-  // Step 5: Process themes that are NOT overridden by their subthemes
-  const overriddenThemes = new Set(subthemeToTheme.values());
-  console.log(
-    `🔍 DEBUG: Processing ${selectedThemes.length} themes:`,
-    selectedThemes,
-  );
-  console.log(`🔍 DEBUG: Overridden themes:`, [...overriddenThemes]);
-
-  for (const themeId of selectedThemes) {
-    if (overriddenThemes.has(themeId)) {
-      console.log(`🔍 DEBUG: Theme ${themeId} is overridden - skipping`);
+  // Process themes using criteria
+  for (const themeInfo of criteria.themesToProcess) {
+    if (themeInfo.isOverridden) {
+      console.log(
+        `🔍 DEBUG: Theme ${themeInfo.themeId} is overridden - skipping`,
+      );
     } else {
       console.log(
-        `🔍 DEBUG: Theme ${themeId} is NOT overridden - adding questions`,
+        `🔍 DEBUG: Theme ${themeInfo.themeId} is NOT overridden - adding questions`,
       );
       const beforeCount = allQuestions.length;
       const themeQuestions = await ctx.db
         .query('questions')
-        .withIndex('by_theme', (q: any) => q.eq('themeId', themeId))
+        .withIndex('by_theme', (q: any) => q.eq('themeId', themeInfo.themeId))
         .take(maxQuestions * 2);
       addQuestions(themeQuestions);
       const addedFromTheme = allQuestions.length - beforeCount;
       console.log(
-        `🔍 DEBUG: Theme ${themeId} added ${addedFromTheme} questions`,
+        `🔍 DEBUG: Theme ${themeInfo.themeId} added ${addedFromTheme} questions`,
       );
     }
   }
 
   console.log(`🔍 DEBUG: FINAL TOTAL: ${allQuestions.length} questions`);
-  console.log(
-    `🔍 DEBUG: Question IDs:`,
-    allQuestions.map(q => q._id),
-  );
   return allQuestions;
 }
 
