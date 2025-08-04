@@ -49,6 +49,7 @@ npm run coverage              # Run tests with coverage
 ## Project Architecture
 
 ### Database Schema (Convex)
+
 - **users**: User profiles with Clerk integration and payment status
 - **themes/subthemes/groups**: Hierarchical taxonomy for question organization
 - **questions**: Question bank with TipTap rich content and taxonomy classification
@@ -67,11 +68,13 @@ npm run coverage              # Run tests with coverage
 - `src/hooks/`: Custom React hooks
 
 ### Authentication & Authorization
+
 - Uses Clerk for authentication with email/password
 - User session management with single active session restriction
 - Payment status tracked in users table (MercadoPago integration)
 
 ### Quiz System Architecture
+
 - **Study Mode**: Immediate feedback after each question
 - **Exam Mode**: Feedback only after quiz completion
 - **Question Modes**: All, unanswered, incorrect, bookmarked questions
@@ -109,6 +112,57 @@ Follow the established Convex patterns in this codebase:
 - MercadoPago for payment processing
 - Payment webhooks handled in API routes
 - User access controlled by `paid` status in database
+
+## Aggregate System Architecture
+
+The application uses a comprehensive aggregate system for O(log n) performance across all counting operations:
+
+### File Organization
+
+- `aggregateRepairs.ts` - Repair functions for inconsistent aggregates (production-safe with pagination)
+- `aggregateWorkflows.ts` - Workflow orchestration for large-scale aggregate repairs  
+- `aggregateMonitoring.ts` - Debug queries and health checks for aggregate validation
+- `aggregateQueries.ts` - CRUD operations and aggregate-based counting queries
+
+### Aggregate Types
+
+1. **Global Question Counts**: `totalQuestionCount`, question counts by theme/subtheme/group
+2. **Random Question Selection**: Efficient random sampling using aggregates
+3. **User-Specific Stats**: Per-user answered/incorrect/bookmarked counts with hierarchical breakdowns
+
+### Production Features
+
+- **15-second safe operations** with proper pagination (100-item batches)
+- **Memory-efficient processing** using cursor-based pagination
+- **Comprehensive workflow system** for multi-step repairs surviving server restarts
+- **Health monitoring** with aggregate vs database validation queries
+
+### Repair System
+
+- Individual repairs: `repairUserAllAggregates(userId)`
+- Section-based repairs: `startSection1Repair()`, `startSection2Repair()`, `startSection3Repair()`
+- Comprehensive repair: `startComprehensiveRepair()` - full system repair with progress tracking
+
+### Question Selection Use Case
+
+The application presents users with 4 question selection modes:
+
+1. **All Mode** (Global):
+   - Displays total question count across entire database
+   - Shows individual theme, subtheme, and group question counts
+   - Uses hierarchical taxonomy filtering: selecting theme1 + subtheme from theme2 counts all theme1 questions plus all theme2/subtheme questions
+
+2. **User-Specific Modes** (Unanswered, Incorrect, Bookmarked):
+   - Displays user-specific total counts for each category
+   - Shows user-specific theme, subtheme, and group counts for that category
+   - Uses hierarchical user aggregates (`incorrectByThemeByUser`, `bookmarkedByGroupByUser`, etc.)
+   - Maintains smart hierarchical filtering with user-specific data
+
+**Performance Benefits:**
+
+- All modes use O(log n) aggregate lookups instead of O(n) table scans
+- Hierarchical selections are optimized with dedicated user-specific aggregates
+- Smart caching prevents double-counting in overlapping taxonomy selections
 
 ## Key Development Notes
 
