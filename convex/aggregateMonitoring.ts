@@ -304,6 +304,10 @@ export const getHealthCheck = query({
   },
 });
 
+// Define types for special namespace values
+type SubthemeIdOrSpecial = Id<'subthemes'> | 'no-subtheme';
+type GroupIdOrSpecial = Id<'groups'> | 'no-group';
+
 /**
  * Comprehensive aggregate status for a specific user
  * Returns all user-specific aggregates plus global aggregates
@@ -358,7 +362,12 @@ export const getAllUserAggregates = query({
     );
 
     // Get question counts by subtheme
-    const questionsBySubtheme = await Promise.all(
+    const questionsBySubtheme: Array<{
+      subthemeId: SubthemeIdOrSpecial;
+      subthemeName: string;
+      count: any;
+      randomCount: any;
+    }> = await Promise.all(
       subthemes.map(async subtheme => {
         const [count, randomCount] = await Promise.all([
           (questionCountBySubtheme.count as any)(ctx, {
@@ -371,7 +380,7 @@ export const getAllUserAggregates = query({
           }),
         ]);
         return {
-          subthemeId: subtheme._id,
+          subthemeId: subtheme._id as SubthemeIdOrSpecial,
           subthemeName: subtheme.name,
           count,
           randomCount,
@@ -389,14 +398,19 @@ export const getAllUserAggregates = query({
       bounds: {},
     });
     questionsBySubtheme.push({
-      subthemeId: 'no-subtheme' as Id<'subthemes'>,
+      subthemeId: 'no-subtheme',
       subthemeName: 'No Subtheme',
       count: noSubthemeCount,
       randomCount: noSubthemeRandomCount,
     });
 
     // Get question counts by group
-    const questionsByGroup = await Promise.all(
+    const questionsByGroup: Array<{
+      groupId: GroupIdOrSpecial;
+      groupName: string;
+      count: any;
+      randomCount: any;
+    }> = await Promise.all(
       groups.map(async group => {
         const [count, randomCount] = await Promise.all([
           (questionCountByGroup.count as any)(ctx, {
@@ -409,7 +423,7 @@ export const getAllUserAggregates = query({
           }),
         ]);
         return {
-          groupId: group._id,
+          groupId: group._id as GroupIdOrSpecial,
           groupName: group.name,
           count,
           randomCount,
@@ -427,7 +441,7 @@ export const getAllUserAggregates = query({
       bounds: {},
     });
     questionsByGroup.push({
-      groupId: 'no-group' as Id<'groups'>,
+      groupId: 'no-group',
       groupName: 'No Group',
       count: noGroupCount,
       randomCount: noGroupRandomCount,
