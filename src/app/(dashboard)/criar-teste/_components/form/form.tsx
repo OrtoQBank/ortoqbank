@@ -10,7 +10,6 @@ import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useTestFormState } from '../hooks/useTestFormState';
 import { type TestFormData } from '../schema';
-import { AvailableQuestionsInfo } from './AvailableQuestionsInfo';
 import { DebugPanel } from './DebugPanel';
 import { FeedbackModal } from './modals/FeedbackModal';
 import { NameModal } from './modals/NameModal';
@@ -36,7 +35,7 @@ export default function TestForm() {
     description: '',
   });
 
-  const createCustomQuiz = useMutation(api.customQuizzes.create);
+  const createCustomQuiz = useMutation(api.customQuizzesCreation.create);
 
   // Custom hook for form state and logic
   const {

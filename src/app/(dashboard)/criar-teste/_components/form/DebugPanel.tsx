@@ -53,7 +53,7 @@ export function DebugPanel({
   const [isDebugging, setIsDebugging] = useState(false);
 
   const debugQuestionCollection = useMutation(
-    api.customQuizzes.debugQuestionCollection,
+    api.customQuizzesCreation.debugQuestionCollection,
   );
 
   // Only show in development
