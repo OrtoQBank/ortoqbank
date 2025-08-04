@@ -4,6 +4,7 @@
 
 import { v } from 'convex/values';
 import { internalMutation, mutation } from './_generated/server';
+import { internal, api } from './_generated/api';
 import {
   answeredByUser,
   bookmarkedByUser,
@@ -237,7 +238,7 @@ export const repairGlobalQuestionCount = mutation({
 });
 
 /**
- * One-click repair for a user (basic + hierarchical)
+ * One-click repair for a user (basic + hierarchical) - inline implementation
  */
 export const repairUserAllAggregates = mutation({
   args: { userId: v.id('users') },
@@ -252,13 +253,136 @@ export const repairUserAllAggregates = mutation({
     }),
   }),
   handler: async (ctx, args) => {
-    const [basic, hierarchical] = await Promise.all([
-      ctx.runMutation(repairUserBasicAggregates, { userId: args.userId }),
-      ctx.runMutation(repairUserHierarchicalAggregates, {
-        userId: args.userId,
-      }),
+    // Clear all aggregates first
+    await Promise.all([
+      // Basic aggregates
+      answeredByUser.clear(ctx, { namespace: args.userId }),
+      incorrectByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedByUser.clear(ctx, { namespace: args.userId }),
+      // Hierarchical aggregates
+      incorrectByThemeByUser.clear(ctx, { namespace: args.userId }),
+      incorrectBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+      incorrectByGroupByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedByThemeByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+      bookmarkedByGroupByUser.clear(ctx, { namespace: args.userId }),
+      answeredByThemeByUser.clear(ctx, { namespace: args.userId }),
+      answeredBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+      answeredByGroupByUser.clear(ctx, { namespace: args.userId }),
     ]);
 
-    return { basic, hierarchical };
+    // Repair basic aggregates
+    const stats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .collect();
+
+    let answered = 0,
+      incorrect = 0;
+    for (const stat of stats) {
+      if (stat.hasAnswered) {
+        await answeredByUser.insertIfDoesNotExist(ctx, stat);
+        answered++;
+      }
+      if (stat.isIncorrect) {
+        await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+        incorrect++;
+      }
+    }
+
+    const bookmarks = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .collect();
+
+    let bookmarked = 0;
+    for (const bookmark of bookmarks) {
+      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+      bookmarked++;
+    }
+
+    // Repair hierarchical aggregates
+    let processed = 0;
+
+    // Process stats for hierarchical
+    for (const stat of stats) {
+      const question = await ctx.db.get(stat.questionId);
+      if (question) {
+        // Answered hierarchical
+        if (stat.hasAnswered) {
+          if (question.themeId) {
+            await answeredByThemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              themeId: question.themeId,
+            });
+          }
+          if (question.subthemeId) {
+            await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              subthemeId: question.subthemeId,
+            });
+          }
+          if (question.groupId) {
+            await answeredByGroupByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              groupId: question.groupId,
+            });
+          }
+        }
+
+        // Incorrect hierarchical
+        if (stat.isIncorrect) {
+          if (question.themeId) {
+            await incorrectByThemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              themeId: question.themeId,
+            });
+          }
+          if (question.subthemeId) {
+            await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              subthemeId: question.subthemeId,
+            });
+          }
+          if (question.groupId) {
+            await incorrectByGroupByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              groupId: question.groupId,
+            });
+          }
+        }
+        processed++;
+      }
+    }
+
+    // Process bookmarks for hierarchical
+    for (const bookmark of bookmarks) {
+      const question = await ctx.db.get(bookmark.questionId);
+      if (question) {
+        if (question.themeId) {
+          await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
+            ...bookmark,
+            themeId: question.themeId,
+          });
+        }
+        if (question.subthemeId) {
+          await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
+            ...bookmark,
+            subthemeId: question.subthemeId,
+          });
+        }
+        if (question.groupId) {
+          await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
+            ...bookmark,
+            groupId: question.groupId,
+          });
+        }
+      }
+    }
+
+    return {
+      basic: { answered, incorrect, bookmarked },
+      hierarchical: { processed },
+    };
   },
 });
