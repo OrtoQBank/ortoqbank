@@ -188,3 +188,12 @@ export function getWeekString(timestamp: number): string {
   const weekNumber = Math.ceil((dayOfYear + firstDayOfYear.getDay() + 1) / 7);
   return `${year}-W${weekNumber.toString().padStart(2, '0')}`;
 }
+
+//question text and explanation text are not allowed to contain blobs
+export const validateNoBlobs = (content: any[]) => {
+  for (const node of content) {
+    if (node.type === 'image' && node.attrs?.src?.startsWith('blob:')) {
+      throw new Error('Invalid image URL detected');
+    }
+  }
+};

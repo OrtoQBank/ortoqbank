@@ -237,6 +237,782 @@ export const repairGlobalQuestionCount = mutation({
   },
 });
 
+// ============================================================================
+// SECTION 1: GLOBAL QUESTION COUNT AGGREGATES REPAIR
+// ============================================================================
+
+// ============================================================================
+// SECTION 1: PAGINATED REPAIR FUNCTIONS (15-second safe)
+// ============================================================================
+
+/**
+ * Clear Section 1 aggregates (fast operation)
+ */
+export const clearSection1Aggregates = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    const { totalQuestionCount } = await import('./aggregates');
+    await totalQuestionCount.clear(ctx, { namespace: 'global' });
+    console.log('Section 1 aggregates cleared');
+    return null;
+  },
+});
+
+/**
+ * Process questions batch for global count (15-second safe)
+ */
+export const processQuestionsBatchGlobal = internalMutation({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 100;
+    const { totalQuestionCount } = await import('./aggregates');
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor,
+      numItems: batchSize,
+    });
+
+    // Process this batch
+    for (const question of result.page) {
+      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+    }
+
+    console.log(`Processed ${result.page.length} questions for global count`);
+
+    return {
+      processed: result.page.length,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * Process theme aggregates batch (15-second safe)
+ */
+export const processThemeAggregatesBatch = internalMutation({
+  args: {
+    themeIds: v.array(v.id('themes')),
+  },
+  returns: v.object({
+    processed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { questionCountByTheme } = await import('./aggregates');
+    let processed = 0;
+
+    for (const themeId of args.themeIds) {
+      // Clear theme aggregate
+      await questionCountByTheme.clear(ctx, { namespace: themeId as any });
+
+      // Get questions for this theme
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_theme', q => q.eq('themeId', themeId))
+        .collect();
+
+      // Insert all questions for this theme
+      for (const question of questions) {
+        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+      console.log(`Processed theme ${themeId}: ${questions.length} questions`);
+    }
+
+    return { processed };
+  },
+});
+
+/**
+ * Process subtheme aggregates batch (15-second safe)
+ */
+export const processSubthemeAggregatesBatch = internalMutation({
+  args: {
+    subthemeIds: v.array(v.id('subthemes')),
+  },
+  returns: v.object({
+    processed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { questionCountBySubtheme } = await import('./aggregates');
+    let processed = 0;
+
+    for (const subthemeId of args.subthemeIds) {
+      // Clear subtheme aggregate
+      await questionCountBySubtheme.clear(ctx, { namespace: subthemeId });
+
+      // Get questions for this subtheme
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .collect();
+
+      // Insert all questions for this subtheme
+      for (const question of questions) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+      console.log(
+        `Processed subtheme ${subthemeId}: ${questions.length} questions`,
+      );
+    }
+
+    return { processed };
+  },
+});
+
+/**
+ * Process group aggregates batch (15-second safe)
+ */
+export const processGroupAggregatesBatch = internalMutation({
+  args: {
+    groupIds: v.array(v.id('groups')),
+  },
+  returns: v.object({
+    processed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { questionCountByGroup } = await import('./aggregates');
+    let processed = 0;
+
+    for (const groupId of args.groupIds) {
+      // Clear group aggregate
+      await questionCountByGroup.clear(ctx, { namespace: groupId });
+
+      // Get questions for this group
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_group', q => q.eq('groupId', groupId))
+        .collect();
+
+      // Insert all questions for this group
+      for (const question of questions) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+      console.log(`Processed group ${groupId}: ${questions.length} questions`);
+    }
+
+    return { processed };
+  },
+});
+
+/**
+ * Get all theme IDs for batch processing
+ */
+export const getAllThemeIds = internalMutation({
+  args: {},
+  returns: v.array(v.id('themes')),
+  handler: async ctx => {
+    const themes = await ctx.db.query('themes').collect();
+    return themes.map(t => t._id);
+  },
+});
+
+/**
+ * Get all subtheme IDs for batch processing
+ */
+export const getAllSubthemeIds = internalMutation({
+  args: {},
+  returns: v.array(v.id('subthemes')),
+  handler: async ctx => {
+    const subthemes = await ctx.db.query('subthemes').collect();
+    return subthemes.map(s => s._id);
+  },
+});
+
+/**
+ * Get all group IDs for batch processing
+ */
+export const getAllGroupIds = internalMutation({
+  args: {},
+  returns: v.array(v.id('groups')),
+  handler: async ctx => {
+    const groups = await ctx.db.query('groups').collect();
+    return groups.map(g => g._id);
+  },
+});
+
+// ============================================================================
+// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES REPAIR (15-second safe)
+// ============================================================================
+
+/**
+ * Clear Section 2 aggregates (fast operation)
+ */
+export const clearSection2Aggregates = internalMutation({
+  args: {},
+  returns: v.null(),
+  handler: async ctx => {
+    const { randomQuestions } = await import('./aggregates');
+    await randomQuestions.clear(ctx, { namespace: 'global' });
+    console.log('Section 2 aggregates cleared');
+    return null;
+  },
+});
+
+/**
+ * Process questions batch for random selection (15-second safe)
+ */
+export const processQuestionsBatchRandom = internalMutation({
+  args: {
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 100;
+    const { randomQuestions } = await import('./aggregates');
+
+    const result = await ctx.db.query('questions').paginate({
+      cursor: args.cursor,
+      numItems: batchSize,
+    });
+
+    // Process this batch
+    for (const question of result.page) {
+      await randomQuestions.insertIfDoesNotExist(ctx, question);
+    }
+
+    console.log(
+      `Processed ${result.page.length} questions for random selection`,
+    );
+
+    return {
+      processed: result.page.length,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
+/**
+ * Process theme random aggregates batch (15-second safe)
+ */
+export const processThemeRandomAggregatesBatch = internalMutation({
+  args: {
+    themeIds: v.array(v.id('themes')),
+  },
+  returns: v.object({
+    processed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { randomQuestionsByTheme } = await import('./aggregates');
+    let processed = 0;
+
+    for (const themeId of args.themeIds) {
+      // Clear theme random aggregate
+      await randomQuestionsByTheme.clear(ctx, { namespace: themeId as any });
+
+      // Get questions for this theme
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_theme', q => q.eq('themeId', themeId))
+        .collect();
+
+      // Insert all questions for this theme
+      for (const question of questions) {
+        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+      console.log(
+        `Processed theme random ${themeId}: ${questions.length} questions`,
+      );
+    }
+
+    return { processed };
+  },
+});
+
+/**
+ * Process subtheme random aggregates batch (15-second safe)
+ */
+export const processSubthemeRandomAggregatesBatch = internalMutation({
+  args: {
+    subthemeIds: v.array(v.id('subthemes')),
+  },
+  returns: v.object({
+    processed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { randomQuestionsBySubtheme } = await import('./aggregates');
+    let processed = 0;
+
+    for (const subthemeId of args.subthemeIds) {
+      // Clear subtheme random aggregate
+      await randomQuestionsBySubtheme.clear(ctx, { namespace: subthemeId });
+
+      // Get questions for this subtheme
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .collect();
+
+      // Insert all questions for this subtheme
+      for (const question of questions) {
+        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+      console.log(
+        `Processed subtheme random ${subthemeId}: ${questions.length} questions`,
+      );
+    }
+
+    return { processed };
+  },
+});
+
+/**
+ * Process group random aggregates batch (15-second safe)
+ */
+export const processGroupRandomAggregatesBatch = internalMutation({
+  args: {
+    groupIds: v.array(v.id('groups')),
+  },
+  returns: v.object({
+    processed: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { randomQuestionsByGroup } = await import('./aggregates');
+    let processed = 0;
+
+    for (const groupId of args.groupIds) {
+      // Clear group random aggregate
+      await randomQuestionsByGroup.clear(ctx, { namespace: groupId });
+
+      // Get questions for this group
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_group', q => q.eq('groupId', groupId))
+        .collect();
+
+      // Insert all questions for this group
+      for (const question of questions) {
+        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      processed++;
+      console.log(
+        `Processed group random ${groupId}: ${questions.length} questions`,
+      );
+    }
+
+    return { processed };
+  },
+});
+
+// ============================================================================
+// SECTION 3: USER-SPECIFIC AGGREGATES REPAIR
+// ============================================================================
+
+/**
+ * Repair all user-specific aggregates (Section 3) - optimized batch processing
+ * Repairs: Basic user aggregates + Hierarchical user aggregates for ALL users
+ */
+export const repairSection3UserSpecificAggregates = internalMutation({
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    usersProcessed: v.number(),
+    totalStats: v.number(),
+    totalBookmarks: v.number(),
+    hierarchicalEntries: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 50; // Process users in batches
+    console.log(
+      `Starting Section 3: User-Specific Aggregates Repair (batch size: ${batchSize})...`,
+    );
+
+    const {
+      answeredByUser,
+      incorrectByUser,
+      bookmarkedByUser,
+      answeredByThemeByUser,
+      answeredBySubthemeByUser,
+      answeredByGroupByUser,
+      incorrectByThemeByUser,
+      incorrectBySubthemeByUser,
+      incorrectByGroupByUser,
+      bookmarkedByThemeByUser,
+      bookmarkedBySubthemeByUser,
+      bookmarkedByGroupByUser,
+    } = await import('./aggregates');
+
+    // Get all users for processing
+    const users = await ctx.db.query('users').collect();
+    console.log(`Processing ${users.length} users in batches...`);
+
+    let usersProcessed = 0;
+    let totalStats = 0;
+    let totalBookmarks = 0;
+    let hierarchicalEntries = 0;
+
+    // Process users in batches to avoid memory issues
+    for (let i = 0; i < users.length; i += batchSize) {
+      const userBatch = users.slice(i, i + batchSize);
+      console.log(
+        `Processing user batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(users.length / batchSize)}`,
+      );
+
+      for (const user of userBatch) {
+        // Clear all user aggregates
+        await Promise.all([
+          answeredByUser.clear(ctx, { namespace: user._id }),
+          incorrectByUser.clear(ctx, { namespace: user._id }),
+          bookmarkedByUser.clear(ctx, { namespace: user._id }),
+        ]);
+
+        // Get user data
+        const [userStats, userBookmarks] = await Promise.all([
+          ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .collect(),
+          ctx.db
+            .query('userBookmarks')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .collect(),
+        ]);
+
+        // Process basic user aggregates
+        for (const stat of userStats) {
+          if (stat.hasAnswered) {
+            await answeredByUser.insertIfDoesNotExist(ctx, stat);
+          }
+          if (stat.isIncorrect) {
+            await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+          }
+        }
+
+        for (const bookmark of userBookmarks) {
+          await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+        }
+
+        // Process hierarchical aggregates
+        for (const stat of userStats) {
+          const question = await ctx.db.get(stat.questionId);
+          if (question) {
+            // Answered hierarchical
+            if (stat.hasAnswered) {
+              if (question.themeId) {
+                await answeredByThemeByUser.insertIfDoesNotExist(ctx, {
+                  ...stat,
+                  themeId: question.themeId,
+                });
+                hierarchicalEntries++;
+              }
+              if (question.subthemeId) {
+                await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, {
+                  ...stat,
+                  subthemeId: question.subthemeId,
+                });
+                hierarchicalEntries++;
+              }
+              if (question.groupId) {
+                await answeredByGroupByUser.insertIfDoesNotExist(ctx, {
+                  ...stat,
+                  groupId: question.groupId,
+                });
+                hierarchicalEntries++;
+              }
+            }
+
+            // Incorrect hierarchical
+            if (stat.isIncorrect) {
+              if (question.themeId) {
+                await incorrectByThemeByUser.insertIfDoesNotExist(ctx, {
+                  ...stat,
+                  themeId: question.themeId,
+                });
+                hierarchicalEntries++;
+              }
+              if (question.subthemeId) {
+                await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, {
+                  ...stat,
+                  subthemeId: question.subthemeId,
+                });
+                hierarchicalEntries++;
+              }
+              if (question.groupId) {
+                await incorrectByGroupByUser.insertIfDoesNotExist(ctx, {
+                  ...stat,
+                  groupId: question.groupId,
+                });
+                hierarchicalEntries++;
+              }
+            }
+          }
+        }
+
+        // Process bookmark hierarchical aggregates
+        for (const bookmark of userBookmarks) {
+          const question = await ctx.db.get(bookmark.questionId);
+          if (question) {
+            if (question.themeId) {
+              await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
+                ...bookmark,
+                themeId: question.themeId,
+              });
+              hierarchicalEntries++;
+            }
+            if (question.subthemeId) {
+              await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
+                ...bookmark,
+                subthemeId: question.subthemeId,
+              });
+              hierarchicalEntries++;
+            }
+            if (question.groupId) {
+              await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
+                ...bookmark,
+                groupId: question.groupId,
+              });
+              hierarchicalEntries++;
+            }
+          }
+        }
+
+        totalStats += userStats.length;
+        totalBookmarks += userBookmarks.length;
+        usersProcessed++;
+      }
+    }
+
+    const result = {
+      usersProcessed,
+      totalStats,
+      totalBookmarks,
+      hierarchicalEntries,
+    };
+
+    console.log('Section 3 repair completed:', result);
+    return result;
+  },
+});
+
+// ============================================================================
+// SECTION 3: USER-SPECIFIC AGGREGATES REPAIR (15-second safe)
+// ============================================================================
+
+/**
+ * Get all user IDs for batch processing
+ */
+export const getAllUserIds = internalMutation({
+  args: {},
+  returns: v.array(v.id('users')),
+  handler: async ctx => {
+    const users = await ctx.db.query('users').collect();
+    return users.map(u => u._id);
+  },
+});
+
+/**
+ * Process a small batch of users for user-specific aggregates (15-second safe)
+ */
+export const processUsersBatch = internalMutation({
+  args: {
+    userIds: v.array(v.id('users')),
+  },
+  returns: v.object({
+    usersProcessed: v.number(),
+    totalStats: v.number(),
+    totalBookmarks: v.number(),
+    hierarchicalEntries: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const {
+      answeredByUser,
+      incorrectByUser,
+      bookmarkedByUser,
+      answeredByThemeByUser,
+      answeredBySubthemeByUser,
+      answeredByGroupByUser,
+      incorrectByThemeByUser,
+      incorrectBySubthemeByUser,
+      incorrectByGroupByUser,
+      bookmarkedByThemeByUser,
+      bookmarkedBySubthemeByUser,
+      bookmarkedByGroupByUser,
+    } = await import('./aggregates');
+
+    let usersProcessed = 0;
+    let totalStats = 0;
+    let totalBookmarks = 0;
+    let hierarchicalEntries = 0;
+
+    for (const userId of args.userIds) {
+      // Clear all user aggregates
+      await Promise.all([
+        answeredByUser.clear(ctx, { namespace: userId }),
+        incorrectByUser.clear(ctx, { namespace: userId }),
+        bookmarkedByUser.clear(ctx, { namespace: userId }),
+      ]);
+
+      // Get user data with pagination to avoid large queries
+      const userStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user', q => q.eq('userId', userId))
+        .collect();
+
+      const userBookmarks = await ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', q => q.eq('userId', userId))
+        .collect();
+
+      // Process basic user aggregates
+      for (const stat of userStats) {
+        if (stat.hasAnswered) {
+          await answeredByUser.insertIfDoesNotExist(ctx, stat);
+        }
+        if (stat.isIncorrect) {
+          await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+        }
+      }
+
+      for (const bookmark of userBookmarks) {
+        await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+      }
+
+      // Process hierarchical aggregates efficiently
+      const questionIds = new Set([
+        ...userStats.map(s => s.questionId),
+        ...userBookmarks.map(b => b.questionId),
+      ]);
+
+      // Batch get questions to avoid individual lookups
+      const questions = new Map();
+      for (const questionId of questionIds) {
+        const question = await ctx.db.get(questionId);
+        if (question) {
+          questions.set(questionId, question);
+        }
+      }
+
+      // Process hierarchical stats
+      for (const stat of userStats) {
+        const question = questions.get(stat.questionId);
+        if (question) {
+          // Answered hierarchical
+          if (stat.hasAnswered) {
+            if (question.themeId) {
+              await answeredByThemeByUser.insertIfDoesNotExist(ctx, {
+                ...stat,
+                themeId: question.themeId,
+              });
+              hierarchicalEntries++;
+            }
+            if (question.subthemeId) {
+              await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, {
+                ...stat,
+                subthemeId: question.subthemeId,
+              });
+              hierarchicalEntries++;
+            }
+            if (question.groupId) {
+              await answeredByGroupByUser.insertIfDoesNotExist(ctx, {
+                ...stat,
+                groupId: question.groupId,
+              });
+              hierarchicalEntries++;
+            }
+          }
+
+          // Incorrect hierarchical
+          if (stat.isIncorrect) {
+            if (question.themeId) {
+              await incorrectByThemeByUser.insertIfDoesNotExist(ctx, {
+                ...stat,
+                themeId: question.themeId,
+              });
+              hierarchicalEntries++;
+            }
+            if (question.subthemeId) {
+              await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, {
+                ...stat,
+                subthemeId: question.subthemeId,
+              });
+              hierarchicalEntries++;
+            }
+            if (question.groupId) {
+              await incorrectByGroupByUser.insertIfDoesNotExist(ctx, {
+                ...stat,
+                groupId: question.groupId,
+              });
+              hierarchicalEntries++;
+            }
+          }
+        }
+      }
+
+      // Process bookmark hierarchical aggregates
+      for (const bookmark of userBookmarks) {
+        const question = questions.get(bookmark.questionId);
+        if (question) {
+          if (question.themeId) {
+            await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
+              ...bookmark,
+              themeId: question.themeId,
+            });
+            hierarchicalEntries++;
+          }
+          if (question.subthemeId) {
+            await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
+              ...bookmark,
+              subthemeId: question.subthemeId,
+            });
+            hierarchicalEntries++;
+          }
+          if (question.groupId) {
+            await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
+              ...bookmark,
+              groupId: question.groupId,
+            });
+            hierarchicalEntries++;
+          }
+        }
+      }
+
+      totalStats += userStats.length;
+      totalBookmarks += userBookmarks.length;
+      usersProcessed++;
+
+      console.log(
+        `Processed user ${userId}: ${userStats.length} stats, ${userBookmarks.length} bookmarks`,
+      );
+    }
+
+    const result = {
+      usersProcessed,
+      totalStats,
+      totalBookmarks,
+      hierarchicalEntries,
+    };
+
+    console.log(`Batch completed: ${usersProcessed} users processed`);
+    return result;
+  },
+});
+
 /**
  * One-click repair for a user (basic + hierarchical) - inline implementation
  */
