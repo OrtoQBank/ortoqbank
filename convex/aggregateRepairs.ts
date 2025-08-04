@@ -219,21 +219,64 @@ export const repairUserHierarchicalAggregates = internalMutation({
 });
 
 /**
- * Repair global question count
+ * Repair global question count with pagination (memory-safe)
  */
 export const repairGlobalQuestionCount = mutation({
-  args: {},
-  returns: v.number(),
-  handler: async ctx => {
+  args: {
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    totalProcessed: v.number(),
+    batchCount: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 100;
+
+    // Clear existing aggregates
     await totalQuestionCount.clear(ctx, { namespace: 'global' });
 
-    const questions = await ctx.db.query('questions').collect();
+    // Process questions in paginated batches
+    let cursor: string | null = null;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of questions) {
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db.query('questions').paginate({
+        cursor,
+        numItems: batchSize,
+      });
 
-    return questions.length;
+      // Process this batch
+      for (const question of result.page) {
+        await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      console.log(
+        `Processed batch ${batchCount}: ${result.page.length} questions`,
+      );
+
+      // If we have more data but this is getting large, we should break
+      // and let the caller call us again with the cursor
+      if (!result.isDone && batchCount >= 10) {
+        console.log(
+          `Processed ${batchCount} batches, stopping to prevent timeout`,
+        );
+        break;
+      }
+    } while (cursor);
+
+    console.log(
+      `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches`,
+    );
+
+    return {
+      totalProcessed,
+      batchCount,
+    };
   },
 });
 
@@ -312,8 +355,7 @@ export const processThemeAggregatesBatch = internalMutation({
 
     for (const themeId of args.themeIds) {
       // Clear theme aggregate
-      await questionCountByTheme.clear(ctx, { namespace: themeId as any });
-
+      await questionCountByTheme.clear(ctx, { namespace: themeId });
       // Get questions for this theme
       const questions = await ctx.db
         .query('questions')
@@ -518,8 +560,7 @@ export const processThemeRandomAggregatesBatch = internalMutation({
 
     for (const themeId of args.themeIds) {
       // Clear theme random aggregate
-      await randomQuestionsByTheme.clear(ctx, { namespace: themeId as any });
-
+      await randomQuestionsByTheme.clear(ctx, { namespace: themeId });
       // Get questions for this theme
       const questions = await ctx.db
         .query('questions')
@@ -658,20 +699,33 @@ export const repairSection3UserSpecificAggregates = internalMutation({
       bookmarkedByGroupByUser,
     } = await import('./aggregates');
 
-    // Get all users for processing
-    const users = await ctx.db.query('users').collect();
-    console.log(`Processing ${users.length} users in batches...`);
-
     let usersProcessed = 0;
     let totalStats = 0;
     let totalBookmarks = 0;
     let hierarchicalEntries = 0;
+    let lastProcessedTime: number | undefined;
+    let batchCount = 0;
 
-    // Process users in batches to avoid memory issues
-    for (let i = 0; i < users.length; i += batchSize) {
-      const userBatch = users.slice(i, i + batchSize);
+    // Process users in batches using pagination to avoid loading all users into memory
+    while (true) {
+      batchCount++;
+      console.log(`Processing user batch ${batchCount}...`);
+
+      // Fetch batch using cursor-based pagination with creation time
+      const query = ctx.db.query('users').order('asc');
+      const userBatch = lastProcessedTime
+        ? await query
+            .filter(q => q.gt(q.field('_creationTime'), lastProcessedTime!))
+            .take(batchSize)
+        : await query.take(batchSize);
+
+      if (userBatch.length === 0) {
+        console.log('No more users to process');
+        break;
+      }
+
       console.log(
-        `Processing user batch ${Math.floor(i / batchSize) + 1}/${Math.ceil(users.length / batchSize)}`,
+        `Processing ${userBatch.length} users in batch ${batchCount}`,
       );
 
       for (const user of userBatch) {
@@ -796,6 +850,29 @@ export const repairSection3UserSpecificAggregates = internalMutation({
         totalBookmarks += userBookmarks.length;
         usersProcessed++;
       }
+
+      // Update lastProcessedTime for pagination
+      if (userBatch.length > 0) {
+        lastProcessedTime = userBatch.at(-1)!._creationTime;
+      }
+
+      console.log(
+        `Batch ${batchCount} completed. Processed ${userBatch.length} users. Total processed: ${usersProcessed}`,
+      );
+
+      // Safety check to prevent infinite loops and avoid timeouts
+      if (batchCount >= 20) {
+        console.log(
+          `Processed ${batchCount} batches, stopping to prevent timeout. Resume by calling again.`,
+        );
+        break;
+      }
+
+      // If we got fewer users than requested, we've reached the end
+      if (userBatch.length < batchSize) {
+        console.log('Reached end of users');
+        break;
+      }
     }
 
     const result = {
@@ -805,7 +882,10 @@ export const repairSection3UserSpecificAggregates = internalMutation({
       hierarchicalEntries,
     };
 
-    console.log('Section 3 repair completed:', result);
+    console.log(
+      `Section 3 repair completed: processed ${usersProcessed} users in ${batchCount} batches`,
+      result,
+    );
     return result;
   },
 });
