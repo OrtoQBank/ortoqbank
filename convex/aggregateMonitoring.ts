@@ -7,12 +7,25 @@ import { v } from 'convex/values';
 import { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import {
+  answeredByGroupByUser,
+  answeredBySubthemeByUser,
+  answeredByThemeByUser,
   answeredByUser,
+  bookmarkedByGroupByUser,
+  bookmarkedBySubthemeByUser,
+  bookmarkedByThemeByUser,
   bookmarkedByUser,
   incorrectByGroupByUser,
   incorrectBySubthemeByUser,
   incorrectByThemeByUser,
   incorrectByUser,
+  questionCountByGroup,
+  questionCountBySubtheme,
+  questionCountByTheme,
+  randomQuestions,
+  randomQuestionsByGroup,
+  randomQuestionsBySubtheme,
+  randomQuestionsByTheme,
   totalQuestionCount,
 } from './aggregates';
 
@@ -287,6 +300,315 @@ export const getHealthCheck = query({
         bookmarked: dbBookmarked,
       },
       match,
+    };
+  },
+});
+
+/**
+ * Comprehensive aggregate status for a specific user
+ * Returns all user-specific aggregates plus global aggregates
+ */
+export const getAllUserAggregates = query({
+  args: { userId: v.id('users') },
+  returns: v.any(),
+  handler: async (ctx, args) => {
+    // ========================================================================
+    // GLOBAL AGGREGATES (non-user-specific)
+    // ========================================================================
+
+    // Get total questions count
+    const totalQuestions = await (totalQuestionCount.count as any)(ctx, {
+      namespace: 'global',
+      bounds: {},
+    });
+
+    // Get random questions count
+    const randomQuestionsCount = await (randomQuestions.count as any)(ctx, {
+      namespace: 'global',
+      bounds: {},
+    });
+
+    // Get all taxonomy data
+    const [themes, subthemes, groups] = await Promise.all([
+      ctx.db.query('themes').collect(),
+      ctx.db.query('subthemes').collect(),
+      ctx.db.query('groups').collect(),
+    ]);
+
+    // Get question counts by theme
+    const questionsByTheme = await Promise.all(
+      themes.map(async theme => {
+        const [count, randomCount] = await Promise.all([
+          (questionCountByTheme.count as any)(ctx, {
+            namespace: theme._id,
+            bounds: {},
+          }),
+          (randomQuestionsByTheme.count as any)(ctx, {
+            namespace: theme._id,
+            bounds: {},
+          }),
+        ]);
+        return {
+          themeId: theme._id,
+          themeName: theme.name,
+          count,
+          randomCount,
+        };
+      }),
+    );
+
+    // Get question counts by subtheme
+    const questionsBySubtheme = await Promise.all(
+      subthemes.map(async subtheme => {
+        const [count, randomCount] = await Promise.all([
+          (questionCountBySubtheme.count as any)(ctx, {
+            namespace: subtheme._id,
+            bounds: {},
+          }),
+          (randomQuestionsBySubtheme.count as any)(ctx, {
+            namespace: subtheme._id,
+            bounds: {},
+          }),
+        ]);
+        return {
+          subthemeId: subtheme._id,
+          subthemeName: subtheme.name,
+          count,
+          randomCount,
+        };
+      }),
+    );
+
+    // Add 'no-subtheme' entry
+    const noSubthemeCount = await (questionCountBySubtheme.count as any)(ctx, {
+      namespace: 'no-subtheme',
+      bounds: {},
+    });
+    const noSubthemeRandomCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
+      namespace: 'no-subtheme',
+      bounds: {},
+    });
+    questionsBySubtheme.push({
+      subthemeId: 'no-subtheme' as Id<'subthemes'>,
+      subthemeName: 'No Subtheme',
+      count: noSubthemeCount,
+      randomCount: noSubthemeRandomCount,
+    });
+
+    // Get question counts by group
+    const questionsByGroup = await Promise.all(
+      groups.map(async group => {
+        const [count, randomCount] = await Promise.all([
+          (questionCountByGroup.count as any)(ctx, {
+            namespace: group._id,
+            bounds: {},
+          }),
+          (randomQuestionsByGroup.count as any)(ctx, {
+            namespace: group._id,
+            bounds: {},
+          }),
+        ]);
+        return {
+          groupId: group._id,
+          groupName: group.name,
+          count,
+          randomCount,
+        };
+      }),
+    );
+
+    // Add 'no-group' entry
+    const noGroupCount = await (questionCountByGroup.count as any)(ctx, {
+      namespace: 'no-group',
+      bounds: {},
+    });
+    const noGroupRandomCount = await (randomQuestionsByGroup.count as any)(ctx, {
+      namespace: 'no-group',
+      bounds: {},
+    });
+    questionsByGroup.push({
+      groupId: 'no-group' as Id<'groups'>,
+      groupName: 'No Group',
+      count: noGroupCount,
+      randomCount: noGroupRandomCount,
+    });
+
+    // ========================================================================
+    // USER-SPECIFIC AGGREGATES
+    // ========================================================================
+
+    // Basic user aggregates
+    const [answered, incorrect, bookmarked] = await Promise.all([
+      (answeredByUser.count as any)(ctx, {
+        namespace: args.userId,
+        bounds: {},
+      }),
+      (incorrectByUser.count as any)(ctx, {
+        namespace: args.userId,
+        bounds: {},
+      }),
+      (bookmarkedByUser.count as any)(ctx, {
+        namespace: args.userId,
+        bounds: {},
+      }),
+    ]);
+
+    // Hierarchical user aggregates by theme
+    const answeredByTheme = await Promise.all(
+      themes.map(async theme => {
+        const count = await (answeredByThemeByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${theme._id}`,
+          bounds: {},
+        });
+        return {
+          themeId: theme._id,
+          themeName: theme.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    const incorrectByTheme = await Promise.all(
+      themes.map(async theme => {
+        const count = await (incorrectByThemeByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${theme._id}`,
+          bounds: {},
+        });
+        return {
+          themeId: theme._id,
+          themeName: theme.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    const bookmarkedByTheme = await Promise.all(
+      themes.map(async theme => {
+        const count = await (bookmarkedByThemeByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${theme._id}`,
+          bounds: {},
+        });
+        return {
+          themeId: theme._id,
+          themeName: theme.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    // Hierarchical user aggregates by subtheme
+    const answeredBySubtheme = await Promise.all(
+      subthemes.map(async subtheme => {
+        const count = await (answeredBySubthemeByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${subtheme._id}`,
+          bounds: {},
+        });
+        return {
+          subthemeId: subtheme._id,
+          subthemeName: subtheme.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    const incorrectBySubtheme = await Promise.all(
+      subthemes.map(async subtheme => {
+        const count = await (incorrectBySubthemeByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${subtheme._id}`,
+          bounds: {},
+        });
+        return {
+          subthemeId: subtheme._id,
+          subthemeName: subtheme.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    const bookmarkedBySubtheme = await Promise.all(
+      subthemes.map(async subtheme => {
+        const count = await (bookmarkedBySubthemeByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${subtheme._id}`,
+          bounds: {},
+        });
+        return {
+          subthemeId: subtheme._id,
+          subthemeName: subtheme.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    // Hierarchical user aggregates by group
+    const answeredByGroup = await Promise.all(
+      groups.map(async group => {
+        const count = await (answeredByGroupByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${group._id}`,
+          bounds: {},
+        });
+        return {
+          groupId: group._id,
+          groupName: group.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    const incorrectByGroup = await Promise.all(
+      groups.map(async group => {
+        const count = await (incorrectByGroupByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${group._id}`,
+          bounds: {},
+        });
+        return {
+          groupId: group._id,
+          groupName: group.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    const bookmarkedByGroup = await Promise.all(
+      groups.map(async group => {
+        const count = await (bookmarkedByGroupByUser.count as any)(ctx, {
+          namespace: `${args.userId}_${group._id}`,
+          bounds: {},
+        });
+        return {
+          groupId: group._id,
+          groupName: group.name,
+          count,
+        };
+      }),
+    ).then(results => results.filter(r => r.count > 0));
+
+    return {
+      userId: args.userId,
+      global: {
+        totalQuestions,
+        randomQuestions: randomQuestionsCount,
+        questionsByTheme,
+        questionsBySubtheme,
+        questionsByGroup,
+      },
+      userSpecific: {
+        basic: {
+          answered,
+          incorrect,
+          bookmarked,
+        },
+        hierarchical: {
+          answeredByTheme,
+          answeredBySubtheme,
+          answeredByGroup,
+          incorrectByTheme,
+          incorrectBySubtheme,
+          incorrectByGroup,
+          bookmarkedByTheme,
+          bookmarkedBySubtheme,
+          bookmarkedByGroup,
+        },
+      },
     };
   },
 });
