@@ -25,7 +25,7 @@ import { WorkflowManager } from '@convex-dev/workflow';
 import { v } from 'convex/values';
 
 import { api, components, internal } from './_generated/api';
-import { mutation } from './_generated/server';
+import { internalMutation, mutation } from './_generated/server';
 
 // Create the workflow manager
 export const workflow = new WorkflowManager(components.workflow);
@@ -33,7 +33,7 @@ export const workflow = new WorkflowManager(components.workflow);
 /**
  * Start simple user repair workflow
  */
-export const startUserRepair = mutation({
+export const startUserRepair = internalMutation({
   args: { userId: v.id('users') },
   returns: v.string(),
   handler: async (ctx, args): Promise<string> => {
@@ -53,7 +53,7 @@ export const startUserRepair = mutation({
 /**
  * Get workflow status
  */
-export const getWorkflowStatus = mutation({
+export const getWorkflowStatus = internalMutation({
   args: { workflowId: v.string() },
   returns: v.any(),
   handler: async (ctx, args) => {
@@ -115,7 +115,7 @@ export const userRepairWorkflow = workflow.define({
 /**
  * Start Section 1 repair workflow (Global Question Count Aggregates)
  */
-export const startSection1Repair = mutation({
+export const startSection1Repair = internalMutation({
   args: {},
   returns: v.string(),
   handler: async (ctx): Promise<string> => {
@@ -255,7 +255,7 @@ export const section1RepairWorkflow = workflow.define({
 /**
  * Start Section 2 repair workflow (Random Question Selection Aggregates)
  */
-export const startSection2Repair = mutation({
+export const startSection2Repair = internalMutation({
   args: {},
   returns: v.string(),
   handler: async (ctx): Promise<string> => {
@@ -397,7 +397,7 @@ export const section2RepairWorkflow = workflow.define({
 /**
  * Start Section 3 repair workflow (User-Specific Aggregates)
  */
-export const startSection3Repair = mutation({
+export const startSection3Repair = internalMutation({
   args: {
     batchSize: v.optional(v.number()),
   },
@@ -500,7 +500,7 @@ export const section3RepairWorkflow = workflow.define({
 /**
  * Start comprehensive repair workflow (All 3 Sections)
  */
-export const startComprehensiveRepair = mutation({
+export const startComprehensiveRepair = internalMutation({
   args: {
     batchSize: v.optional(v.number()),
   },

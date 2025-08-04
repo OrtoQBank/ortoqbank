@@ -5,7 +5,7 @@
 import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
-import { mutation, query } from './_generated/server';
+import { internalQuery, mutation, query } from './_generated/server';
 import {
   answeredByGroupByUser,
   answeredBySubthemeByUser,
@@ -32,7 +32,7 @@ import {
 /**
  * Quick overview of aggregate health
  */
-export const getAggregateOverview = query({
+export const getAggregateOverview = internalQuery({
   args: {},
   returns: v.object({
     totalQuestions: v.number(),
@@ -136,7 +136,7 @@ export const getAggregateOverview = query({
 /**
  * Get specific user's aggregate counts
  */
-export const getUserAggregates = query({
+export const getUserAggregates = internalQuery({
   args: { userId: v.id('users') },
   returns: v.object({
     basic: v.object({
@@ -215,7 +215,7 @@ export const getUserAggregates = query({
 /**
  * Simple health check - compare aggregate vs raw database counts
  */
-export const getHealthCheck = query({
+export const getHealthCheck = internalQuery({
   args: { userId: v.optional(v.id('users')) },
   returns: v.object({
     status: v.string(),
@@ -312,7 +312,7 @@ type GroupIdOrSpecial = Id<'groups'> | 'no-group';
  * Comprehensive aggregate status for a specific user
  * Returns all user-specific aggregates plus global aggregates
  */
-export const getAllUserAggregates = query({
+export const getAllUserAggregates = internalQuery({
   args: { userId: v.id('users') },
   returns: v.any(),
   handler: async (ctx, args) => {
@@ -393,7 +393,9 @@ export const getAllUserAggregates = query({
       namespace: 'no-subtheme',
       bounds: {},
     });
-    const noSubthemeRandomCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
+    const noSubthemeRandomCount = await (
+      randomQuestionsBySubtheme.count as any
+    )(ctx, {
       namespace: 'no-subtheme',
       bounds: {},
     });
@@ -436,10 +438,13 @@ export const getAllUserAggregates = query({
       namespace: 'no-group',
       bounds: {},
     });
-    const noGroupRandomCount = await (randomQuestionsByGroup.count as any)(ctx, {
-      namespace: 'no-group',
-      bounds: {},
-    });
+    const noGroupRandomCount = await (randomQuestionsByGroup.count as any)(
+      ctx,
+      {
+        namespace: 'no-group',
+        bounds: {},
+      },
+    );
     questionsByGroup.push({
       groupId: 'no-group',
       groupName: 'No Group',

@@ -229,7 +229,7 @@ export const repairUserHierarchicalAggregates = internalMutation({
 /**
  * Repair global question count with pagination (memory-safe)
  */
-export const repairGlobalQuestionCount = mutation({
+export const repairGlobalQuestionCount = internalMutation({
   args: {
     batchSize: v.optional(v.number()),
     startCursor: v.optional(v.union(v.string(), v.null())),
@@ -1081,7 +1081,7 @@ export const processUsersBatch = internalMutation({
 /**
  * One-click repair for a user (basic + hierarchical) - delegates to tested internal mutations
  */
-export const repairUserAllAggregates = mutation({
+export const repairUserAllAggregates = internalMutation({
   args: { userId: v.id('users') },
   returns: v.object({
     basic: v.object({
