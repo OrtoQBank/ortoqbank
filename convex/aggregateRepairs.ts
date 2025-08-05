@@ -5,8 +5,8 @@
 import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
+import { Doc, Id } from './_generated/dataModel';
 import { internalMutation, mutation } from './_generated/server';
-import { Id, Doc } from './_generated/dataModel';
 import {
   answeredByGroupByUser,
   answeredBySubthemeByUser,
@@ -1268,29 +1268,7 @@ export const internalRepairUserHierarchicalAggregatesBatch = internalMutation({
     });
 
     // Collect all questionIds for batch fetching
-    const questionIds = new Set([...stats.page.map(stat => stat.questionId)]);
-
-    // If stats are done, also collect bookmark questionIds and store bookmarks result
-    let bookmarks: {
-      page: any[];
-      continueCursor: string | null;
-      isDone: boolean;
-    } | null = null;
-    if (stats.isDone) {
-      const bookmarksQuery = ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', args.userId));
-
-      bookmarks = await bookmarksQuery.paginate({
-        numItems: batchSize,
-        cursor: null,
-      });
-
-      // Add bookmark questionIds to the set
-      for (const bookmark of bookmarks.page) {
-        questionIds.add(bookmark.questionId);
-      }
-    }
+    const questionIds = new Set(stats.page.map(stat => stat.questionId));
 
     // Batch fetch all questions
     const questions = new Map<Id<'questions'>, Doc<'questions'>>();
@@ -1347,50 +1325,92 @@ export const internalRepairUserHierarchicalAggregatesBatch = internalMutation({
               groupId: question.groupId,
             });
           }
+          processed++;
+        }
+      }
+    }
+
+    return {
+      processed,
+      nextCursor: stats.continueCursor || null,
+      isDone: stats.isDone,
+    };
+  },
+});
+
+/**
+ * Repair hierarchical bookmarks for a user with pagination (15-second safe)
+ */
+export const internalRepairUserHierarchicalBookmarksBatch = internalMutation({
+  args: {
+    userId: v.id('users'),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 50;
+
+    let processed = 0;
+
+    // Process userBookmarks in batches
+    const bookmarksQuery = ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId));
+
+    const bookmarks = await bookmarksQuery.paginate({
+      numItems: batchSize,
+      cursor: args.cursor || null,
+    });
+
+    // Collect all questionIds for batch fetching
+    const bookmarkQuestionIds = new Set(
+      bookmarks.page.map(bookmark => bookmark.questionId),
+    );
+
+    // Batch fetch all questions
+    const bookmarkQuestions = new Map<Id<'questions'>, Doc<'questions'>>();
+    for (const questionId of bookmarkQuestionIds) {
+      const question = await ctx.db.get(questionId);
+      if (question) {
+        bookmarkQuestions.set(questionId, question);
+      }
+    }
+
+    // Process bookmarks
+    for (const bookmark of bookmarks.page) {
+      const question = bookmarkQuestions.get(bookmark.questionId);
+      if (question) {
+        if (question.themeId) {
+          await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
+            ...bookmark,
+            themeId: question.themeId,
+          });
+        }
+        if (question.subthemeId) {
+          await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
+            ...bookmark,
+            subthemeId: question.subthemeId,
+          });
+        }
+        if (question.groupId) {
+          await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
+            ...bookmark,
+            groupId: question.groupId,
+          });
         }
         processed++;
       }
     }
 
-    // If stats are done, process bookmarks
-    if (stats.isDone && bookmarks) {
-      // Process bookmarks
-      for (const bookmark of bookmarks.page) {
-        const question = questions.get(bookmark.questionId);
-        if (question) {
-          if (question.themeId) {
-            await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
-              ...bookmark,
-              themeId: question.themeId,
-            });
-          }
-          if (question.subthemeId) {
-            await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
-              ...bookmark,
-              subthemeId: question.subthemeId,
-            });
-          }
-          if (question.groupId) {
-            await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
-              ...bookmark,
-              groupId: question.groupId,
-            });
-          }
-          processed++;
-        }
-      }
-
-      return {
-        processed,
-        nextCursor: bookmarks.continueCursor,
-        isDone: bookmarks.isDone,
-      };
-    }
-
     return {
       processed,
-      nextCursor: stats.continueCursor,
-      isDone: false,
+      nextCursor: bookmarks.continueCursor,
+      isDone: bookmarks.isDone,
     };
   },
 });

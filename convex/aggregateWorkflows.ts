@@ -138,6 +138,29 @@ export const userRepairInternalWorkflow = workflow.define({
       if (batchResult.isDone) break;
     } while (hierarchicalCursor);
 
+    // Step 4: Repair hierarchical bookmarks with pagination
+    let bookmarksCursor: string | null = null;
+    let bookmarksProcessed = 0;
+    let bookmarksBatchCount = 0;
+
+    do {
+      const batchResult: {
+        processed: number;
+        nextCursor: string | null;
+        isDone: boolean;
+      } = await step.runMutation(
+        internal.aggregateRepairs.internalRepairUserHierarchicalBookmarksBatch,
+        { userId: args.userId, cursor: bookmarksCursor, batchSize: 50 },
+        { name: `userHierarchicalBookmarks_batch_${bookmarksBatchCount}` },
+      );
+
+      bookmarksProcessed += batchResult.processed;
+      bookmarksCursor = batchResult.nextCursor;
+      bookmarksBatchCount++;
+
+      if (batchResult.isDone) break;
+    } while (bookmarksCursor);
+
     console.log(
       `Workflow: User ${args.userId} hierarchical aggregates completed. Processed: ${hierarchicalProcessed} in ${hierarchicalBatchCount} batches`,
     );
@@ -146,7 +169,8 @@ export const userRepairInternalWorkflow = workflow.define({
       basicResult.answered +
       basicResult.incorrect +
       basicResult.bookmarked +
-      hierarchicalProcessed;
+      hierarchicalProcessed +
+      bookmarksProcessed;
 
     console.log(
       `Workflow: User ${args.userId} repair completed. Total processed: ${totalProcessed}`,
