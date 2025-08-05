@@ -8,17 +8,21 @@
  * @module
  */
 
+import type * as aggregateMonitoring from "../aggregateMonitoring.js";
 import type * as aggregateQueries from "../aggregateQueries.js";
+import type * as aggregateRepairs from "../aggregateRepairs.js";
 import type * as aggregateWorkflows from "../aggregateWorkflows.js";
 import type * as aggregates from "../aggregates.js";
 import type * as bookmark from "../bookmark.js";
 import type * as customQuizzes from "../customQuizzes.js";
+import type * as customQuizzesCreation from "../customQuizzesCreation.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as migrations from "../migrations.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
 import type * as questions from "../questions.js";
+import type * as questionsAggregateSync from "../questionsAggregateSync.js";
 import type * as quiz from "../quiz.js";
 import type * as quizSessions from "../quizSessions.js";
 import type * as subthemes from "../subthemes.js";
@@ -44,17 +48,21 @@ import type {
  * ```
  */
 declare const fullApi: ApiFromModules<{
+  aggregateMonitoring: typeof aggregateMonitoring;
   aggregateQueries: typeof aggregateQueries;
+  aggregateRepairs: typeof aggregateRepairs;
   aggregateWorkflows: typeof aggregateWorkflows;
   aggregates: typeof aggregates;
   bookmark: typeof bookmark;
   customQuizzes: typeof customQuizzes;
+  customQuizzesCreation: typeof customQuizzesCreation;
   groups: typeof groups;
   http: typeof http;
   init: typeof init;
   migrations: typeof migrations;
   presetQuizzes: typeof presetQuizzes;
   questions: typeof questions;
+  questionsAggregateSync: typeof questionsAggregateSync;
   quiz: typeof quiz;
   quizSessions: typeof quizSessions;
   subthemes: typeof subthemes;
@@ -1062,435 +1070,6 @@ export declare const components: {
       >;
     };
   };
-  answeredByUser: {
-    btree: {
-      aggregateBetween: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any },
-        { count: number; sum: number }
-      >;
-      atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      atOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      get: FunctionReference<
-        "query",
-        "internal",
-        { key: any; namespace?: any },
-        null | { k: any; s: number; v: any }
-      >;
-      offset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; key: any; namespace?: any },
-        number
-      >;
-      offsetUntil: FunctionReference<
-        "query",
-        "internal",
-        { k2?: any; key: any; namespace?: any },
-        number
-      >;
-      paginate: FunctionReference<
-        "query",
-        "internal",
-        {
-          cursor?: string;
-          k1?: any;
-          k2?: any;
-          limit: number;
-          namespace?: any;
-          order: "asc" | "desc";
-        },
-        {
-          cursor: string;
-          isDone: boolean;
-          page: Array<{ k: any; s: number; v: any }>;
-        }
-      >;
-      paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
-        { cursor?: string; limit: number },
-        { cursor: string; isDone: boolean; page: Array<any> }
-      >;
-      validate: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any },
-        any
-      >;
-    };
-    inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
-      inspectNode: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any; node?: string },
-        null
-      >;
-    };
-    public: {
-      clear: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        any
-      >;
-      delete_: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        null
-      >;
-      init: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      insert: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any; summand?: number; value: any },
-        null
-      >;
-      makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
-        { namespace?: any },
-        null
-      >;
-      replace: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        null
-      >;
-      replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        any
-      >;
-    };
-  };
-  incorrectByUser: {
-    btree: {
-      aggregateBetween: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any },
-        { count: number; sum: number }
-      >;
-      atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      atOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      get: FunctionReference<
-        "query",
-        "internal",
-        { key: any; namespace?: any },
-        null | { k: any; s: number; v: any }
-      >;
-      offset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; key: any; namespace?: any },
-        number
-      >;
-      offsetUntil: FunctionReference<
-        "query",
-        "internal",
-        { k2?: any; key: any; namespace?: any },
-        number
-      >;
-      paginate: FunctionReference<
-        "query",
-        "internal",
-        {
-          cursor?: string;
-          k1?: any;
-          k2?: any;
-          limit: number;
-          namespace?: any;
-          order: "asc" | "desc";
-        },
-        {
-          cursor: string;
-          isDone: boolean;
-          page: Array<{ k: any; s: number; v: any }>;
-        }
-      >;
-      paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
-        { cursor?: string; limit: number },
-        { cursor: string; isDone: boolean; page: Array<any> }
-      >;
-      validate: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any },
-        any
-      >;
-    };
-    inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
-      inspectNode: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any; node?: string },
-        null
-      >;
-    };
-    public: {
-      clear: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        any
-      >;
-      delete_: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        null
-      >;
-      init: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      insert: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any; summand?: number; value: any },
-        null
-      >;
-      makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
-        { namespace?: any },
-        null
-      >;
-      replace: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        null
-      >;
-      replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        any
-      >;
-    };
-  };
-  bookmarkedByUser: {
-    btree: {
-      aggregateBetween: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any },
-        { count: number; sum: number }
-      >;
-      atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      atOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      get: FunctionReference<
-        "query",
-        "internal",
-        { key: any; namespace?: any },
-        null | { k: any; s: number; v: any }
-      >;
-      offset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; key: any; namespace?: any },
-        number
-      >;
-      offsetUntil: FunctionReference<
-        "query",
-        "internal",
-        { k2?: any; key: any; namespace?: any },
-        number
-      >;
-      paginate: FunctionReference<
-        "query",
-        "internal",
-        {
-          cursor?: string;
-          k1?: any;
-          k2?: any;
-          limit: number;
-          namespace?: any;
-          order: "asc" | "desc";
-        },
-        {
-          cursor: string;
-          isDone: boolean;
-          page: Array<{ k: any; s: number; v: any }>;
-        }
-      >;
-      paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
-        { cursor?: string; limit: number },
-        { cursor: string; isDone: boolean; page: Array<any> }
-      >;
-      validate: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any },
-        any
-      >;
-    };
-    inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
-      inspectNode: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any; node?: string },
-        null
-      >;
-    };
-    public: {
-      clear: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        any
-      >;
-      delete_: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        null
-      >;
-      init: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      insert: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any; summand?: number; value: any },
-        null
-      >;
-      makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
-        { namespace?: any },
-        null
-      >;
-      replace: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        null
-      >;
-      replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        any
-      >;
-    };
-  };
   randomQuestions: {
     btree: {
       aggregateBetween: FunctionReference<
@@ -1921,6 +1500,864 @@ export declare const components: {
     };
   };
   randomQuestionsByGroup: {
+    btree: {
+      aggregateBetween: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any },
+        { count: number; sum: number }
+      >;
+      atNegativeOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      atOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { key: any; namespace?: any },
+        null | { k: any; s: number; v: any }
+      >;
+      offset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; key: any; namespace?: any },
+        number
+      >;
+      offsetUntil: FunctionReference<
+        "query",
+        "internal",
+        { k2?: any; key: any; namespace?: any },
+        number
+      >;
+      paginate: FunctionReference<
+        "query",
+        "internal",
+        {
+          cursor?: string;
+          k1?: any;
+          k2?: any;
+          limit: number;
+          namespace?: any;
+          order: "asc" | "desc";
+        },
+        {
+          cursor: string;
+          isDone: boolean;
+          page: Array<{ k: any; s: number; v: any }>;
+        }
+      >;
+      paginateNamespaces: FunctionReference<
+        "query",
+        "internal",
+        { cursor?: string; limit: number },
+        { cursor: string; isDone: boolean; page: Array<any> }
+      >;
+      validate: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any },
+        any
+      >;
+    };
+    inspect: {
+      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
+      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      inspectNode: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any; node?: string },
+        null
+      >;
+    };
+    public: {
+      clear: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      deleteIfExists: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        any
+      >;
+      delete_: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        null
+      >;
+      init: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any; summand?: number; value: any },
+        null
+      >;
+      makeRootLazy: FunctionReference<
+        "mutation",
+        "internal",
+        { namespace?: any },
+        null
+      >;
+      replace: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        null
+      >;
+      replaceOrInsert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        any
+      >;
+    };
+  };
+  answeredByUser: {
+    btree: {
+      aggregateBetween: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any },
+        { count: number; sum: number }
+      >;
+      atNegativeOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      atOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { key: any; namespace?: any },
+        null | { k: any; s: number; v: any }
+      >;
+      offset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; key: any; namespace?: any },
+        number
+      >;
+      offsetUntil: FunctionReference<
+        "query",
+        "internal",
+        { k2?: any; key: any; namespace?: any },
+        number
+      >;
+      paginate: FunctionReference<
+        "query",
+        "internal",
+        {
+          cursor?: string;
+          k1?: any;
+          k2?: any;
+          limit: number;
+          namespace?: any;
+          order: "asc" | "desc";
+        },
+        {
+          cursor: string;
+          isDone: boolean;
+          page: Array<{ k: any; s: number; v: any }>;
+        }
+      >;
+      paginateNamespaces: FunctionReference<
+        "query",
+        "internal",
+        { cursor?: string; limit: number },
+        { cursor: string; isDone: boolean; page: Array<any> }
+      >;
+      validate: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any },
+        any
+      >;
+    };
+    inspect: {
+      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
+      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      inspectNode: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any; node?: string },
+        null
+      >;
+    };
+    public: {
+      clear: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      deleteIfExists: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        any
+      >;
+      delete_: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        null
+      >;
+      init: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any; summand?: number; value: any },
+        null
+      >;
+      makeRootLazy: FunctionReference<
+        "mutation",
+        "internal",
+        { namespace?: any },
+        null
+      >;
+      replace: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        null
+      >;
+      replaceOrInsert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        any
+      >;
+    };
+  };
+  incorrectByUser: {
+    btree: {
+      aggregateBetween: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any },
+        { count: number; sum: number }
+      >;
+      atNegativeOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      atOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { key: any; namespace?: any },
+        null | { k: any; s: number; v: any }
+      >;
+      offset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; key: any; namespace?: any },
+        number
+      >;
+      offsetUntil: FunctionReference<
+        "query",
+        "internal",
+        { k2?: any; key: any; namespace?: any },
+        number
+      >;
+      paginate: FunctionReference<
+        "query",
+        "internal",
+        {
+          cursor?: string;
+          k1?: any;
+          k2?: any;
+          limit: number;
+          namespace?: any;
+          order: "asc" | "desc";
+        },
+        {
+          cursor: string;
+          isDone: boolean;
+          page: Array<{ k: any; s: number; v: any }>;
+        }
+      >;
+      paginateNamespaces: FunctionReference<
+        "query",
+        "internal",
+        { cursor?: string; limit: number },
+        { cursor: string; isDone: boolean; page: Array<any> }
+      >;
+      validate: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any },
+        any
+      >;
+    };
+    inspect: {
+      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
+      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      inspectNode: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any; node?: string },
+        null
+      >;
+    };
+    public: {
+      clear: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      deleteIfExists: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        any
+      >;
+      delete_: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        null
+      >;
+      init: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any; summand?: number; value: any },
+        null
+      >;
+      makeRootLazy: FunctionReference<
+        "mutation",
+        "internal",
+        { namespace?: any },
+        null
+      >;
+      replace: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        null
+      >;
+      replaceOrInsert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        any
+      >;
+    };
+  };
+  bookmarkedByUser: {
+    btree: {
+      aggregateBetween: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any },
+        { count: number; sum: number }
+      >;
+      atNegativeOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      atOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { key: any; namespace?: any },
+        null | { k: any; s: number; v: any }
+      >;
+      offset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; key: any; namespace?: any },
+        number
+      >;
+      offsetUntil: FunctionReference<
+        "query",
+        "internal",
+        { k2?: any; key: any; namespace?: any },
+        number
+      >;
+      paginate: FunctionReference<
+        "query",
+        "internal",
+        {
+          cursor?: string;
+          k1?: any;
+          k2?: any;
+          limit: number;
+          namespace?: any;
+          order: "asc" | "desc";
+        },
+        {
+          cursor: string;
+          isDone: boolean;
+          page: Array<{ k: any; s: number; v: any }>;
+        }
+      >;
+      paginateNamespaces: FunctionReference<
+        "query",
+        "internal",
+        { cursor?: string; limit: number },
+        { cursor: string; isDone: boolean; page: Array<any> }
+      >;
+      validate: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any },
+        any
+      >;
+    };
+    inspect: {
+      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
+      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      inspectNode: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any; node?: string },
+        null
+      >;
+    };
+    public: {
+      clear: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      deleteIfExists: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        any
+      >;
+      delete_: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        null
+      >;
+      init: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any; summand?: number; value: any },
+        null
+      >;
+      makeRootLazy: FunctionReference<
+        "mutation",
+        "internal",
+        { namespace?: any },
+        null
+      >;
+      replace: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        null
+      >;
+      replaceOrInsert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        any
+      >;
+    };
+  };
+  answeredByThemeByUser: {
+    btree: {
+      aggregateBetween: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any },
+        { count: number; sum: number }
+      >;
+      atNegativeOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      atOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { key: any; namespace?: any },
+        null | { k: any; s: number; v: any }
+      >;
+      offset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; key: any; namespace?: any },
+        number
+      >;
+      offsetUntil: FunctionReference<
+        "query",
+        "internal",
+        { k2?: any; key: any; namespace?: any },
+        number
+      >;
+      paginate: FunctionReference<
+        "query",
+        "internal",
+        {
+          cursor?: string;
+          k1?: any;
+          k2?: any;
+          limit: number;
+          namespace?: any;
+          order: "asc" | "desc";
+        },
+        {
+          cursor: string;
+          isDone: boolean;
+          page: Array<{ k: any; s: number; v: any }>;
+        }
+      >;
+      paginateNamespaces: FunctionReference<
+        "query",
+        "internal",
+        { cursor?: string; limit: number },
+        { cursor: string; isDone: boolean; page: Array<any> }
+      >;
+      validate: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any },
+        any
+      >;
+    };
+    inspect: {
+      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
+      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      inspectNode: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any; node?: string },
+        null
+      >;
+    };
+    public: {
+      clear: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      deleteIfExists: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        any
+      >;
+      delete_: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        null
+      >;
+      init: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any; summand?: number; value: any },
+        null
+      >;
+      makeRootLazy: FunctionReference<
+        "mutation",
+        "internal",
+        { namespace?: any },
+        null
+      >;
+      replace: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        null
+      >;
+      replaceOrInsert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        any
+      >;
+    };
+  };
+  answeredBySubthemeByUser: {
+    btree: {
+      aggregateBetween: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any },
+        { count: number; sum: number }
+      >;
+      atNegativeOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      atOffset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; k2?: any; namespace?: any; offset: number },
+        { k: any; s: number; v: any }
+      >;
+      get: FunctionReference<
+        "query",
+        "internal",
+        { key: any; namespace?: any },
+        null | { k: any; s: number; v: any }
+      >;
+      offset: FunctionReference<
+        "query",
+        "internal",
+        { k1?: any; key: any; namespace?: any },
+        number
+      >;
+      offsetUntil: FunctionReference<
+        "query",
+        "internal",
+        { k2?: any; key: any; namespace?: any },
+        number
+      >;
+      paginate: FunctionReference<
+        "query",
+        "internal",
+        {
+          cursor?: string;
+          k1?: any;
+          k2?: any;
+          limit: number;
+          namespace?: any;
+          order: "asc" | "desc";
+        },
+        {
+          cursor: string;
+          isDone: boolean;
+          page: Array<{ k: any; s: number; v: any }>;
+        }
+      >;
+      paginateNamespaces: FunctionReference<
+        "query",
+        "internal",
+        { cursor?: string; limit: number },
+        { cursor: string; isDone: boolean; page: Array<any> }
+      >;
+      validate: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any },
+        any
+      >;
+    };
+    inspect: {
+      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
+      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      inspectNode: FunctionReference<
+        "query",
+        "internal",
+        { namespace?: any; node?: string },
+        null
+      >;
+    };
+    public: {
+      clear: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      deleteIfExists: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        any
+      >;
+      delete_: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any },
+        null
+      >;
+      init: FunctionReference<
+        "mutation",
+        "internal",
+        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
+        null
+      >;
+      insert: FunctionReference<
+        "mutation",
+        "internal",
+        { key: any; namespace?: any; summand?: number; value: any },
+        null
+      >;
+      makeRootLazy: FunctionReference<
+        "mutation",
+        "internal",
+        { namespace?: any },
+        null
+      >;
+      replace: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        null
+      >;
+      replaceOrInsert: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          currentKey: any;
+          namespace?: any;
+          newKey: any;
+          newNamespace?: any;
+          summand?: number;
+          value: any;
+        },
+        any
+      >;
+    };
+  };
+  answeredByGroupByUser: {
     btree: {
       aggregateBetween: FunctionReference<
         "query",
@@ -2779,435 +3216,6 @@ export declare const components: {
     };
   };
   bookmarkedByGroupByUser: {
-    btree: {
-      aggregateBetween: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any },
-        { count: number; sum: number }
-      >;
-      atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      atOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      get: FunctionReference<
-        "query",
-        "internal",
-        { key: any; namespace?: any },
-        null | { k: any; s: number; v: any }
-      >;
-      offset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; key: any; namespace?: any },
-        number
-      >;
-      offsetUntil: FunctionReference<
-        "query",
-        "internal",
-        { k2?: any; key: any; namespace?: any },
-        number
-      >;
-      paginate: FunctionReference<
-        "query",
-        "internal",
-        {
-          cursor?: string;
-          k1?: any;
-          k2?: any;
-          limit: number;
-          namespace?: any;
-          order: "asc" | "desc";
-        },
-        {
-          cursor: string;
-          isDone: boolean;
-          page: Array<{ k: any; s: number; v: any }>;
-        }
-      >;
-      paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
-        { cursor?: string; limit: number },
-        { cursor: string; isDone: boolean; page: Array<any> }
-      >;
-      validate: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any },
-        any
-      >;
-    };
-    inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
-      inspectNode: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any; node?: string },
-        null
-      >;
-    };
-    public: {
-      clear: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        any
-      >;
-      delete_: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        null
-      >;
-      init: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      insert: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any; summand?: number; value: any },
-        null
-      >;
-      makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
-        { namespace?: any },
-        null
-      >;
-      replace: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        null
-      >;
-      replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        any
-      >;
-    };
-  };
-  answeredByThemeByUser: {
-    btree: {
-      aggregateBetween: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any },
-        { count: number; sum: number }
-      >;
-      atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      atOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      get: FunctionReference<
-        "query",
-        "internal",
-        { key: any; namespace?: any },
-        null | { k: any; s: number; v: any }
-      >;
-      offset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; key: any; namespace?: any },
-        number
-      >;
-      offsetUntil: FunctionReference<
-        "query",
-        "internal",
-        { k2?: any; key: any; namespace?: any },
-        number
-      >;
-      paginate: FunctionReference<
-        "query",
-        "internal",
-        {
-          cursor?: string;
-          k1?: any;
-          k2?: any;
-          limit: number;
-          namespace?: any;
-          order: "asc" | "desc";
-        },
-        {
-          cursor: string;
-          isDone: boolean;
-          page: Array<{ k: any; s: number; v: any }>;
-        }
-      >;
-      paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
-        { cursor?: string; limit: number },
-        { cursor: string; isDone: boolean; page: Array<any> }
-      >;
-      validate: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any },
-        any
-      >;
-    };
-    inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
-      inspectNode: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any; node?: string },
-        null
-      >;
-    };
-    public: {
-      clear: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        any
-      >;
-      delete_: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        null
-      >;
-      init: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      insert: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any; summand?: number; value: any },
-        null
-      >;
-      makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
-        { namespace?: any },
-        null
-      >;
-      replace: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        null
-      >;
-      replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        any
-      >;
-    };
-  };
-  answeredBySubthemeByUser: {
-    btree: {
-      aggregateBetween: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any },
-        { count: number; sum: number }
-      >;
-      atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      atOffset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; k2?: any; namespace?: any; offset: number },
-        { k: any; s: number; v: any }
-      >;
-      get: FunctionReference<
-        "query",
-        "internal",
-        { key: any; namespace?: any },
-        null | { k: any; s: number; v: any }
-      >;
-      offset: FunctionReference<
-        "query",
-        "internal",
-        { k1?: any; key: any; namespace?: any },
-        number
-      >;
-      offsetUntil: FunctionReference<
-        "query",
-        "internal",
-        { k2?: any; key: any; namespace?: any },
-        number
-      >;
-      paginate: FunctionReference<
-        "query",
-        "internal",
-        {
-          cursor?: string;
-          k1?: any;
-          k2?: any;
-          limit: number;
-          namespace?: any;
-          order: "asc" | "desc";
-        },
-        {
-          cursor: string;
-          isDone: boolean;
-          page: Array<{ k: any; s: number; v: any }>;
-        }
-      >;
-      paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
-        { cursor?: string; limit: number },
-        { cursor: string; isDone: boolean; page: Array<any> }
-      >;
-      validate: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any },
-        any
-      >;
-    };
-    inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
-      inspectNode: FunctionReference<
-        "query",
-        "internal",
-        { namespace?: any; node?: string },
-        null
-      >;
-    };
-    public: {
-      clear: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        any
-      >;
-      delete_: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any },
-        null
-      >;
-      init: FunctionReference<
-        "mutation",
-        "internal",
-        { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
-        null
-      >;
-      insert: FunctionReference<
-        "mutation",
-        "internal",
-        { key: any; namespace?: any; summand?: number; value: any },
-        null
-      >;
-      makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
-        { namespace?: any },
-        null
-      >;
-      replace: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        null
-      >;
-      replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
-        {
-          currentKey: any;
-          namespace?: any;
-          newKey: any;
-          newNamespace?: any;
-          summand?: number;
-          value: any;
-        },
-        any
-      >;
-    };
-  };
-  answeredByGroupByUser: {
     btree: {
       aggregateBetween: FunctionReference<
         "query",

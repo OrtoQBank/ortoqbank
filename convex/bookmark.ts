@@ -1,8 +1,8 @@
 import { v } from 'convex/values';
 
 import { query } from './_generated/server';
-import { getCurrentUserOrThrow } from './users';
 import { mutation } from './triggers';
+import { getCurrentUserOrThrow } from './users';
 
 export const toggleBookmark = mutation({
   args: {

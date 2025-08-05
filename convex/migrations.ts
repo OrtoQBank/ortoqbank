@@ -1,8 +1,7 @@
 import { Migrations } from '@convex-dev/migrations';
 import { v } from 'convex/values';
 
-import { components } from './_generated/api';
-import { internal } from './_generated/api';
+import { components, internal } from './_generated/api';
 import { DataModel } from './_generated/dataModel';
 import { internalAction, internalMutation } from './_generated/server';
 

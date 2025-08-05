@@ -2,7 +2,6 @@ import { v } from 'convex/values';
 
 import { Doc } from './_generated/dataModel';
 import { query } from './_generated/server';
-
 import { mutation } from './triggers';
 
 export const create = mutation({
