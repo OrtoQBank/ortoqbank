@@ -1174,15 +1174,11 @@ async function collectRandomQuestionsWithAggregates(
           userId,
           mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
           count: maxQuestions,
-          ...(selection.type === 'theme'
-            ? { themeId: selection.id as Id<'themes'> }
-            : {}),
+          ...(selection.type === 'theme' ? { themeId: selection.id } : {}),
           ...(selection.type === 'subtheme'
-            ? { subthemeId: selection.id as Id<'subthemes'> }
+            ? { subthemeId: selection.id }
             : {}),
-          ...(selection.type === 'group'
-            ? { groupId: selection.id as Id<'groups'> }
-            : {}),
+          ...(selection.type === 'group' ? { groupId: selection.id } : {}),
         };
 
         const questionIds = await ctx.runQuery(
