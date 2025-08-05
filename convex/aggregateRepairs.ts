@@ -32,7 +32,7 @@ import {
 /**
  * Clear all aggregates for a user
  */
-export const clearUserAggregates = internalMutation({
+export const internalRepairClearUserAggregates = internalMutation({
   args: { userId: v.id('users') },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -59,7 +59,7 @@ export const clearUserAggregates = internalMutation({
 /**
  * Repair basic user aggregates (answered, incorrect, bookmarked)
  */
-export const repairUserBasicAggregates = internalMutation({
+export const internalRepairUserBasicAggregates = internalMutation({
   args: { userId: v.id('users') },
   returns: v.object({
     answered: v.number(),
@@ -112,7 +112,7 @@ export const repairUserBasicAggregates = internalMutation({
 /**
  * Repair hierarchical aggregates for a user
  */
-export const repairUserHierarchicalAggregates = internalMutation({
+export const internalRepairUserHierarchicalAggregates = internalMutation({
   args: { userId: v.id('users') },
   returns: v.object({
     processed: v.number(),
@@ -316,7 +316,7 @@ export const repairGlobalQuestionCount = internalMutation({
 /**
  * Clear Section 1 aggregates (fast operation)
  */
-export const clearSection1Aggregates = internalMutation({
+export const internalRepairClearSection1Aggregates = internalMutation({
   args: {},
   returns: v.null(),
   handler: async ctx => {
@@ -329,7 +329,7 @@ export const clearSection1Aggregates = internalMutation({
 /**
  * Process questions batch for global count (15-second safe)
  */
-export const processQuestionsBatchGlobal = internalMutation({
+export const internalRepairProcessQuestionsBatchGlobal = internalMutation({
   args: {
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
@@ -365,7 +365,7 @@ export const processQuestionsBatchGlobal = internalMutation({
 /**
  * Process theme aggregates batch (15-second safe)
  */
-export const processThemeAggregatesBatch = internalMutation({
+export const internalRepairProcessThemeAggregatesBatch = internalMutation({
   args: {
     themeIds: v.array(v.id('themes')),
   },
@@ -400,7 +400,7 @@ export const processThemeAggregatesBatch = internalMutation({
 /**
  * Process subtheme aggregates batch (15-second safe)
  */
-export const processSubthemeAggregatesBatch = internalMutation({
+export const internalRepairProcessSubthemeAggregatesBatch = internalMutation({
   args: {
     subthemeIds: v.array(v.id('subthemes')),
   },
@@ -438,7 +438,7 @@ export const processSubthemeAggregatesBatch = internalMutation({
 /**
  * Process group aggregates batch (15-second safe)
  */
-export const processGroupAggregatesBatch = internalMutation({
+export const internalRepairProcessGroupAggregatesBatch = internalMutation({
   args: {
     groupIds: v.array(v.id('groups')),
   },
@@ -474,7 +474,7 @@ export const processGroupAggregatesBatch = internalMutation({
 /**
  * Get all theme IDs for batch processing
  */
-export const getAllThemeIds = internalMutation({
+export const internalRepairGetAllThemeIds = internalMutation({
   args: {},
   returns: v.array(v.id('themes')),
   handler: async ctx => {
@@ -486,7 +486,7 @@ export const getAllThemeIds = internalMutation({
 /**
  * Get all subtheme IDs for batch processing
  */
-export const getAllSubthemeIds = internalMutation({
+export const internalRepairGetAllSubthemeIds = internalMutation({
   args: {},
   returns: v.array(v.id('subthemes')),
   handler: async ctx => {
@@ -498,7 +498,7 @@ export const getAllSubthemeIds = internalMutation({
 /**
  * Get all group IDs for batch processing
  */
-export const getAllGroupIds = internalMutation({
+export const internalRepairGetAllGroupIds = internalMutation({
   args: {},
   returns: v.array(v.id('groups')),
   handler: async ctx => {
@@ -514,7 +514,7 @@ export const getAllGroupIds = internalMutation({
 /**
  * Clear Section 2 aggregates (fast operation)
  */
-export const clearSection2Aggregates = internalMutation({
+export const internalRepairClearSection2Aggregates = internalMutation({
   args: {},
   returns: v.null(),
   handler: async ctx => {
@@ -527,7 +527,7 @@ export const clearSection2Aggregates = internalMutation({
 /**
  * Process questions batch for random selection (15-second safe)
  */
-export const processQuestionsBatchRandom = internalMutation({
+export const internalRepairProcessQuestionsBatchRandom = internalMutation({
   args: {
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
@@ -565,115 +565,120 @@ export const processQuestionsBatchRandom = internalMutation({
 /**
  * Process theme random aggregates batch (15-second safe)
  */
-export const processThemeRandomAggregatesBatch = internalMutation({
-  args: {
-    themeIds: v.array(v.id('themes')),
-  },
-  returns: v.object({
-    processed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    let processed = 0;
+export const internalRepairProcessThemeRandomAggregatesBatch = internalMutation(
+  {
+    args: {
+      themeIds: v.array(v.id('themes')),
+    },
+    returns: v.object({
+      processed: v.number(),
+    }),
+    handler: async (ctx, args) => {
+      let processed = 0;
 
-    for (const themeId of args.themeIds) {
-      // Clear theme random aggregate
-      await randomQuestionsByTheme.clear(ctx, { namespace: themeId });
-      // Get questions for this theme
-      const questions = await ctx.db
-        .query('questions')
-        .withIndex('by_theme', q => q.eq('themeId', themeId))
-        .collect();
+      for (const themeId of args.themeIds) {
+        // Clear theme random aggregate
+        await randomQuestionsByTheme.clear(ctx, { namespace: themeId });
+        // Get questions for this theme
+        const questions = await ctx.db
+          .query('questions')
+          .withIndex('by_theme', q => q.eq('themeId', themeId))
+          .collect();
 
-      // Insert all questions for this theme
-      for (const question of questions) {
-        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+        // Insert all questions for this theme
+        for (const question of questions) {
+          await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+        }
+
+        processed++;
+        console.log(
+          `Processed theme random ${themeId}: ${questions.length} questions`,
+        );
       }
 
-      processed++;
-      console.log(
-        `Processed theme random ${themeId}: ${questions.length} questions`,
-      );
-    }
-
-    return { processed };
+      return { processed };
+    },
   },
-});
+);
 
 /**
  * Process subtheme random aggregates batch (15-second safe)
  */
-export const processSubthemeRandomAggregatesBatch = internalMutation({
-  args: {
-    subthemeIds: v.array(v.id('subthemes')),
-  },
-  returns: v.object({
-    processed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    let processed = 0;
+export const internalRepairProcessSubthemeRandomAggregatesBatch =
+  internalMutation({
+    args: {
+      subthemeIds: v.array(v.id('subthemes')),
+    },
+    returns: v.object({
+      processed: v.number(),
+    }),
+    handler: async (ctx, args) => {
+      let processed = 0;
 
-    for (const subthemeId of args.subthemeIds) {
-      // Clear subtheme random aggregate
-      await randomQuestionsBySubtheme.clear(ctx, { namespace: subthemeId });
+      for (const subthemeId of args.subthemeIds) {
+        // Clear subtheme random aggregate
+        await randomQuestionsBySubtheme.clear(ctx, { namespace: subthemeId });
 
-      // Get questions for this subtheme
-      const questions = await ctx.db
-        .query('questions')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
-        .collect();
+        // Get questions for this subtheme
+        const questions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+          .collect();
 
-      // Insert all questions for this subtheme
-      for (const question of questions) {
-        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+        // Insert all questions for this subtheme
+        for (const question of questions) {
+          await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+        }
+
+        processed++;
+        console.log(
+          `Processed subtheme random ${subthemeId}: ${questions.length} questions`,
+        );
       }
 
-      processed++;
-      console.log(
-        `Processed subtheme random ${subthemeId}: ${questions.length} questions`,
-      );
-    }
-
-    return { processed };
-  },
-});
+      return { processed };
+    },
+  });
 
 /**
  * Process group random aggregates batch (15-second safe)
  */
-export const processGroupRandomAggregatesBatch = internalMutation({
-  args: {
-    groupIds: v.array(v.id('groups')),
-  },
-  returns: v.object({
-    processed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    let processed = 0;
+export const internalRepairProcessGroupRandomAggregatesBatch = internalMutation(
+  {
+    args: {
+      groupIds: v.array(v.id('groups')),
+    },
+    returns: v.object({
+      processed: v.number(),
+    }),
+    handler: async (ctx, args) => {
+      let processed = 0;
 
-    for (const groupId of args.groupIds) {
-      // Clear group random aggregate
-      await randomQuestionsByGroup.clear(ctx, { namespace: groupId });
+      for (const groupId of args.groupIds) {
+        // Clear group random aggregate
+        await randomQuestionsByGroup.clear(ctx, { namespace: groupId });
 
-      // Get questions for this group
-      const questions = await ctx.db
-        .query('questions')
-        .withIndex('by_group', q => q.eq('groupId', groupId))
-        .collect();
+        // Get questions for this group
+        const questions = await ctx.db
+          .query('questions')
+          .withIndex('by_group', q => q.eq('groupId', groupId))
+          .collect();
 
-      // Insert all questions for this group
-      for (const question of questions) {
-        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+        // Insert all questions for this group
+        for (const question of questions) {
+          await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+        }
+
+        processed++;
+        console.log(
+          `Processed group random ${groupId}: ${questions.length} questions`,
+        );
       }
 
-      processed++;
-      console.log(
-        `Processed group random ${groupId}: ${questions.length} questions`,
-      );
-    }
-
-    return { processed };
+      return { processed };
+    },
   },
-});
+);
 
 // ============================================================================
 // SECTION 3: USER-SPECIFIC AGGREGATES REPAIR
@@ -897,7 +902,7 @@ export const repairSection3UserSpecificAggregates = internalMutation({
 /**
  * Get all user IDs for batch processing
  */
-export const getAllUserIds = internalMutation({
+export const internalRepairGetAllUserIds = internalMutation({
   args: {},
   returns: v.array(v.id('users')),
   handler: async ctx => {
@@ -909,7 +914,7 @@ export const getAllUserIds = internalMutation({
 /**
  * Process a small batch of users for user-specific aggregates (15-second safe)
  */
-export const processUsersBatch = internalMutation({
+export const internalRepairProcessUsersBatch = internalMutation({
   args: {
     userIds: v.array(v.id('users')),
   },
@@ -1081,7 +1086,7 @@ export const processUsersBatch = internalMutation({
 /**
  * One-click repair for a user (basic + hierarchical) - delegates to tested internal mutations
  */
-export const repairUserAllAggregates = internalMutation({
+export const internalRepairUserAllAggregates = internalMutation({
   args: { userId: v.id('users') },
   returns: v.object({
     basic: v.object({
@@ -1103,14 +1108,14 @@ export const repairUserAllAggregates = internalMutation({
     // Call existing tested internal mutations instead of duplicating logic
     const basic: { answered: number; incorrect: number; bookmarked: number } =
       await ctx.runMutation(
-        internal.aggregateRepairs.repairUserBasicAggregates,
+        internal.aggregateRepairs.internalRepairUserBasicAggregates,
         {
           userId: args.userId,
         },
       );
 
     const hierarchical: { processed: number } = await ctx.runMutation(
-      internal.aggregateRepairs.repairUserHierarchicalAggregates,
+      internal.aggregateRepairs.internalRepairUserHierarchicalAggregates,
       {
         userId: args.userId,
       },

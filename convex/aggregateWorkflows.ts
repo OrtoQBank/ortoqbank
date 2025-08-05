@@ -74,13 +74,16 @@ export const userRepairInternalWorkflow = workflow.define({
     console.log(`Workflow: Repairing aggregates for user ${args.userId}...`);
 
     // Step 1: Clear user aggregates
-    await step.runMutation(internal.aggregateRepairs.clearUserAggregates, {
-      userId: args.userId,
-    });
+    await step.runMutation(
+      internal.aggregateRepairs.internalRepairClearUserAggregates,
+      {
+        userId: args.userId,
+      },
+    );
 
     // Step 2: Repair basic aggregates
     const basicResult = await step.runMutation(
-      internal.aggregateRepairs.repairUserBasicAggregates,
+      internal.aggregateRepairs.internalRepairUserBasicAggregates,
       {
         userId: args.userId,
       },
@@ -88,7 +91,7 @@ export const userRepairInternalWorkflow = workflow.define({
 
     // Step 3: Repair hierarchical aggregates
     const hierarchicalResult = await step.runMutation(
-      internal.aggregateRepairs.repairUserHierarchicalAggregates,
+      internal.aggregateRepairs.internalRepairUserHierarchicalAggregates,
       {
         userId: args.userId,
       },
@@ -154,7 +157,7 @@ export const section1RepairInternalWorkflow = workflow.define({
 
     // Step 1: Clear aggregates
     await step.runMutation(
-      internal.aggregateRepairs.clearSection1Aggregates,
+      internal.aggregateRepairs.internalRepairClearSection1Aggregates,
       {},
     );
 
@@ -169,7 +172,7 @@ export const section1RepairInternalWorkflow = workflow.define({
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
-        internal.aggregateRepairs.processQuestionsBatchGlobal,
+        internal.aggregateRepairs.internalRepairProcessQuestionsBatchGlobal,
         { cursor, batchSize: 100 },
         { name: `processQuestionsBatch_${batchCount}` },
       );
@@ -187,9 +190,18 @@ export const section1RepairInternalWorkflow = workflow.define({
 
     // Step 3: Get taxonomy IDs
     const [themeIds, subthemeIds, groupIds] = await Promise.all([
-      step.runMutation(internal.aggregateRepairs.getAllThemeIds, {}),
-      step.runMutation(internal.aggregateRepairs.getAllSubthemeIds, {}),
-      step.runMutation(internal.aggregateRepairs.getAllGroupIds, {}),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllThemeIds,
+        {},
+      ),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllSubthemeIds,
+        {},
+      ),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllGroupIds,
+        {},
+      ),
     ]);
 
     // Step 4: Process themes in batches (5 themes per batch)
@@ -198,7 +210,7 @@ export const section1RepairInternalWorkflow = workflow.define({
     for (let i = 0; i < themeIds.length; i += themeBatchSize) {
       const batch = themeIds.slice(i, i + themeBatchSize);
       const result = await step.runMutation(
-        internal.aggregateRepairs.processThemeAggregatesBatch,
+        internal.aggregateRepairs.internalRepairProcessThemeAggregatesBatch,
         { themeIds: batch },
         { name: `processThemes_batch_${Math.floor(i / themeBatchSize)}` },
       );
@@ -211,7 +223,7 @@ export const section1RepairInternalWorkflow = workflow.define({
     for (let i = 0; i < subthemeIds.length; i += subthemeBatchSize) {
       const batch = subthemeIds.slice(i, i + subthemeBatchSize);
       const result = await step.runMutation(
-        internal.aggregateRepairs.processSubthemeAggregatesBatch,
+        internal.aggregateRepairs.internalRepairProcessSubthemeAggregatesBatch,
         { subthemeIds: batch },
         { name: `processSubthemes_batch_${Math.floor(i / subthemeBatchSize)}` },
       );
@@ -224,7 +236,7 @@ export const section1RepairInternalWorkflow = workflow.define({
     for (let i = 0; i < groupIds.length; i += groupBatchSize) {
       const batch = groupIds.slice(i, i + groupBatchSize);
       const result = await step.runMutation(
-        internal.aggregateRepairs.processGroupAggregatesBatch,
+        internal.aggregateRepairs.internalRepairProcessGroupAggregatesBatch,
         { groupIds: batch },
         { name: `processGroups_batch_${Math.floor(i / groupBatchSize)}` },
       );
@@ -294,7 +306,7 @@ export const section2RepairInternalWorkflow = workflow.define({
 
     // Step 1: Clear aggregates
     await step.runMutation(
-      internal.aggregateRepairs.clearSection2Aggregates,
+      internal.aggregateRepairs.internalRepairClearSection2Aggregates,
       {},
     );
 
@@ -309,7 +321,7 @@ export const section2RepairInternalWorkflow = workflow.define({
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
-        internal.aggregateRepairs.processQuestionsBatchRandom,
+        internal.aggregateRepairs.internalRepairProcessQuestionsBatchRandom,
         { cursor, batchSize: 100 },
         { name: `processRandomQuestionsBatch_${batchCount}` },
       );
@@ -327,9 +339,18 @@ export const section2RepairInternalWorkflow = workflow.define({
 
     // Step 3: Get taxonomy IDs
     const [themeIds, subthemeIds, groupIds] = await Promise.all([
-      step.runMutation(internal.aggregateRepairs.getAllThemeIds, {}),
-      step.runMutation(internal.aggregateRepairs.getAllSubthemeIds, {}),
-      step.runMutation(internal.aggregateRepairs.getAllGroupIds, {}),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllThemeIds,
+        {},
+      ),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllSubthemeIds,
+        {},
+      ),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllGroupIds,
+        {},
+      ),
     ]);
 
     // Step 4: Process themes in batches (5 themes per batch)
@@ -338,7 +359,8 @@ export const section2RepairInternalWorkflow = workflow.define({
     for (let i = 0; i < themeIds.length; i += themeBatchSize) {
       const batch = themeIds.slice(i, i + themeBatchSize);
       const result = await step.runMutation(
-        internal.aggregateRepairs.processThemeRandomAggregatesBatch,
+        internal.aggregateRepairs
+          .internalRepairProcessThemeRandomAggregatesBatch,
         { themeIds: batch },
         { name: `processRandomThemes_batch_${Math.floor(i / themeBatchSize)}` },
       );
@@ -351,7 +373,8 @@ export const section2RepairInternalWorkflow = workflow.define({
     for (let i = 0; i < subthemeIds.length; i += subthemeBatchSize) {
       const batch = subthemeIds.slice(i, i + subthemeBatchSize);
       const result = await step.runMutation(
-        internal.aggregateRepairs.processSubthemeRandomAggregatesBatch,
+        internal.aggregateRepairs
+          .internalRepairProcessSubthemeRandomAggregatesBatch,
         { subthemeIds: batch },
         {
           name: `processRandomSubthemes_batch_${Math.floor(i / subthemeBatchSize)}`,
@@ -366,7 +389,8 @@ export const section2RepairInternalWorkflow = workflow.define({
     for (let i = 0; i < groupIds.length; i += groupBatchSize) {
       const batch = groupIds.slice(i, i + groupBatchSize);
       const result = await step.runMutation(
-        internal.aggregateRepairs.processGroupRandomAggregatesBatch,
+        internal.aggregateRepairs
+          .internalRepairProcessGroupRandomAggregatesBatch,
         { groupIds: batch },
         { name: `processRandomGroups_batch_${Math.floor(i / groupBatchSize)}` },
       );
@@ -442,7 +466,7 @@ export const section3RepairInternalWorkflow = workflow.define({
 
     // Step 1: Get all user IDs
     const userIds = await step.runMutation(
-      internal.aggregateRepairs.getAllUserIds,
+      internal.aggregateRepairs.internalRepairGetAllUserIds,
       {},
     );
 
@@ -461,7 +485,7 @@ export const section3RepairInternalWorkflow = workflow.define({
       const batchNumber = Math.floor(i / userBatchSize);
 
       const batchResult = await step.runMutation(
-        internal.aggregateRepairs.processUsersBatch,
+        internal.aggregateRepairs.internalRepairProcessUsersBatch,
         { userIds: userBatch },
         { name: `processUsersBatch_${batchNumber}` },
       );
@@ -548,7 +572,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     // Step 1: Section 1 - Global Question Count Aggregates (direct execution)
     console.log('Workflow: Phase 1/3 - Global Question Count Aggregates...');
     await step.runMutation(
-      internal.aggregateRepairs.clearSection1Aggregates,
+      internal.aggregateRepairs.internalRepairClearSection1Aggregates,
       {},
     );
 
@@ -563,7 +587,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
-        internal.aggregateRepairs.processQuestionsBatchGlobal,
+        internal.aggregateRepairs.internalRepairProcessQuestionsBatchGlobal,
         { cursor: cursor1, batchSize: 100 },
         { name: `comprehensive_section1_batch_${batchCount1}` },
       );
@@ -577,9 +601,18 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
 
     // Get taxonomy IDs and process them
     const [themeIds1, subthemeIds1, groupIds1] = await Promise.all([
-      step.runMutation(internal.aggregateRepairs.getAllThemeIds, {}),
-      step.runMutation(internal.aggregateRepairs.getAllSubthemeIds, {}),
-      step.runMutation(internal.aggregateRepairs.getAllGroupIds, {}),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllThemeIds,
+        {},
+      ),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllSubthemeIds,
+        {},
+      ),
+      step.runMutation(
+        internal.aggregateRepairs.internalRepairGetAllGroupIds,
+        {},
+      ),
     ]);
 
     // Process taxonomies in batches
@@ -587,7 +620,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     for (let i = 0; i < themeIds1.length; i += 5) {
       const batch = themeIds1.slice(i, i + 5);
       await step.runMutation(
-        internal.aggregateRepairs.processThemeAggregatesBatch,
+        internal.aggregateRepairs.internalRepairProcessThemeAggregatesBatch,
         { themeIds: batch },
         { name: `comprehensive_section1_themes_${Math.floor(i / 5)}` },
       );
@@ -607,7 +640,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
       'Workflow: Phase 2/3 - Random Question Selection Aggregates...',
     );
     await step.runMutation(
-      internal.aggregateRepairs.clearSection2Aggregates,
+      internal.aggregateRepairs.internalRepairClearSection2Aggregates,
       {},
     );
 
@@ -622,7 +655,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
-        internal.aggregateRepairs.processQuestionsBatchRandom,
+        internal.aggregateRepairs.internalRepairProcessQuestionsBatchRandom,
         { cursor: cursor2, batchSize: 100 },
         { name: `comprehensive_section2_batch_${batchCount2}` },
       );
@@ -639,7 +672,8 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     for (let i = 0; i < themeIds1.length; i += 5) {
       const batch = themeIds1.slice(i, i + 5);
       await step.runMutation(
-        internal.aggregateRepairs.processThemeRandomAggregatesBatch,
+        internal.aggregateRepairs
+          .internalRepairProcessThemeRandomAggregatesBatch,
         { themeIds: batch },
         { name: `comprehensive_section2_themes_${Math.floor(i / 5)}` },
       );
@@ -657,7 +691,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     // Step 3: Section 3 - User-Specific Aggregates (direct execution)
     console.log('Workflow: Phase 3/3 - User-Specific Aggregates...');
     const userIds = await step.runMutation(
-      internal.aggregateRepairs.getAllUserIds,
+      internal.aggregateRepairs.internalRepairGetAllUserIds,
       {},
     );
 
@@ -672,7 +706,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
       const batchNumber = Math.floor(i / batchSize);
 
       const batchResult = await step.runMutation(
-        internal.aggregateRepairs.processUsersBatch,
+        internal.aggregateRepairs.internalRepairProcessUsersBatch,
         { userIds: userBatch },
         { name: `comprehensive_section3_batch_${batchNumber}` },
       );
