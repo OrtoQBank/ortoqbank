@@ -6,6 +6,7 @@ import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
 import { internalMutation, mutation } from './_generated/server';
+import { Id, Doc } from './_generated/dataModel';
 import {
   answeredByGroupByUser,
   answeredBySubthemeByUser,
@@ -1266,9 +1267,43 @@ export const internalRepairUserHierarchicalAggregatesBatch = internalMutation({
       cursor: args.cursor || null,
     });
 
+    // Collect all questionIds for batch fetching
+    const questionIds = new Set([...stats.page.map(stat => stat.questionId)]);
+
+    // If stats are done, also collect bookmark questionIds and store bookmarks result
+    let bookmarks: {
+      page: any[];
+      continueCursor: string | null;
+      isDone: boolean;
+    } | null = null;
+    if (stats.isDone) {
+      const bookmarksQuery = ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', q => q.eq('userId', args.userId));
+
+      bookmarks = await bookmarksQuery.paginate({
+        numItems: batchSize,
+        cursor: null,
+      });
+
+      // Add bookmark questionIds to the set
+      for (const bookmark of bookmarks.page) {
+        questionIds.add(bookmark.questionId);
+      }
+    }
+
+    // Batch fetch all questions
+    const questions = new Map<Id<'questions'>, Doc<'questions'>>();
+    for (const questionId of questionIds) {
+      const question = await ctx.db.get(questionId);
+      if (question) {
+        questions.set(questionId, question);
+      }
+    }
+
     // Process stats (answered and incorrect)
     for (const stat of stats.page) {
-      const question = await ctx.db.get(stat.questionId);
+      const question = questions.get(stat.questionId);
       if (question) {
         // Answered stats
         if (stat.hasAnswered) {
@@ -1318,19 +1353,10 @@ export const internalRepairUserHierarchicalAggregatesBatch = internalMutation({
     }
 
     // If stats are done, process bookmarks
-    if (stats.isDone) {
-      const bookmarksQuery = ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', args.userId));
-
-      const bookmarks = await bookmarksQuery.paginate({
-        numItems: batchSize,
-        cursor: null,
-      });
-
+    if (stats.isDone && bookmarks) {
       // Process bookmarks
       for (const bookmark of bookmarks.page) {
-        const question = await ctx.db.get(bookmark.questionId);
+        const question = questions.get(bookmark.questionId);
         if (question) {
           if (question.themeId) {
             await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
