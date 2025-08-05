@@ -6,6 +6,7 @@ import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
 import { internalMutation, mutation } from './_generated/server';
+import { Id, Doc } from './_generated/dataModel';
 import {
   answeredByGroupByUser,
   answeredBySubthemeByUser,
@@ -1124,6 +1125,272 @@ export const internalRepairUserAllAggregates = internalMutation({
     return {
       basic,
       hierarchical,
+    };
+  },
+});
+
+/**
+ * Repair basic user aggregates with pagination (15-second safe)
+ */
+export const internalRepairUserBasicAggregatesBatch = internalMutation({
+  args: {
+    userId: v.id('users'),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    answered: v.number(),
+    incorrect: v.number(),
+    bookmarked: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 50;
+
+    // Only clear aggregates if this is the first call (no cursor)
+    if (!args.cursor) {
+      await Promise.all([
+        answeredByUser.clear(ctx, { namespace: args.userId }),
+        incorrectByUser.clear(ctx, { namespace: args.userId }),
+        bookmarkedByUser.clear(ctx, { namespace: args.userId }),
+      ]);
+    }
+
+    let processed = 0;
+    let answered = 0;
+    let incorrect = 0;
+    let bookmarked = 0;
+
+    // Process userQuestionStats in batches
+    const statsQuery = ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', args.userId));
+
+    const stats = await statsQuery.paginate({
+      numItems: batchSize,
+      cursor: args.cursor || null,
+    });
+
+    for (const stat of stats.page) {
+      if (stat.hasAnswered) {
+        await answeredByUser.insertIfDoesNotExist(ctx, stat);
+        answered++;
+      }
+      if (stat.isIncorrect) {
+        await incorrectByUser.insertIfDoesNotExist(ctx, stat);
+        incorrect++;
+      }
+      processed++;
+    }
+
+    // Process userBookmarks in batches (only if stats are done)
+    if (stats.isDone) {
+      const bookmarksQuery = ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', q => q.eq('userId', args.userId));
+
+      const bookmarks = await bookmarksQuery.paginate({
+        numItems: batchSize,
+        cursor: null,
+      });
+
+      for (const bookmark of bookmarks.page) {
+        await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+        bookmarked++;
+        processed++;
+      }
+
+      return {
+        processed,
+        answered,
+        incorrect,
+        bookmarked,
+        nextCursor: bookmarks.continueCursor,
+        isDone: bookmarks.isDone,
+      };
+    }
+
+    return {
+      processed,
+      answered,
+      incorrect,
+      bookmarked,
+      nextCursor: stats.continueCursor,
+      isDone: false,
+    };
+  },
+});
+
+/**
+ * Repair hierarchical aggregates for a user with pagination (15-second safe)
+ */
+export const internalRepairUserHierarchicalAggregatesBatch = internalMutation({
+  args: {
+    userId: v.id('users'),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 50;
+
+    // Only clear hierarchical aggregates if this is the first call (no cursor)
+    if (!args.cursor) {
+      await Promise.all([
+        incorrectByThemeByUser.clear(ctx, { namespace: args.userId }),
+        incorrectBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+        incorrectByGroupByUser.clear(ctx, { namespace: args.userId }),
+        bookmarkedByThemeByUser.clear(ctx, { namespace: args.userId }),
+        bookmarkedBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+        bookmarkedByGroupByUser.clear(ctx, { namespace: args.userId }),
+        answeredByThemeByUser.clear(ctx, { namespace: args.userId }),
+        answeredBySubthemeByUser.clear(ctx, { namespace: args.userId }),
+        answeredByGroupByUser.clear(ctx, { namespace: args.userId }),
+      ]);
+    }
+
+    let processed = 0;
+
+    // Process userQuestionStats in batches
+    const statsQuery = ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', args.userId));
+
+    const stats = await statsQuery.paginate({
+      numItems: batchSize,
+      cursor: args.cursor || null,
+    });
+
+    // Collect all questionIds for batch fetching
+    const questionIds = new Set([...stats.page.map(stat => stat.questionId)]);
+
+    // If stats are done, also collect bookmark questionIds and store bookmarks result
+    let bookmarks: {
+      page: any[];
+      continueCursor: string | null;
+      isDone: boolean;
+    } | null = null;
+    if (stats.isDone) {
+      const bookmarksQuery = ctx.db
+        .query('userBookmarks')
+        .withIndex('by_user', q => q.eq('userId', args.userId));
+
+      bookmarks = await bookmarksQuery.paginate({
+        numItems: batchSize,
+        cursor: null,
+      });
+
+      // Add bookmark questionIds to the set
+      for (const bookmark of bookmarks.page) {
+        questionIds.add(bookmark.questionId);
+      }
+    }
+
+    // Batch fetch all questions
+    const questions = new Map<Id<'questions'>, Doc<'questions'>>();
+    for (const questionId of questionIds) {
+      const question = await ctx.db.get(questionId);
+      if (question) {
+        questions.set(questionId, question);
+      }
+    }
+
+    // Process stats (answered and incorrect)
+    for (const stat of stats.page) {
+      const question = questions.get(stat.questionId);
+      if (question) {
+        // Answered stats
+        if (stat.hasAnswered) {
+          if (question.themeId) {
+            await answeredByThemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              themeId: question.themeId,
+            });
+          }
+          if (question.subthemeId) {
+            await answeredBySubthemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              subthemeId: question.subthemeId,
+            });
+          }
+          if (question.groupId) {
+            await answeredByGroupByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              groupId: question.groupId,
+            });
+          }
+        }
+
+        // Incorrect stats
+        if (stat.isIncorrect) {
+          if (question.themeId) {
+            await incorrectByThemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              themeId: question.themeId,
+            });
+          }
+          if (question.subthemeId) {
+            await incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              subthemeId: question.subthemeId,
+            });
+          }
+          if (question.groupId) {
+            await incorrectByGroupByUser.insertIfDoesNotExist(ctx, {
+              ...stat,
+              groupId: question.groupId,
+            });
+          }
+        }
+        processed++;
+      }
+    }
+
+    // If stats are done, process bookmarks
+    if (stats.isDone && bookmarks) {
+      // Process bookmarks
+      for (const bookmark of bookmarks.page) {
+        const question = questions.get(bookmark.questionId);
+        if (question) {
+          if (question.themeId) {
+            await bookmarkedByThemeByUser.insertIfDoesNotExist(ctx, {
+              ...bookmark,
+              themeId: question.themeId,
+            });
+          }
+          if (question.subthemeId) {
+            await bookmarkedBySubthemeByUser.insertIfDoesNotExist(ctx, {
+              ...bookmark,
+              subthemeId: question.subthemeId,
+            });
+          }
+          if (question.groupId) {
+            await bookmarkedByGroupByUser.insertIfDoesNotExist(ctx, {
+              ...bookmark,
+              groupId: question.groupId,
+            });
+          }
+          processed++;
+        }
+      }
+
+      return {
+        processed,
+        nextCursor: bookmarks.continueCursor,
+        isDone: bookmarks.isDone,
+      };
+    }
+
+    return {
+      processed,
+      nextCursor: stats.continueCursor,
+      isDone: false,
     };
   },
 });

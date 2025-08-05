@@ -1163,7 +1163,36 @@ async function collectRandomQuestionsWithAggregates(
         `🚀 AGGREGATE BATCH: Processing ${selections.length} selections in parallel`,
       );
 
-      // Use the batch-optimized function for maximum performance
+      // Special case: If only one selection, use direct query for better performance
+      if (selections.length === 1) {
+        const selection = selections[0];
+        console.log(
+          `🚀 AGGREGATE SINGLE: Using direct query for single ${selection.type} selection`,
+        );
+
+        const queryArgs = {
+          userId,
+          mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+          count: maxQuestions,
+          ...(selection.type === 'theme' ? { themeId: selection.id } : {}),
+          ...(selection.type === 'subtheme'
+            ? { subthemeId: selection.id }
+            : {}),
+          ...(selection.type === 'group' ? { groupId: selection.id } : {}),
+        };
+
+        const questionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserModeOptimized,
+          queryArgs,
+        );
+
+        console.log(
+          `🚀 AGGREGATE SINGLE: Returned ${questionIds.length} questions for single ${selection.type} selection`,
+        );
+        return questionIds;
+      }
+
+      // Use the batch-optimized function for multiple selections
       const questionIds = await ctx.runQuery(
         api.aggregateQueries.getRandomQuestionsByUserModeBatch,
         {
@@ -1246,19 +1275,44 @@ async function collectRandomQuestionsWithAggregates(
     for (const groupId of selectedGroups) {
       if (remainingQuestions <= 0) break;
 
-      const groupQuestionIds = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestionsByGroup,
-        {
-          groupId,
-          count: Math.min(questionsPerGroup, remainingQuestions),
-        },
-      );
+      // For user-specific modes, use user-specific group aggregates
+      if (questionMode === 'all') {
+        // For 'all' mode, use global group aggregates
+        const groupQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByGroup,
+          {
+            groupId,
+            count: Math.min(questionsPerGroup, remainingQuestions),
+          },
+        );
 
-      groupQuestionIds.forEach((id: Id<'questions'>) => allQuestionIds.add(id));
-      remainingQuestions -= groupQuestionIds.length;
-      console.log(
-        `🚀 AGGREGATE: Group ${groupId} contributed ${groupQuestionIds.length} questions`,
-      );
+        groupQuestionIds.forEach((id: Id<'questions'>) =>
+          allQuestionIds.add(id),
+        );
+        remainingQuestions -= groupQuestionIds.length;
+        console.log(
+          `🚀 AGGREGATE: Group ${groupId} contributed ${groupQuestionIds.length} questions (global mode)`,
+        );
+      } else {
+        // For user-specific modes, use user-specific group aggregates
+        const groupQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserModeOptimized,
+          {
+            userId,
+            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+            count: Math.min(questionsPerGroup, remainingQuestions),
+            groupId,
+          },
+        );
+
+        groupQuestionIds.forEach((id: Id<'questions'>) =>
+          allQuestionIds.add(id),
+        );
+        remainingQuestions -= groupQuestionIds.length;
+        console.log(
+          `🚀 AGGREGATE: Group ${groupId} contributed ${groupQuestionIds.length} questions (user-specific mode)`,
+        );
+      }
     }
   }
 
@@ -1289,23 +1343,44 @@ async function collectRandomQuestionsWithAggregates(
         groupsForThisSubtheme.length === 0);
 
     if (shouldProcessSubtheme) {
-      const subthemeQuestionIds = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestionsBySubtheme,
-        {
-          subthemeId,
-          count: remainingQuestions,
-        },
-      );
+      // For user-specific modes, use user-specific subtheme aggregates
+      if (questionMode === 'all') {
+        // For 'all' mode, use global subtheme aggregates
+        const subthemeQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsBySubtheme,
+          {
+            subthemeId,
+            count: remainingQuestions,
+          },
+        );
 
-      // Filter out questions that belong to groups (to avoid non-group questions when groups exist)
-      // Note: This is a simplification - we could add more sophisticated filtering here
-      subthemeQuestionIds.forEach((id: Id<'questions'>) =>
-        allQuestionIds.add(id),
-      );
-      remainingQuestions -= subthemeQuestionIds.length;
-      console.log(
-        `🚀 AGGREGATE: Subtheme ${subthemeId} contributed ${subthemeQuestionIds.length} questions`,
-      );
+        subthemeQuestionIds.forEach((id: Id<'questions'>) =>
+          allQuestionIds.add(id),
+        );
+        remainingQuestions -= subthemeQuestionIds.length;
+        console.log(
+          `🚀 AGGREGATE: Subtheme ${subthemeId} contributed ${subthemeQuestionIds.length} questions (global mode)`,
+        );
+      } else {
+        // For user-specific modes, use user-specific subtheme aggregates
+        const subthemeQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserModeOptimized,
+          {
+            userId,
+            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+            count: remainingQuestions,
+            subthemeId,
+          },
+        );
+
+        subthemeQuestionIds.forEach((id: Id<'questions'>) =>
+          allQuestionIds.add(id),
+        );
+        remainingQuestions -= subthemeQuestionIds.length;
+        console.log(
+          `🚀 AGGREGATE: Subtheme ${subthemeId} contributed ${subthemeQuestionIds.length} questions (user-specific mode)`,
+        );
+      }
     }
   }
 
@@ -1320,19 +1395,44 @@ async function collectRandomQuestionsWithAggregates(
         `🚀 AGGREGATE: Theme ${themeId} skipped (overridden by subthemes)`,
       );
     } else {
-      const themeQuestionIds = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestionsByTheme,
-        {
-          themeId,
-          count: remainingQuestions,
-        },
-      );
+      // For user-specific modes, use user-specific theme aggregates
+      if (questionMode === 'all') {
+        // For 'all' mode, use global theme aggregates
+        const themeQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByTheme,
+          {
+            themeId,
+            count: remainingQuestions,
+          },
+        );
 
-      themeQuestionIds.forEach((id: Id<'questions'>) => allQuestionIds.add(id));
-      remainingQuestions -= themeQuestionIds.length;
-      console.log(
-        `🚀 AGGREGATE: Theme ${themeId} contributed ${themeQuestionIds.length} questions`,
-      );
+        themeQuestionIds.forEach((id: Id<'questions'>) =>
+          allQuestionIds.add(id),
+        );
+        remainingQuestions -= themeQuestionIds.length;
+        console.log(
+          `🚀 AGGREGATE: Theme ${themeId} contributed ${themeQuestionIds.length} questions (global mode)`,
+        );
+      } else {
+        // For user-specific modes, use user-specific theme aggregates
+        const themeQuestionIds = await ctx.runQuery(
+          api.aggregateQueries.getRandomQuestionsByUserModeOptimized,
+          {
+            userId,
+            mode: questionMode as 'incorrect' | 'bookmarked' | 'unanswered',
+            count: remainingQuestions,
+            themeId,
+          },
+        );
+
+        themeQuestionIds.forEach((id: Id<'questions'>) =>
+          allQuestionIds.add(id),
+        );
+        remainingQuestions -= themeQuestionIds.length;
+        console.log(
+          `🚀 AGGREGATE: Theme ${themeId} contributed ${themeQuestionIds.length} questions (user-specific mode)`,
+        );
+      }
     }
   }
 

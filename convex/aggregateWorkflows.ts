@@ -81,30 +81,75 @@ export const userRepairInternalWorkflow = workflow.define({
       },
     );
 
-    // Step 2: Repair basic aggregates
-    const basicResult = await step.runMutation(
-      internal.aggregateRepairs.internalRepairUserBasicAggregates,
-      {
-        userId: args.userId,
-      },
+    // Step 2: Repair basic aggregates with pagination
+    let basicCursor: string | null = null;
+    let basicProcessed = 0;
+    let basicBatchCount = 0;
+    let basicResult = { answered: 0, incorrect: 0, bookmarked: 0 };
+
+    do {
+      const batchResult: {
+        processed: number;
+        answered: number;
+        incorrect: number;
+        bookmarked: number;
+        nextCursor: string | null;
+        isDone: boolean;
+      } = await step.runMutation(
+        internal.aggregateRepairs.internalRepairUserBasicAggregatesBatch,
+        { userId: args.userId, cursor: basicCursor, batchSize: 50 },
+        { name: `userBasicAggregates_batch_${basicBatchCount}` },
+      );
+
+      basicResult.answered += batchResult.answered;
+      basicResult.incorrect += batchResult.incorrect;
+      basicResult.bookmarked += batchResult.bookmarked;
+      basicProcessed += batchResult.processed;
+      basicCursor = batchResult.nextCursor;
+      basicBatchCount++;
+
+      if (batchResult.isDone) break;
+    } while (basicCursor);
+
+    console.log(
+      `Workflow: User ${args.userId} basic aggregates completed. Processed: ${basicProcessed} in ${basicBatchCount} batches`,
     );
 
-    // Step 3: Repair hierarchical aggregates
-    const hierarchicalResult = await step.runMutation(
-      internal.aggregateRepairs.internalRepairUserHierarchicalAggregates,
-      {
-        userId: args.userId,
-      },
+    // Step 3: Repair hierarchical aggregates with pagination
+    let hierarchicalCursor: string | null = null;
+    let hierarchicalProcessed = 0;
+    let hierarchicalBatchCount = 0;
+
+    do {
+      const batchResult: {
+        processed: number;
+        nextCursor: string | null;
+        isDone: boolean;
+      } = await step.runMutation(
+        internal.aggregateRepairs.internalRepairUserHierarchicalAggregatesBatch,
+        { userId: args.userId, cursor: hierarchicalCursor, batchSize: 50 },
+        { name: `userHierarchicalAggregates_batch_${hierarchicalBatchCount}` },
+      );
+
+      hierarchicalProcessed += batchResult.processed;
+      hierarchicalCursor = batchResult.nextCursor;
+      hierarchicalBatchCount++;
+
+      if (batchResult.isDone) break;
+    } while (hierarchicalCursor);
+
+    console.log(
+      `Workflow: User ${args.userId} hierarchical aggregates completed. Processed: ${hierarchicalProcessed} in ${hierarchicalBatchCount} batches`,
     );
 
     const totalProcessed =
       basicResult.answered +
       basicResult.incorrect +
       basicResult.bookmarked +
-      hierarchicalResult.processed;
+      hierarchicalProcessed;
 
     console.log(
-      `Workflow: User ${args.userId} repair completed. Processed: ${totalProcessed}`,
+      `Workflow: User ${args.userId} repair completed. Total processed: ${totalProcessed}`,
     );
 
     return { success: true, processed: totalProcessed };
@@ -743,5 +788,24 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     console.log('Final results:', result);
 
     return result;
+  },
+});
+
+/**
+ * Test function to verify user repair workflow works
+ */
+export const testUserRepair = mutation({
+  args: { userId: v.id('users') },
+  returns: v.string(),
+  handler: async (ctx, args): Promise<string> => {
+    console.log(`Testing user repair for ${args.userId}...`);
+
+    const workflowId = await ctx.runMutation(
+      internal.aggregateWorkflows.initiateUserRepair,
+      { userId: args.userId },
+    );
+
+    console.log(`Test workflow started with ID: ${workflowId}`);
+    return workflowId;
   },
 });
