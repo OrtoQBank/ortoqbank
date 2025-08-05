@@ -31,9 +31,9 @@ import { internalMutation, mutation } from './_generated/server';
 export const workflow = new WorkflowManager(components.workflow);
 
 /**
- * Start simple user repair workflow
+ * Initiate simple user repair workflow
  */
-export const startUserRepair = internalMutation({
+export const initiateUserRepair = internalMutation({
   args: { userId: v.id('users') },
   returns: v.string(),
   handler: async (ctx, args): Promise<string> => {
@@ -41,7 +41,7 @@ export const startUserRepair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateWorkflows.userRepairWorkflow,
+      internal.aggregateWorkflows.userRepairInternalWorkflow,
       { userId: args.userId },
     );
 
@@ -63,9 +63,9 @@ export const getWorkflowStatus = internalMutation({
 });
 
 /**
- * Simple user repair workflow
+ * Simple user repair internal workflow
  */
-export const userRepairWorkflow = workflow.define({
+export const userRepairInternalWorkflow = workflow.define({
   args: { userId: v.id('users') },
   handler: async (
     step,
@@ -113,9 +113,9 @@ export const userRepairWorkflow = workflow.define({
 // ============================================================================
 
 /**
- * Start Section 1 repair workflow (Global Question Count Aggregates)
+ * Initiate Section 1 repair workflow (Global Question Count Aggregates)
  */
-export const startSection1Repair = internalMutation({
+export const initiateSection1Repair = internalMutation({
   args: {},
   returns: v.string(),
   handler: async (ctx): Promise<string> => {
@@ -125,7 +125,7 @@ export const startSection1Repair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateWorkflows.section1RepairWorkflow,
+      internal.aggregateWorkflows.section1RepairInternalWorkflow,
       {},
     );
 
@@ -135,9 +135,9 @@ export const startSection1Repair = internalMutation({
 });
 
 /**
- * Section 1 repair workflow (Global Question Count Aggregates) - 15-second safe
+ * Section 1 repair internal workflow (Global Question Count Aggregates) - 15-second safe
  */
-export const section1RepairWorkflow = workflow.define({
+export const section1RepairInternalWorkflow = workflow.define({
   args: {},
   handler: async (
     step,
@@ -253,9 +253,9 @@ export const section1RepairWorkflow = workflow.define({
 // ============================================================================
 
 /**
- * Start Section 2 repair workflow (Random Question Selection Aggregates)
+ * Initiate Section 2 repair workflow (Random Question Selection Aggregates)
  */
-export const startSection2Repair = internalMutation({
+export const initiateSection2Repair = internalMutation({
   args: {},
   returns: v.string(),
   handler: async (ctx): Promise<string> => {
@@ -265,7 +265,7 @@ export const startSection2Repair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateWorkflows.section2RepairWorkflow,
+      internal.aggregateWorkflows.section2RepairInternalWorkflow,
       {},
     );
 
@@ -275,9 +275,9 @@ export const startSection2Repair = internalMutation({
 });
 
 /**
- * Section 2 repair workflow (Random Question Selection Aggregates) - 15-second safe
+ * Section 2 repair internal workflow (Random Question Selection Aggregates) - 15-second safe
  */
-export const section2RepairWorkflow = workflow.define({
+export const section2RepairInternalWorkflow = workflow.define({
   args: {},
   handler: async (
     step,
@@ -395,9 +395,9 @@ export const section2RepairWorkflow = workflow.define({
 // ============================================================================
 
 /**
- * Start Section 3 repair workflow (User-Specific Aggregates)
+ * Initiate Section 3 repair workflow (User-Specific Aggregates)
  */
-export const startSection3Repair = internalMutation({
+export const initiateSection3Repair = internalMutation({
   args: {
     batchSize: v.optional(v.number()),
   },
@@ -409,7 +409,7 @@ export const startSection3Repair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateWorkflows.section3RepairWorkflow,
+      internal.aggregateWorkflows.section3RepairInternalWorkflow,
       { batchSize: args.batchSize || 50 },
     );
 
@@ -419,9 +419,9 @@ export const startSection3Repair = internalMutation({
 });
 
 /**
- * Section 3 repair workflow (User-Specific Aggregates) - 15-second safe
+ * Section 3 repair internal workflow (User-Specific Aggregates) - 15-second safe
  */
-export const section3RepairWorkflow = workflow.define({
+export const section3RepairInternalWorkflow = workflow.define({
   args: {
     batchSize: v.optional(v.number()),
   },
@@ -498,9 +498,9 @@ export const section3RepairWorkflow = workflow.define({
 // ============================================================================
 
 /**
- * Start comprehensive repair workflow (All 3 Sections)
+ * Initiate comprehensive repair workflow (All 3 Sections)
  */
-export const startComprehensiveRepair = internalMutation({
+export const initiateComprehensiveRepair = internalMutation({
   args: {
     batchSize: v.optional(v.number()),
   },
@@ -512,7 +512,7 @@ export const startComprehensiveRepair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
-      internal.aggregateWorkflows.comprehensiveRepairWorkflow,
+      internal.aggregateWorkflows.comprehensiveRepairInternalWorkflow,
       { batchSize: args.batchSize || 50 },
     );
 
@@ -522,9 +522,9 @@ export const startComprehensiveRepair = internalMutation({
 });
 
 /**
- * Comprehensive repair workflow (All 3 Sections sequentially)
+ * Comprehensive repair internal workflow (All 3 Sections sequentially)
  */
-export const comprehensiveRepairWorkflow = workflow.define({
+export const comprehensiveRepairInternalWorkflow = workflow.define({
   args: {
     batchSize: v.optional(v.number()),
   },
