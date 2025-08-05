@@ -81,39 +81,69 @@ export const userRepairInternalWorkflow = workflow.define({
       },
     );
 
-    // Step 2: Repair basic aggregates with pagination
-    let basicCursor: string | null = null;
-    let basicProcessed = 0;
-    let basicBatchCount = 0;
-    let basicResult = { answered: 0, incorrect: 0, bookmarked: 0 };
+    // Step 2: Repair basic stats aggregates with pagination
+    let statsCursor: string | null = null;
+    let statsProcessed = 0;
+    let statsBatchCount = 0;
+    let statsResult = { answered: 0, incorrect: 0 };
 
     do {
       const batchResult: {
         processed: number;
         answered: number;
         incorrect: number;
+        nextCursor: string | null;
+        isDone: boolean;
+      } = await step.runMutation(
+        internal.aggregateRepairs.internalRepairUserBasicStatsBatch,
+        { userId: args.userId, cursor: statsCursor, batchSize: 50 },
+        { name: `userBasicStats_batch_${statsBatchCount}` },
+      );
+
+      statsResult.answered += batchResult.answered;
+      statsResult.incorrect += batchResult.incorrect;
+      statsProcessed += batchResult.processed;
+      statsCursor = batchResult.nextCursor;
+      statsBatchCount++;
+
+      if (batchResult.isDone) break;
+    } while (statsCursor);
+
+    // Step 3: Repair basic bookmarks aggregates with pagination
+    let basicBookmarksCursor: string | null = null;
+    let basicBookmarksProcessed = 0;
+    let basicBookmarksBatchCount = 0;
+    let basicBookmarksResult = { bookmarked: 0 };
+
+    do {
+      const batchResult: {
+        processed: number;
         bookmarked: number;
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
-        internal.aggregateRepairs.internalRepairUserBasicAggregatesBatch,
-        { userId: args.userId, cursor: basicCursor, batchSize: 50 },
-        { name: `userBasicAggregates_batch_${basicBatchCount}` },
+        internal.aggregateRepairs.internalRepairUserBasicBookmarksBatch,
+        { userId: args.userId, cursor: basicBookmarksCursor, batchSize: 50 },
+        { name: `userBasicBookmarks_batch_${basicBookmarksBatchCount}` },
       );
 
-      basicResult.answered += batchResult.answered;
-      basicResult.incorrect += batchResult.incorrect;
-      basicResult.bookmarked += batchResult.bookmarked;
-      basicProcessed += batchResult.processed;
-      basicCursor = batchResult.nextCursor;
-      basicBatchCount++;
+      basicBookmarksResult.bookmarked += batchResult.bookmarked;
+      basicBookmarksProcessed += batchResult.processed;
+      basicBookmarksCursor = batchResult.nextCursor;
+      basicBookmarksBatchCount++;
 
       if (batchResult.isDone) break;
-    } while (basicCursor);
+    } while (basicBookmarksCursor);
 
     console.log(
-      `Workflow: User ${args.userId} basic aggregates completed. Processed: ${basicProcessed} in ${basicBatchCount} batches`,
+      `Workflow: User ${args.userId} basic aggregates completed. Stats: ${statsProcessed} in ${statsBatchCount} batches, Bookmarks: ${basicBookmarksProcessed} in ${basicBookmarksBatchCount} batches`,
     );
+
+    const basicResult = {
+      answered: statsResult.answered,
+      incorrect: statsResult.incorrect,
+      bookmarked: basicBookmarksResult.bookmarked,
+    };
 
     // Step 3: Repair hierarchical aggregates with pagination
     let hierarchicalCursor: string | null = null;

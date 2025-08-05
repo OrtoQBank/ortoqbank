@@ -1130,9 +1130,9 @@ export const internalRepairUserAllAggregates = internalMutation({
 });
 
 /**
- * Repair basic user aggregates with pagination (15-second safe)
+ * Repair basic user aggregates (stats) with pagination (15-second safe)
  */
-export const internalRepairUserBasicAggregatesBatch = internalMutation({
+export const internalRepairUserBasicStatsBatch = internalMutation({
   args: {
     userId: v.id('users'),
     cursor: v.optional(v.union(v.string(), v.null())),
@@ -1142,7 +1142,6 @@ export const internalRepairUserBasicAggregatesBatch = internalMutation({
     processed: v.number(),
     answered: v.number(),
     incorrect: v.number(),
-    bookmarked: v.number(),
     nextCursor: v.union(v.string(), v.null()),
     isDone: v.boolean(),
   }),
@@ -1154,14 +1153,12 @@ export const internalRepairUserBasicAggregatesBatch = internalMutation({
       await Promise.all([
         answeredByUser.clear(ctx, { namespace: args.userId }),
         incorrectByUser.clear(ctx, { namespace: args.userId }),
-        bookmarkedByUser.clear(ctx, { namespace: args.userId }),
       ]);
     }
 
     let processed = 0;
     let answered = 0;
     let incorrect = 0;
-    let bookmarked = 0;
 
     // Process userQuestionStats in batches
     const statsQuery = ctx.db
@@ -1185,40 +1182,63 @@ export const internalRepairUserBasicAggregatesBatch = internalMutation({
       processed++;
     }
 
-    // Process userBookmarks in batches (only if stats are done)
-    if (stats.isDone) {
-      const bookmarksQuery = ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', args.userId));
-
-      const bookmarks = await bookmarksQuery.paginate({
-        numItems: batchSize,
-        cursor: null,
-      });
-
-      for (const bookmark of bookmarks.page) {
-        await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
-        bookmarked++;
-        processed++;
-      }
-
-      return {
-        processed,
-        answered,
-        incorrect,
-        bookmarked,
-        nextCursor: bookmarks.continueCursor,
-        isDone: bookmarks.isDone,
-      };
-    }
-
     return {
       processed,
       answered,
       incorrect,
+      nextCursor: stats.continueCursor || null,
+      isDone: stats.isDone,
+    };
+  },
+});
+
+/**
+ * Repair basic user aggregates (bookmarks) with pagination (15-second safe)
+ */
+export const internalRepairUserBasicBookmarksBatch = internalMutation({
+  args: {
+    userId: v.id('users'),
+    cursor: v.optional(v.union(v.string(), v.null())),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    bookmarked: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 50;
+
+    // Only clear bookmarks aggregate if this is the first call (no cursor)
+    if (!args.cursor) {
+      await bookmarkedByUser.clear(ctx, { namespace: args.userId });
+    }
+
+    let processed = 0;
+    let bookmarked = 0;
+
+    // Process userBookmarks in batches
+    const bookmarksQuery = ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId));
+
+    const bookmarks = await bookmarksQuery.paginate({
+      numItems: batchSize,
+      cursor: args.cursor || null,
+    });
+
+    for (const bookmark of bookmarks.page) {
+      await bookmarkedByUser.insertIfDoesNotExist(ctx, bookmark);
+      bookmarked++;
+      processed++;
+    }
+
+    return {
+      processed,
       bookmarked,
-      nextCursor: stats.continueCursor,
-      isDone: false,
+      nextCursor: bookmarks.continueCursor || null,
+      isDone: bookmarks.isDone,
     };
   },
 });
