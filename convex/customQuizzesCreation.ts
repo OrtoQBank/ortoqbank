@@ -236,16 +236,45 @@ async function applyHierarchyFilters(
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
 ): Promise<Doc<'questions'>[]> {
+  console.log(
+    `🔧 DEBUG: Starting hierarchy filtering with ${baseQuestions.length} base questions`,
+  );
+  console.log(
+    `🔧 DEBUG: Filters - themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
+  );
+
+  // Sample a few questions to see their structure
+  if (baseQuestions.length > 0) {
+    const sample = baseQuestions.slice(0, 3);
+    console.log(
+      `🔧 DEBUG: Sample questions structure:`,
+      sample.map(q => ({
+        id: q._id,
+        hasThemeId: !!q.themeId,
+        hasSubthemeId: !!q.subthemeId,
+        hasGroupId: !!q.groupId,
+        themeId: q.themeId,
+        subthemeId: q.subthemeId,
+        groupId: q.groupId,
+      })),
+    );
+  }
+
   const validQuestionIds = new Set<Id<'questions'>>();
 
   // Step 1: Process groups (highest priority)
   if (selectedGroups.length > 0) {
     console.log(`🔧 Processing ${selectedGroups.length} groups`);
+    let groupMatches = 0;
     baseQuestions.forEach(question => {
       if (question.groupId && selectedGroups.includes(question.groupId)) {
         validQuestionIds.add(question._id);
+        groupMatches++;
       }
     });
+    console.log(
+      `🔧 DEBUG: Found ${groupMatches} questions matching selected groups`,
+    );
   }
 
   // Step 2: Process subthemes (only if not overridden by groups)
@@ -266,16 +295,24 @@ async function applyHierarchyFilters(
     }
 
     const overriddenSubthemes = new Set(groupToSubtheme.values());
+    console.log(`🔧 DEBUG: Overridden subthemes by groups:`, [
+      ...overriddenSubthemes,
+    ]);
 
+    let subthemeMatches = 0;
     baseQuestions.forEach(question => {
       if (
         question.subthemeId &&
-        selectedSubthemes.includes(question.subthemeId) &&
+        selectedSubthemes.includes(question.subthemeId) && // Include if this subtheme is not overridden by groups OR this question has no group
         (!overriddenSubthemes.has(question.subthemeId) || !question.groupId)
       ) {
         validQuestionIds.add(question._id);
+        subthemeMatches++;
       }
     });
+    console.log(
+      `🔧 DEBUG: Found ${subthemeMatches} questions matching selected subthemes`,
+    );
   }
 
   // Step 3: Process themes (only if not overridden by subthemes)
@@ -296,7 +333,11 @@ async function applyHierarchyFilters(
     }
 
     const overriddenThemes = new Set(subthemeToTheme.values());
+    console.log(`🔧 DEBUG: Overridden themes by subthemes:`, [
+      ...overriddenThemes,
+    ]);
 
+    let themeMatches = 0;
     baseQuestions.forEach(question => {
       if (
         question.themeId &&
@@ -304,8 +345,12 @@ async function applyHierarchyFilters(
         !overriddenThemes.has(question.themeId)
       ) {
         validQuestionIds.add(question._id);
+        themeMatches++;
       }
     });
+    console.log(
+      `🔧 DEBUG: Found ${themeMatches} questions matching selected themes`,
+    );
   }
 
   const filteredQuestions = baseQuestions.filter(q =>
@@ -315,8 +360,98 @@ async function applyHierarchyFilters(
     `🔧 Hierarchy filtering: ${baseQuestions.length} -> ${filteredQuestions.length} questions`,
   );
 
+  // Debug: Log when no questions match filters
+  if (filteredQuestions.length === 0 && baseQuestions.length > 0) {
+    console.log(
+      `🔧 WARNING: No questions matched hierarchy filters. This suggests an issue with filter criteria.`,
+    );
+    console.log(
+      `🔧 DEBUG: Selected themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
+    );
+  }
+
   return filteredQuestions;
 }
+
+/**
+ * Debug mutation to test question collection without creating a quiz
+ */
+export const debugQuestionCollection = mutation({
+  args: {
+    questionMode: v.union(
+      v.literal('all'),
+      v.literal('unanswered'),
+      v.literal('incorrect'),
+      v.literal('bookmarked'),
+    ),
+    selectedThemes: v.optional(v.array(v.id('themes'))),
+    selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
+    selectedGroups: v.optional(v.array(v.id('groups'))),
+    maxQuestions: v.optional(v.number()),
+  },
+  returns: v.object({
+    questionMode: v.string(),
+    totalQuestionsInDB: v.number(),
+    baseQuestionsFound: v.number(),
+    hasFilters: v.boolean(),
+    filtersApplied: v.object({
+      themes: v.number(),
+      subthemes: v.number(),
+      groups: v.number(),
+    }),
+    finalQuestionCount: v.number(),
+    sampleQuestions: v.array(
+      v.object({
+        id: v.string(),
+        hasThemeId: v.boolean(),
+        hasSubthemeId: v.boolean(),
+        hasGroupId: v.boolean(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    const userId = await getCurrentUserOrThrow(ctx);
+    const maxQuestions = args.maxQuestions || 50;
+
+    // Get total questions in DB for reference
+    const allQuestionsInDB = await ctx.db.query('questions').collect();
+
+    // Test the collection logic
+    const questions = await collectQuestions(
+      ctx,
+      userId._id,
+      args.questionMode,
+      args.selectedThemes || [],
+      args.selectedSubthemes || [],
+      args.selectedGroups || [],
+      maxQuestions,
+    );
+
+    const hasFilters =
+      (args.selectedThemes?.length || 0) > 0 ||
+      (args.selectedSubthemes?.length || 0) > 0 ||
+      (args.selectedGroups?.length || 0) > 0;
+
+    return {
+      questionMode: args.questionMode,
+      totalQuestionsInDB: allQuestionsInDB.length,
+      baseQuestionsFound: questions.length,
+      hasFilters,
+      filtersApplied: {
+        themes: args.selectedThemes?.length || 0,
+        subthemes: args.selectedSubthemes?.length || 0,
+        groups: args.selectedGroups?.length || 0,
+      },
+      finalQuestionCount: questions.length,
+      sampleQuestions: questions.slice(0, 5).map(q => ({
+        id: q._id,
+        hasThemeId: !!q.themeId,
+        hasSubthemeId: !!q.subthemeId,
+        hasGroupId: !!q.groupId,
+      })),
+    };
+  },
+});
 
 /**
  * Randomly shuffle an array using Fisher-Yates algorithm
