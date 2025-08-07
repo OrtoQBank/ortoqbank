@@ -34,24 +34,15 @@ export function QuestionModeSelector({
 }: QuestionModeSelectorProps) {
   const { isLoading, calculateQuestionCounts } = useFormContext();
 
-  // Memoized counts calculation (only recalculates when selections change)
+  // Memoized counts calculation (global counts - don't change with selections)
   const counts = useMemo(() => {
     if (isLoading) return null;
 
-    const result = calculateQuestionCounts(
-      selectedThemes as any[],
-      selectedSubthemes as any[],
-      selectedGroups as any[],
-    );
+    // Call with empty arrays to get global counts only
+    const result = calculateQuestionCounts([], [], []);
 
     return typeof result === 'object' ? result : null;
-  }, [
-    selectedThemes,
-    selectedSubthemes,
-    selectedGroups,
-    calculateQuestionCounts,
-    isLoading,
-  ]);
+  }, [calculateQuestionCounts, isLoading]);
 
   const options: { id: string; label: string; apiKey: ModeKey }[] = [
     { id: 'all', label: 'Todas', apiKey: 'all' },

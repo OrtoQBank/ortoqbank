@@ -50,10 +50,7 @@ export default function TestForm() {
     availableQuestionCount,
     isCountLoading,
     hierarchicalData,
-    userCountsForQuizCreation,
-    totalQuestions,
     mapQuestionMode,
-    calculateLocalQuestionCounts,
     isAuthenticated,
   } = useTestFormState();
 
@@ -230,7 +227,7 @@ export default function TestForm() {
 
         {/* Themes Section */}
         <ThemeSelector
-          themes={(hierarchicalData?.themes || []).sort((a, b) =>
+          themes={(hierarchicalData?.themes || []).sort((a: any, b: any) =>
             (a.name || '').localeCompare(b.name || ''),
           )}
           selectedThemes={selectedThemes}
@@ -251,13 +248,13 @@ export default function TestForm() {
         {/* Subthemes Section - only if themes are selected */}
         {selectedThemes.length > 0 && (
           <SubthemeSelector
-            themes={(hierarchicalData?.themes || []).sort((a, b) =>
+            themes={(hierarchicalData?.themes || []).sort((a: any, b: any) =>
               (a.name || '').localeCompare(b.name || ''),
             )}
-            subthemes={(hierarchicalData?.subthemes || []).sort((a, b) =>
-              (a.name || '').localeCompare(b.name || ''),
+            subthemes={(hierarchicalData?.subthemes || []).sort(
+              (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
             )}
-            groups={(hierarchicalData?.groups || []).sort((a, b) =>
+            groups={(hierarchicalData?.groups || []).sort((a: any, b: any) =>
               (a.name || '').localeCompare(b.name || ''),
             )}
             selectedThemes={selectedThemes}

@@ -130,10 +130,11 @@ const calculateLocalQuestionCounts = (
   }
 
   // For 'all' and 'unanswered' modes with hierarchical selections,
-  // we still need to fall back to API calls since we don't have
-  // total question counts per hierarchy in userCounts
+  // we need to use API calls since we don't have total question counts per hierarchy
   if (questionMode === 'all' || questionMode === 'unanswered') {
-    return 0; // Will trigger API fallback
+    // TODO: Implement API call for filtered total counts
+    // For now, return 0 to indicate this needs API resolution
+    return 0;
   }
 
   return totalCount;
@@ -194,50 +195,20 @@ export function FormContextProvider({
       }
 
       // Return all counts at once (more efficient)
+      // These are GLOBAL counts for the question mode selector - they don't change with filters
       const allCounts: QuestionCounts = {
-        all:
-          calculateLocalQuestionCounts(
-            userCountsForQuizCreation,
-            totalQuestions,
-            selectedThemes,
-            selectedSubthemes,
-            selectedGroups,
-            'all',
-          ) || totalQuestions,
-        unanswered:
-          calculateLocalQuestionCounts(
-            userCountsForQuizCreation,
-            totalQuestions,
-            selectedThemes,
-            selectedSubthemes,
-            selectedGroups,
-            'unanswered',
-          ) ||
-          Math.max(
-            0,
-            totalQuestions - userCountsForQuizCreation.global.totalAnswered,
-          ),
-        incorrect: calculateLocalQuestionCounts(
-          userCountsForQuizCreation,
-          totalQuestions,
-          selectedThemes,
-          selectedSubthemes,
-          selectedGroups,
-          'incorrect',
-        ),
-        bookmarked: calculateLocalQuestionCounts(
-          userCountsForQuizCreation,
-          totalQuestions,
-          selectedThemes,
-          selectedSubthemes,
-          selectedGroups,
-          'bookmarked',
-        ),
+        all: totalQuestions, // Always use total question count from aggregate
+        unanswered: Math.max(
+          0,
+          totalQuestions - userCountsForQuizCreation.global.totalAnswered,
+        ), // Total unanswered globally
+        incorrect: userCountsForQuizCreation.global.totalIncorrect, // Total incorrect globally
+        bookmarked: userCountsForQuizCreation.global.totalBookmarked, // Total bookmarked globally
       };
 
       return allCounts;
     };
-  }, [userCountsForQuizCreation, totalQuestions]);
+  }, [userCountsForQuizCreation, totalQuestions]); // Only depends on data, not selections
 
   const contextValue: FormContextValue = useMemo(
     () => ({
