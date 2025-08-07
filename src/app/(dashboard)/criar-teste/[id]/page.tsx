@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { redirect, useParams } from 'next/navigation';
 import { useEffect } from 'react';
 

@@ -50,7 +50,10 @@ export default function TestForm() {
     availableQuestionCount,
     isCountLoading,
     hierarchicalData,
+    userCountsForQuizCreation,
+    totalQuestions,
     mapQuestionMode,
+    calculateLocalQuestionCounts,
     isAuthenticated,
   } = useTestFormState();
 
@@ -220,6 +223,9 @@ export default function TestForm() {
             form.setValue('questionMode', value, { shouldValidate: true })
           }
           error={form.formState.errors.questionMode?.message}
+          selectedThemes={selectedThemes}
+          selectedSubthemes={selectedSubthemes}
+          selectedGroups={selectedGroups}
         />
 
         {/* Themes Section */}

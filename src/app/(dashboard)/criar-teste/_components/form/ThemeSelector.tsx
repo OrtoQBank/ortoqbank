@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { InfoIcon as InfoCircle } from 'lucide-react';
 
 import { Button } from '@/components/ui/button';
@@ -12,6 +12,7 @@ import {
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
+import { useFormContext } from '../context/FormContext';
 
 type Theme = { _id: string; name: string };
 
@@ -42,16 +43,13 @@ function ThemeQuestionCount({
 }
 
 function IncorrectThemeCount({ themeId }: { themeId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserIncorrectCountByThemeQuery,
-    {
-      themeId: themeId as Id<'themes'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="text-xs text-gray-400">...</span>;
   }
+
+  const count = userCountsForQuizCreation.byTheme[themeId]?.incorrect || 0;
 
   return (
     <span className="rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
@@ -61,16 +59,13 @@ function IncorrectThemeCount({ themeId }: { themeId: string }) {
 }
 
 function BookmarkedThemeCount({ themeId }: { themeId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserBookmarksCountByThemeQuery,
-    {
-      themeId: themeId as Id<'themes'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="text-xs text-gray-400">...</span>;
   }
+
+  const count = userCountsForQuizCreation.byTheme[themeId]?.bookmarked || 0;
 
   return (
     <span className="rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">

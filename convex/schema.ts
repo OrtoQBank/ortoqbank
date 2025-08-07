@@ -165,4 +165,31 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_user_incorrect', ['userId', 'isIncorrect'])
     .index('by_user_answered', ['userId', 'hasAnswered']),
+
+  // Table for pre-computed user statistics counts (Performance optimization)
+  userStatsCounts: defineTable({
+    userId: v.id('users'),
+
+    // Global counts
+    totalAnswered: v.number(),
+    totalIncorrect: v.number(),
+    totalBookmarked: v.number(),
+
+    // By theme counts (using Records for flexibility)
+    answeredByTheme: v.record(v.id('themes'), v.number()),
+    incorrectByTheme: v.record(v.id('themes'), v.number()),
+    bookmarkedByTheme: v.record(v.id('themes'), v.number()),
+
+    // By subtheme counts
+    answeredBySubtheme: v.record(v.id('subthemes'), v.number()),
+    incorrectBySubtheme: v.record(v.id('subthemes'), v.number()),
+    bookmarkedBySubtheme: v.record(v.id('subthemes'), v.number()),
+
+    // By group counts
+    answeredByGroup: v.record(v.id('groups'), v.number()),
+    incorrectByGroup: v.record(v.id('groups'), v.number()),
+    bookmarkedByGroup: v.record(v.id('groups'), v.number()),
+
+    lastUpdated: v.number(),
+  }).index('by_user', ['userId']),
 });

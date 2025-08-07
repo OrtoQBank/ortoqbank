@@ -1,9 +1,13 @@
 // ============================================================================
-// PRODUCTION-SAFE AGGREGATE REPAIR WORKFLOWS (15-SECOND COMPLIANT)
+// PRODUCTION-SAFE AGGREGATE REPAIR WORKFLOWS (GLOBAL AGGREGATES ONLY)
 // ============================================================================
 //
-// This system is designed to repair aggregates efficiently within Convex's
+// This system repairs global aggregates efficiently within Convex's
 // 15-second mutation limit using proper pagination and workflow orchestration.
+//
+// ⚠️  USER-SPECIFIC AGGREGATES REMOVED
+// User-specific aggregate workflows have been removed as they are replaced
+// by the userStatsCounts table for better performance and maintainability.
 //
 // KEY FEATURES:
 // - All mutations complete within 15-second limit
@@ -11,12 +15,11 @@
 // - Step-by-step progress tracking
 // - Production-safe batch processing
 // - Hierarchical processing (themes, subthemes, groups)
-// - User-specific aggregate processing in small batches
 //
-// USAGE:
-// - Individual sections: startSection1Repair(), startSection2Repair(), startSection3Repair()
-// - Complete repair: startComprehensiveRepair()
-// - Legacy single user: startUserRepair(userId)
+// AVAILABLE WORKFLOWS:
+// - Section 1: Global Question Count Aggregates (initiateSection1Repair)
+// - Section 2: Random Question Selection Aggregates (initiateSection2Repair)
+// - Complete repair: Global aggregates only (initiateComprehensiveRepair)
 //
 // Based on Convex Workflow component: https://www.convex.dev/components/workflow
 // ============================================================================
@@ -30,25 +33,9 @@ import { internalMutation, mutation } from './_generated/server';
 // Create the workflow manager
 export const workflow = new WorkflowManager(components.workflow);
 
-/**
- * Initiate simple user repair workflow
- */
-export const initiateUserRepair = internalMutation({
-  args: { userId: v.id('users') },
-  returns: v.string(),
-  handler: async (ctx, args): Promise<string> => {
-    console.log(`Starting user repair for ${args.userId}...`);
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.userRepairInternalWorkflow,
-      { userId: args.userId },
-    );
-
-    console.log(`User repair workflow started with ID: ${workflowId}`);
-    return workflowId as string;
-  },
-});
+// USER-SPECIFIC REPAIR WORKFLOWS REMOVED
+// User-specific aggregates have been replaced by the userStatsCounts table
+// These workflows are no longer needed
 
 /**
  * Get workflow status
@@ -62,153 +49,9 @@ export const getWorkflowStatus = internalMutation({
   },
 });
 
-/**
- * Simple user repair internal workflow
- */
-export const userRepairInternalWorkflow = workflow.define({
-  args: { userId: v.id('users') },
-  handler: async (
-    step,
-    args,
-  ): Promise<{ success: boolean; processed: number }> => {
-    console.log(`Workflow: Repairing aggregates for user ${args.userId}...`);
-
-    // Step 1: Clear user aggregates
-    await step.runMutation(
-      internal.aggregateRepairs.internalRepairClearUserAggregates,
-      {
-        userId: args.userId,
-      },
-    );
-
-    // Step 2: Repair basic stats aggregates with pagination
-    let statsCursor: string | null = null;
-    let statsProcessed = 0;
-    let statsBatchCount = 0;
-    let statsResult = { answered: 0, incorrect: 0 };
-
-    do {
-      const batchResult: {
-        processed: number;
-        answered: number;
-        incorrect: number;
-        nextCursor: string | null;
-        isDone: boolean;
-      } = await step.runMutation(
-        internal.aggregateRepairs.internalRepairUserBasicStatsBatch,
-        { userId: args.userId, cursor: statsCursor, batchSize: 50 },
-        { name: `userBasicStats_batch_${statsBatchCount}` },
-      );
-
-      statsResult.answered += batchResult.answered;
-      statsResult.incorrect += batchResult.incorrect;
-      statsProcessed += batchResult.processed;
-      statsCursor = batchResult.nextCursor;
-      statsBatchCount++;
-
-      if (batchResult.isDone) break;
-    } while (statsCursor);
-
-    // Step 3: Repair basic bookmarks aggregates with pagination
-    let basicBookmarksCursor: string | null = null;
-    let basicBookmarksProcessed = 0;
-    let basicBookmarksBatchCount = 0;
-    let basicBookmarksResult = { bookmarked: 0 };
-
-    do {
-      const batchResult: {
-        processed: number;
-        bookmarked: number;
-        nextCursor: string | null;
-        isDone: boolean;
-      } = await step.runMutation(
-        internal.aggregateRepairs.internalRepairUserBasicBookmarksBatch,
-        { userId: args.userId, cursor: basicBookmarksCursor, batchSize: 50 },
-        { name: `userBasicBookmarks_batch_${basicBookmarksBatchCount}` },
-      );
-
-      basicBookmarksResult.bookmarked += batchResult.bookmarked;
-      basicBookmarksProcessed += batchResult.processed;
-      basicBookmarksCursor = batchResult.nextCursor;
-      basicBookmarksBatchCount++;
-
-      if (batchResult.isDone) break;
-    } while (basicBookmarksCursor);
-
-    console.log(
-      `Workflow: User ${args.userId} basic aggregates completed. Stats: ${statsProcessed} in ${statsBatchCount} batches, Bookmarks: ${basicBookmarksProcessed} in ${basicBookmarksBatchCount} batches`,
-    );
-
-    const basicResult = {
-      answered: statsResult.answered,
-      incorrect: statsResult.incorrect,
-      bookmarked: basicBookmarksResult.bookmarked,
-    };
-
-    // Step 3: Repair hierarchical aggregates with pagination
-    let hierarchicalCursor: string | null = null;
-    let hierarchicalProcessed = 0;
-    let hierarchicalBatchCount = 0;
-
-    do {
-      const batchResult: {
-        processed: number;
-        nextCursor: string | null;
-        isDone: boolean;
-      } = await step.runMutation(
-        internal.aggregateRepairs.internalRepairUserHierarchicalAggregatesBatch,
-        { userId: args.userId, cursor: hierarchicalCursor, batchSize: 50 },
-        { name: `userHierarchicalAggregates_batch_${hierarchicalBatchCount}` },
-      );
-
-      hierarchicalProcessed += batchResult.processed;
-      hierarchicalCursor = batchResult.nextCursor;
-      hierarchicalBatchCount++;
-
-      if (batchResult.isDone) break;
-    } while (hierarchicalCursor);
-
-    // Step 4: Repair hierarchical bookmarks with pagination
-    let bookmarksCursor: string | null = null;
-    let bookmarksProcessed = 0;
-    let bookmarksBatchCount = 0;
-
-    do {
-      const batchResult: {
-        processed: number;
-        nextCursor: string | null;
-        isDone: boolean;
-      } = await step.runMutation(
-        internal.aggregateRepairs.internalRepairUserHierarchicalBookmarksBatch,
-        { userId: args.userId, cursor: bookmarksCursor, batchSize: 50 },
-        { name: `userHierarchicalBookmarks_batch_${bookmarksBatchCount}` },
-      );
-
-      bookmarksProcessed += batchResult.processed;
-      bookmarksCursor = batchResult.nextCursor;
-      bookmarksBatchCount++;
-
-      if (batchResult.isDone) break;
-    } while (bookmarksCursor);
-
-    console.log(
-      `Workflow: User ${args.userId} hierarchical aggregates completed. Processed: ${hierarchicalProcessed} in ${hierarchicalBatchCount} batches`,
-    );
-
-    const totalProcessed =
-      basicResult.answered +
-      basicResult.incorrect +
-      basicResult.bookmarked +
-      hierarchicalProcessed +
-      bookmarksProcessed;
-
-    console.log(
-      `Workflow: User ${args.userId} repair completed. Total processed: ${totalProcessed}`,
-    );
-
-    return { success: true, processed: totalProcessed };
-  },
-});
+// userRepairInternalWorkflow REMOVED
+// User-specific aggregate workflows are no longer needed as they have been
+// replaced by the userStatsCounts table for better performance
 
 // ============================================================================
 // SECTION 1: GLOBAL QUESTION COUNT AGGREGATES WORKFLOW
@@ -514,129 +357,33 @@ export const section2RepairInternalWorkflow = workflow.define({
 });
 
 // ============================================================================
-// SECTION 3: USER-SPECIFIC AGGREGATES WORKFLOW
+// SECTION 3: USER-SPECIFIC AGGREGATES WORKFLOW - REMOVED
 // ============================================================================
 
-/**
- * Initiate Section 3 repair workflow (User-Specific Aggregates)
- */
-export const initiateSection3Repair = internalMutation({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.string(),
-  handler: async (ctx, args): Promise<string> => {
-    console.log(
-      'Starting Section 3: User-Specific Aggregates Repair Workflow...',
-    );
-
-    const workflowId: any = await workflow.start(
-      ctx,
-      internal.aggregateWorkflows.section3RepairInternalWorkflow,
-      { batchSize: args.batchSize || 50 },
-    );
-
-    console.log(`Section 3 repair workflow started with ID: ${workflowId}`);
-    return workflowId as string;
-  },
-});
-
-/**
- * Section 3 repair internal workflow (User-Specific Aggregates) - 15-second safe
- */
-export const section3RepairInternalWorkflow = workflow.define({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
-  handler: async (
-    step,
-    args,
-  ): Promise<{
-    success: boolean;
-    usersProcessed: number;
-    totalStats: number;
-    totalBookmarks: number;
-    hierarchicalEntries: number;
-  }> => {
-    const userBatchSize = args.batchSize || 8; // Small batches for 15-second safety
-    console.log(
-      `Workflow: Starting Section 3 - User-Specific Aggregates Repair (batch size: ${userBatchSize})...`,
-    );
-
-    // Step 1: Get all user IDs
-    const userIds = await step.runMutation(
-      internal.aggregateRepairs.internalRepairGetAllUserIds,
-      {},
-    );
-
-    console.log(
-      `Processing ${userIds.length} users in batches of ${userBatchSize}`,
-    );
-
-    // Step 2: Process users in small batches
-    let totalUsersProcessed = 0;
-    let totalStats = 0;
-    let totalBookmarks = 0;
-    let totalHierarchicalEntries = 0;
-
-    for (let i = 0; i < userIds.length; i += userBatchSize) {
-      const userBatch = userIds.slice(i, i + userBatchSize);
-      const batchNumber = Math.floor(i / userBatchSize);
-
-      const batchResult = await step.runMutation(
-        internal.aggregateRepairs.internalRepairProcessUsersBatch,
-        { userIds: userBatch },
-        { name: `processUsersBatch_${batchNumber}` },
-      );
-
-      totalUsersProcessed += batchResult.usersProcessed;
-      totalStats += batchResult.totalStats;
-      totalBookmarks += batchResult.totalBookmarks;
-      totalHierarchicalEntries += batchResult.hierarchicalEntries;
-
-      console.log(
-        `Completed batch ${batchNumber + 1}/${Math.ceil(userIds.length / userBatchSize)}: ${batchResult.usersProcessed} users processed`,
-      );
-    }
-
-    const finalResult = {
-      success: true,
-      usersProcessed: totalUsersProcessed,
-      totalStats,
-      totalBookmarks,
-      hierarchicalEntries: totalHierarchicalEntries,
-    };
-
-    console.log(
-      'Workflow: Section 3 repair completed successfully:',
-      finalResult,
-    );
-
-    return finalResult;
-  },
-});
+// All Section 3 user-specific aggregate workflows have been removed.
+// User statistics are now efficiently handled by the userStatsCounts table,
+// which provides much better performance than the old aggregate system.
+// Use userStats.initializeAllUserStatsCounts() instead for data migration.
 
 // ============================================================================
 // COMPREHENSIVE REPAIR WORKFLOW (ALL SECTIONS)
 // ============================================================================
 
 /**
- * Initiate comprehensive repair workflow (All 3 Sections)
+ * Initiate comprehensive repair workflow (Sections 1 & 2 only)
  */
 export const initiateComprehensiveRepair = internalMutation({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
+  args: {},
   returns: v.string(),
-  handler: async (ctx, args): Promise<string> => {
+  handler: async (ctx): Promise<string> => {
     console.log(
-      'Starting Comprehensive Aggregate Repair Workflow (All Sections)...',
+      'Starting Comprehensive Aggregate Repair Workflow (Global Aggregates Only)...',
     );
 
     const workflowId: any = await workflow.start(
       ctx,
       internal.aggregateWorkflows.comprehensiveRepairInternalWorkflow,
-      { batchSize: args.batchSize || 50 },
+      {},
     );
 
     console.log(`Comprehensive repair workflow started with ID: ${workflowId}`);
@@ -645,31 +392,26 @@ export const initiateComprehensiveRepair = internalMutation({
 });
 
 /**
- * Comprehensive repair internal workflow (All 3 Sections sequentially)
+ * Comprehensive repair internal workflow (Sections 1 & 2 only)
  */
 export const comprehensiveRepairInternalWorkflow = workflow.define({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
+  args: {},
   handler: async (
     step,
-    args,
   ): Promise<{
     success: boolean;
     section1: any;
     section2: any;
-    section3: any;
     totalDuration: number;
   }> => {
     const startTime = Date.now();
-    const batchSize = args.batchSize || 50;
 
     console.log(
-      'Workflow: Starting Comprehensive Aggregate Repair (All 3 Sections)...',
+      'Workflow: Starting Comprehensive Aggregate Repair (Global Aggregates Only)...',
     );
 
     // Step 1: Section 1 - Global Question Count Aggregates (direct execution)
-    console.log('Workflow: Phase 1/3 - Global Question Count Aggregates...');
+    console.log('Workflow: Phase 1/2 - Global Question Count Aggregates...');
     await step.runMutation(
       internal.aggregateRepairs.internalRepairClearSection1Aggregates,
       {},
@@ -736,7 +478,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
 
     // Step 2: Section 2 - Random Question Selection Aggregates (direct execution)
     console.log(
-      'Workflow: Phase 2/3 - Random Question Selection Aggregates...',
+      'Workflow: Phase 2/2 - Random Question Selection Aggregates...',
     );
     await step.runMutation(
       internal.aggregateRepairs.internalRepairClearSection2Aggregates,
@@ -787,50 +529,12 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
       groups: groupIds1.length,
     };
 
-    // Step 3: Section 3 - User-Specific Aggregates (direct execution)
-    console.log('Workflow: Phase 3/3 - User-Specific Aggregates...');
-    const userIds = await step.runMutation(
-      internal.aggregateRepairs.internalRepairGetAllUserIds,
-      {},
-    );
-
-    let totalUsersProcessed = 0;
-    let totalStats = 0;
-    let totalBookmarks = 0;
-    let totalHierarchicalEntries = 0;
-
-    // Process users in small batches
-    for (let i = 0; i < userIds.length; i += batchSize) {
-      const userBatch = userIds.slice(i, i + batchSize);
-      const batchNumber = Math.floor(i / batchSize);
-
-      const batchResult = await step.runMutation(
-        internal.aggregateRepairs.internalRepairProcessUsersBatch,
-        { userIds: userBatch },
-        { name: `comprehensive_section3_batch_${batchNumber}` },
-      );
-
-      totalUsersProcessed += batchResult.usersProcessed;
-      totalStats += batchResult.totalStats;
-      totalBookmarks += batchResult.totalBookmarks;
-      totalHierarchicalEntries += batchResult.hierarchicalEntries;
-    }
-
-    const section3Result = {
-      success: true,
-      usersProcessed: totalUsersProcessed,
-      totalStats,
-      totalBookmarks,
-      hierarchicalEntries: totalHierarchicalEntries,
-    };
-
     const totalDuration = Date.now() - startTime;
 
     const result = {
       success: true,
       section1: section1Result,
       section2: section2Result,
-      section3: section3Result,
       totalDuration,
     };
 
@@ -845,21 +549,5 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
   },
 });
 
-/**
- * Test function to verify user repair workflow works
- */
-export const testUserRepair = mutation({
-  args: { userId: v.id('users') },
-  returns: v.string(),
-  handler: async (ctx, args): Promise<string> => {
-    console.log(`Testing user repair for ${args.userId}...`);
-
-    const workflowId = await ctx.runMutation(
-      internal.aggregateWorkflows.initiateUserRepair,
-      { userId: args.userId },
-    );
-
-    console.log(`Test workflow started with ID: ${workflowId}`);
-    return workflowId;
-  },
-});
+// testUserRepair function removed
+// User-specific aggregate repair workflows are no longer needed

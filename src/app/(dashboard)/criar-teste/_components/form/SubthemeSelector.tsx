@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
+import { useFormContext } from '../context/FormContext';
 
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };
@@ -46,16 +47,14 @@ function SubthemeQuestionCount({
 }
 
 function IncorrectSubthemeCount({ subthemeId }: { subthemeId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserIncorrectCountBySubthemeQuery,
-    {
-      subthemeId: subthemeId as Id<'subthemes'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count =
+    userCountsForQuizCreation.bySubtheme[subthemeId]?.incorrect || 0;
 
   return (
     <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
@@ -65,16 +64,14 @@ function IncorrectSubthemeCount({ subthemeId }: { subthemeId: string }) {
 }
 
 function BookmarkedSubthemeCount({ subthemeId }: { subthemeId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserBookmarksCountBySubthemeQuery,
-    {
-      subthemeId: subthemeId as Id<'subthemes'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count =
+    userCountsForQuizCreation.bySubtheme[subthemeId]?.bookmarked || 0;
 
   return (
     <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">
@@ -118,16 +115,13 @@ function GroupQuestionCount({
 }
 
 function IncorrectGroupCount({ groupId }: { groupId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserIncorrectCountByGroupQuery,
-    {
-      groupId: groupId as Id<'groups'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count = userCountsForQuizCreation.byGroup[groupId]?.incorrect || 0;
 
   return (
     <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
@@ -137,16 +131,13 @@ function IncorrectGroupCount({ groupId }: { groupId: string }) {
 }
 
 function BookmarkedGroupCount({ groupId }: { groupId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserBookmarksCountByGroupQuery,
-    {
-      groupId: groupId as Id<'groups'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count = userCountsForQuizCreation.byGroup[groupId]?.bookmarked || 0;
 
   return (
     <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">

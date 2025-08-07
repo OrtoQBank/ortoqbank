@@ -14,49 +14,8 @@ import * as aggregates from './aggregates';
 // Create a triggers instance to handle updates to aggregates
 export const triggers = new Triggers<DataModel>();
 
-// Register all our aggregates with the triggers
-// User question stats aggregates
-triggers.register('userQuestionStats', aggregates.answeredByUser.trigger());
-triggers.register('userQuestionStats', aggregates.incorrectByUser.trigger());
-triggers.register(
-  'userQuestionStats',
-  aggregates.answeredByThemeByUser.trigger(),
-);
-triggers.register(
-  'userQuestionStats',
-  aggregates.answeredBySubthemeByUser.trigger(),
-);
-triggers.register(
-  'userQuestionStats',
-  aggregates.answeredByGroupByUser.trigger(),
-);
-triggers.register(
-  'userQuestionStats',
-  aggregates.incorrectByThemeByUser.trigger(),
-);
-triggers.register(
-  'userQuestionStats',
-  aggregates.incorrectBySubthemeByUser.trigger(),
-);
-triggers.register(
-  'userQuestionStats',
-  aggregates.incorrectByGroupByUser.trigger(),
-);
-
-// User bookmarks aggregates
-triggers.register('userBookmarks', aggregates.bookmarkedByUser.trigger());
-triggers.register(
-  'userBookmarks',
-  aggregates.bookmarkedByThemeByUser.trigger(),
-);
-triggers.register(
-  'userBookmarks',
-  aggregates.bookmarkedBySubthemeByUser.trigger(),
-);
-triggers.register(
-  'userBookmarks',
-  aggregates.bookmarkedByGroupByUser.trigger(),
-);
+// Register only the global aggregates (user-specific aggregates removed)
+// User-specific counts are now handled by the userStatsCounts table for better performance
 
 // Questions aggregates
 triggers.register('questions', aggregates.totalQuestionCount.trigger());
@@ -78,6 +37,7 @@ export const internalMutation = customMutation(
 );
 // queries don't need trigger wrapping
 
+// Only global question aggregates remain - user-specific aggregates replaced by userStatsCounts table
 // For comprehensive aggregate repair and testing, use aggregateWorkflows.ts functions
 
 export { query } from './_generated/server';
