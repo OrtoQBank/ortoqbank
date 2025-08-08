@@ -42,7 +42,7 @@ export default function UniversalQuizResultsPage() {
   const router = useRouter();
   const { id } = useParams();
   const quizId = id as Id<'presetQuizzes'> | Id<'customQuizzes'>;
-  const { user } = useUser();
+  const { user, isLoaded, isSignedIn } = useUser();
 
   // State for current question
   const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
@@ -58,7 +58,9 @@ export default function UniversalQuizResultsPage() {
 
   const customQuizResult = useQuery(
     api.customQuizzes.getByIdForResults,
-    isCustom ? { id: quizId as Id<'customQuizzes'> } : 'skip',
+    isCustom && isLoaded && isSignedIn
+      ? { id: quizId as Id<'customQuizzes'> }
+      : 'skip',
   );
 
   // Combined quiz data - use the appropriate result based on quiz type
@@ -66,9 +68,12 @@ export default function UniversalQuizResultsPage() {
 
   // Get the completed sessions for this quiz
   const completedSessions =
-    useQuery(api.quizSessions.getCompletedSessions, {
-      quizId: quizId as Id<'presetQuizzes'> | Id<'customQuizzes'>,
-    }) || [];
+    useQuery(
+      api.quizSessions.getCompletedSessions,
+      isLoaded && isSignedIn
+        ? { quizId: quizId as Id<'presetQuizzes'> | Id<'customQuizzes'> }
+        : 'skip',
+    ) || [];
 
   // Get the most recent session (index 0)
   const session = completedSessions[0];

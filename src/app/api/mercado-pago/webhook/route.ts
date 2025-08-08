@@ -16,14 +16,28 @@ export async function POST(request: Request) {
     });
 
     try {
+      // Basic allowlist for Mercado Pago IP ranges if provided via headers (best-effort)
+      const cfConnectingIp = (request.headers as any).get?.('x-forwarded-for');
+      if (typeof cfConnectingIp === 'string') {
+        Sentry.addBreadcrumb({
+          message: 'Webhook source IP',
+          category: 'webhook',
+          level: 'info',
+          data: { ip: cfConnectingIp.split(',')[0].trim() },
+        });
+      }
+
       Sentry.addBreadcrumb({
         message: 'Webhook received',
         category: 'webhook',
         level: 'info',
       });
 
-      // Verify Mercado Pago signature
-      verifyMercadoPagoSignature(request);
+      // Verify Mercado Pago signature and short-circuit on failure
+      const sigError = verifyMercadoPagoSignature(request);
+      if (sigError) {
+        return sigError;
+      }
 
       Sentry.addBreadcrumb({
         message: 'Signature verified',
@@ -87,6 +101,47 @@ export async function POST(request: Request) {
                   category: 'payment',
                   level: 'info',
                 });
+
+                // Basic sanity checks: currency and amount vs metadata
+                try {
+                  const expectedAmount = (paymentData.metadata as any)
+                    ?.final_price;
+                  const currency = (paymentData as any)?.currency_id;
+                  if (
+                    typeof expectedAmount === 'number' &&
+                    typeof (paymentData as any)?.transaction_amount ===
+                      'number' &&
+                    (paymentData as any).transaction_amount !== expectedAmount
+                  ) {
+                    Sentry.captureMessage('Payment amount mismatch', {
+                      level: 'warning',
+                      tags: { operation: 'payment-amount-mismatch' },
+                      extra: {
+                        expectedAmount,
+                        paidAmount: (paymentData as any).transaction_amount,
+                        paymentId: paymentData.id,
+                      },
+                    });
+                    return NextResponse.json(
+                      { error: 'Invalid amount' },
+                      { status: 400 },
+                    );
+                  }
+                  if (currency && currency !== 'BRL') {
+                    Sentry.captureMessage('Unexpected currency', {
+                      level: 'warning',
+                      tags: { operation: 'payment-currency-mismatch' },
+                      extra: {
+                        currency,
+                        paymentId: paymentData.id,
+                      },
+                    });
+                    return NextResponse.json(
+                      { error: 'Invalid currency' },
+                      { status: 400 },
+                    );
+                  }
+                } catch {}
 
                 await handleMercadoPagoPayment(paymentData);
 
