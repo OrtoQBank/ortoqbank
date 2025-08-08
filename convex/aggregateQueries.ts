@@ -1,3 +1,11 @@
+// ============================================================================
+// ⚠️  MIGRATION STATUS: PARTIALLY MIGRATED TO userStatsCounts TABLE
+// ============================================================================
+// User statistics functions have been replaced by userStats.ts functions.
+// Quiz generation functions still use old aggregates (marked as DEPRECATED).
+// TODO: Update quiz generation to use userStatsCounts table.
+// ============================================================================
+
 import { v } from 'convex/values';
 
 import { api } from './_generated/api';
@@ -9,19 +17,6 @@ import {
   type QueryCtx,
 } from './_generated/server';
 import {
-  answeredByGroupByUser,
-  answeredBySubthemeByUser,
-  answeredByThemeByUser,
-  answeredByUser,
-  bookmarkedByGroupByUser,
-  bookmarkedBySubthemeByUser,
-  bookmarkedByThemeByUser,
-  bookmarkedByUser,
-  incorrectByGroupByUser,
-  incorrectBySubthemeByUser,
-  // Hierarchical user-specific count aggregates
-  incorrectByThemeByUser,
-  incorrectByUser,
   questionCountByGroup,
   questionCountBySubtheme,
   questionCountByTheme,
@@ -32,7 +27,65 @@ import {
   totalQuestionCount,
 } from './aggregates';
 import { getCurrentUserOrThrow } from './users';
+import {
+  getUserAnsweredCount,
+  getUserAnsweredCountByGroup,
+  getUserAnsweredCountBySubtheme,
+  getUserAnsweredCountByTheme,
+  getUserBookmarksCount,
+  getUserBookmarksCountByGroup,
+  getUserBookmarksCountBySubtheme,
+  getUserBookmarksCountByTheme,
+  getUserIncorrectCount,
+  getUserIncorrectCountByGroup,
+  getUserIncorrectCountBySubtheme,
+  getUserIncorrectCountByTheme,
+} from './userStatsCounts';
 import { getWeekString } from './utils';
+
+// ----------------------------------------------------------------------------
+// Internal helpers (keep public APIs unchanged)
+// ----------------------------------------------------------------------------
+
+/**
+ * Select random question ids from an aggregate using its count/at functions.
+ * The getTotal and getAt closures encapsulate aggregate-specific call shapes.
+ */
+async function selectRandomIdsFromAggregate(
+  getTotal: () => Promise<number>,
+  getAt: (index: number) => Promise<{ id?: Id<'questions'> } | null>,
+  desiredCount: number,
+): Promise<Id<'questions'>[]> {
+  const totalCount = await getTotal();
+  if (totalCount === 0 || desiredCount <= 0) return [];
+
+  const questionIds: Id<'questions'>[] = [];
+  const maxAttempts = Math.min(desiredCount * 3, totalCount);
+  const usedIndices = new Set<number>();
+
+  for (let i = 0; i < desiredCount && usedIndices.size < maxAttempts; i++) {
+    let randomIndex: number;
+    do {
+      randomIndex = Math.floor(Math.random() * totalCount);
+    } while (usedIndices.has(randomIndex));
+
+    usedIndices.add(randomIndex);
+
+    try {
+      const randomQuestion = await getAt(randomIndex);
+      if (randomQuestion?.id) {
+        questionIds.push(randomQuestion.id);
+      }
+    } catch (error) {
+      console.warn(
+        `Failed to get random question at index ${randomIndex}:`,
+        error,
+      );
+    }
+  }
+
+  return questionIds;
+}
 
 /**
  * UNIFIED AGGREGATE-BASED COUNTING SYSTEM
@@ -82,7 +135,7 @@ export const getTotalQuestionCountQuery = query({
     // This is the most efficient way to count all questions
     const count = await totalQuestionCount.count(ctx, {
       namespace: 'global',
-      bounds: {},
+      bounds: {} as any,
     });
     return count;
   },
@@ -115,7 +168,7 @@ export const getThemeQuestionCountQuery = query({
     try {
       const count = await questionCountByTheme.count(ctx, {
         namespace: args.themeId,
-        bounds: args.bounds || {},
+        bounds: (args.bounds || {}) as any,
       });
       return count;
     } catch (error) {
@@ -140,7 +193,7 @@ export const getSubthemeQuestionCountQuery = query({
     try {
       const count = await questionCountBySubtheme.count(ctx, {
         namespace: args.subthemeId,
-        bounds: {},
+        bounds: {} as any,
       });
       return count;
     } catch (error) {
@@ -165,7 +218,7 @@ export const getGroupQuestionCountQuery = query({
     try {
       const count = await questionCountByGroup.count(ctx, {
         namespace: args.groupId,
-        bounds: {},
+        bounds: {} as any,
       });
       return count;
     } catch (error) {
@@ -180,207 +233,7 @@ export const getGroupQuestionCountQuery = query({
   },
 });
 
-// Query function to get user answer count - using aggregate for O(log n) performance
-export const getUserAnsweredCountQuery = query({
-  args: {
-    userId: v.id('users'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    // Use answeredByUser aggregate for O(log n) counting
-    const count = await answeredByUser.count(ctx, {
-      namespace: args.userId,
-      bounds: {},
-    } as { namespace: Id<'users'>; bounds: {} });
-    return count;
-  },
-});
-
-// Query function to get user incorrect count - using aggregate for O(log n) performance
-export const getUserIncorrectCountQuery = query({
-  args: {
-    userId: v.id('users'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    // Use incorrectByUser aggregate for O(log n) counting
-    const count = await incorrectByUser.count(ctx, {
-      namespace: args.userId,
-      bounds: {},
-    } as { namespace: Id<'users'>; bounds: {} });
-    return count;
-  },
-});
-
-// Query function to get user bookmarks count - using aggregate for O(log n) performance
-export const getUserBookmarksCountQuery = query({
-  args: {
-    userId: v.id('users'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    // Use bookmarkedByUser aggregate for O(log n) counting
-    const count = await bookmarkedByUser.count(ctx, {
-      namespace: args.userId,
-      bounds: {},
-    } as { namespace: Id<'users'>; bounds: {} });
-    return count;
-  },
-});
-
-// ============================================================================
-// HIERARCHICAL USER-SPECIFIC COUNT QUERIES (Theme/Subtheme/Group by User)
-// ============================================================================
-
-// INCORRECT QUESTIONS BY USER WITHIN THEME/SUBTHEME/GROUP
-
-export const getUserIncorrectCountByThemeQuery = query({
-  args: {
-    themeId: v.id('themes'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.themeId}`;
-    const count = await (incorrectByThemeByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-export const getUserIncorrectCountBySubthemeQuery = query({
-  args: {
-    subthemeId: v.id('subthemes'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.subthemeId}`;
-    const count = await (incorrectBySubthemeByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-export const getUserIncorrectCountByGroupQuery = query({
-  args: {
-    groupId: v.id('groups'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.groupId}`;
-    const count = await (incorrectByGroupByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-// BOOKMARKED QUESTIONS BY USER WITHIN THEME/SUBTHEME/GROUP
-
-export const getUserBookmarksCountByThemeQuery = query({
-  args: {
-    themeId: v.id('themes'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.themeId}`;
-    const count = await (bookmarkedByThemeByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-export const getUserBookmarksCountBySubthemeQuery = query({
-  args: {
-    subthemeId: v.id('subthemes'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.subthemeId}`;
-    const count = await (bookmarkedBySubthemeByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-export const getUserBookmarksCountByGroupQuery = query({
-  args: {
-    groupId: v.id('groups'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.groupId}`;
-    const count = await (bookmarkedByGroupByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-// ANSWERED QUESTIONS BY USER WITHIN THEME/SUBTHEME/GROUP
-
-export const getUserAnsweredCountByThemeQuery = query({
-  args: {
-    themeId: v.id('themes'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.themeId}`;
-    const count = await (answeredByThemeByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-export const getUserAnsweredCountBySubthemeQuery = query({
-  args: {
-    subthemeId: v.id('subthemes'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.subthemeId}`;
-    const count = await (answeredBySubthemeByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
-
-export const getUserAnsweredCountByGroupQuery = query({
-  args: {
-    groupId: v.id('groups'),
-  },
-  returns: v.number(),
-  handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
-    const namespace = `${userId._id}_${args.groupId}`;
-    const count = await (answeredByGroupByUser.count as any)(ctx, {
-      namespace,
-      bounds: {},
-    });
-    return count;
-  },
-});
+// Legacy user-specific aggregate query functions have been removed.
 
 // Helper functions that call these queries
 export async function getTotalQuestionCount(ctx: QueryCtx): Promise<number> {
@@ -417,32 +270,7 @@ export async function getGroupQuestionCount(
   });
 }
 
-export async function getUserAnsweredCount(
-  ctx: QueryCtx,
-  userId: Id<'users'>,
-): Promise<number> {
-  return await ctx.runQuery(api.aggregateQueries.getUserAnsweredCountQuery, {
-    userId,
-  });
-}
-
-export async function getUserIncorrectCount(
-  ctx: QueryCtx,
-  userId: Id<'users'>,
-): Promise<number> {
-  return await ctx.runQuery(api.aggregateQueries.getUserIncorrectCountQuery, {
-    userId,
-  });
-}
-
-export async function getUserBookmarksCount(
-  ctx: QueryCtx,
-  userId: Id<'users'>,
-): Promise<number> {
-  return await ctx.runQuery(api.aggregateQueries.getUserBookmarksCountQuery, {
-    userId,
-  });
-}
+// User-specific count helpers moved to `userStatsCounts.ts`.
 
 /**
  * Count questions based on filter type only (no taxonomy selection yet)
@@ -511,15 +339,9 @@ export const getQuestionCountBySelection = query({
 
         try {
           if (args.filter === 'incorrect') {
-            return await (incorrectByGroupByUser.count as any)(ctx, {
-              namespace,
-              bounds: {},
-            });
+            return await getUserIncorrectCountByGroup(ctx, userId._id, groupId);
           } else if (args.filter === 'bookmarked') {
-            return await (bookmarkedByGroupByUser.count as any)(ctx, {
-              namespace,
-              bounds: {},
-            });
+            return await getUserBookmarksCountByGroup(ctx, userId._id, groupId);
           }
         } catch (error) {
           console.warn(
@@ -541,15 +363,17 @@ export const getQuestionCountBySelection = query({
 
         try {
           if (args.filter === 'incorrect') {
-            return await (incorrectBySubthemeByUser.count as any)(ctx, {
-              namespace,
-              bounds: {},
-            });
+            return await getUserIncorrectCountBySubtheme(
+              ctx,
+              userId._id,
+              subthemeId,
+            );
           } else if (args.filter === 'bookmarked') {
-            return await (bookmarkedBySubthemeByUser.count as any)(ctx, {
-              namespace,
-              bounds: {},
-            });
+            return await getUserBookmarksCountBySubtheme(
+              ctx,
+              userId._id,
+              subthemeId,
+            );
           }
         } catch (error) {
           console.warn(
@@ -571,15 +395,9 @@ export const getQuestionCountBySelection = query({
 
         try {
           if (args.filter === 'incorrect') {
-            return await (incorrectByThemeByUser.count as any)(ctx, {
-              namespace,
-              bounds: {},
-            });
+            return await getUserIncorrectCountByTheme(ctx, userId._id, themeId);
           } else if (args.filter === 'bookmarked') {
-            return await (bookmarkedByThemeByUser.count as any)(ctx, {
-              namespace,
-              bounds: {},
-            });
+            return await getUserBookmarksCountByTheme(ctx, userId._id, themeId);
           }
         } catch (error) {
           console.warn(
@@ -775,43 +593,15 @@ export const getRandomQuestions = query({
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
-    const totalCount = await (randomQuestions.count as any)(ctx, {
-      namespace: 'global',
-      bounds: {},
-    });
-
-    if (totalCount === 0) return [];
-
-    const questionIds: Id<'questions'>[] = [];
-    const maxAttempts = Math.min(args.count * 3, totalCount); // Avoid infinite loops
-    const usedIndices = new Set<number>();
-
-    // Generate random indices and fetch questions
-    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
-      let randomIndex: number;
-      do {
-        randomIndex = Math.floor(Math.random() * totalCount);
-      } while (usedIndices.has(randomIndex));
-
-      usedIndices.add(randomIndex);
-
-      try {
-        const randomQuestion = await (randomQuestions.at as any)(
-          ctx,
-          randomIndex,
-        );
-        if (randomQuestion?.id) {
-          questionIds.push(randomQuestion.id);
-        }
-      } catch (error) {
-        console.warn(
-          `Failed to get random question at index ${randomIndex}:`,
-          error,
-        );
-      }
-    }
-
-    return questionIds;
+    return await selectRandomIdsFromAggregate(
+      () =>
+        (randomQuestions.count as any)(ctx, {
+          namespace: 'global',
+          bounds: {},
+        }),
+      (index: number) => (randomQuestions.at as any)(ctx, index),
+      args.count,
+    );
   },
 });
 
@@ -825,42 +615,18 @@ export const getRandomQuestionsByTheme = query({
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
-    const totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
-      namespace: args.themeId,
-      bounds: {},
-    });
-
-    if (totalCount === 0) return [];
-
-    const questionIds: Id<'questions'>[] = [];
-    const maxAttempts = Math.min(args.count * 3, totalCount);
-    const usedIndices = new Set<number>();
-
-    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
-      let randomIndex: number;
-      do {
-        randomIndex = Math.floor(Math.random() * totalCount);
-      } while (usedIndices.has(randomIndex));
-
-      usedIndices.add(randomIndex);
-
-      try {
-        const randomQuestion = await (randomQuestionsByTheme.at as any)(ctx, {
+    return await selectRandomIdsFromAggregate(
+      () =>
+        (randomQuestionsByTheme.count as any)(ctx, {
           namespace: args.themeId,
-          index: randomIndex,
-        });
-        if (randomQuestion?.id) {
-          questionIds.push(randomQuestion.id);
-        }
-      } catch (error) {
-        console.warn(
-          `Failed to get random question at index ${randomIndex} for theme ${args.themeId}:`,
-          error,
-        );
-      }
-    }
-
-    return questionIds;
+          bounds: {},
+        }),
+      (index: number) =>
+        (randomQuestionsByTheme.at as any)(ctx, index, {
+          namespace: args.themeId,
+        }),
+      args.count,
+    );
   },
 });
 
@@ -874,45 +640,18 @@ export const getRandomQuestionsBySubtheme = query({
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
-    const totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
-      namespace: args.subthemeId,
-      bounds: {},
-    });
-
-    if (totalCount === 0) return [];
-
-    const questionIds: Id<'questions'>[] = [];
-    const maxAttempts = Math.min(args.count * 3, totalCount);
-    const usedIndices = new Set<number>();
-
-    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
-      let randomIndex: number;
-      do {
-        randomIndex = Math.floor(Math.random() * totalCount);
-      } while (usedIndices.has(randomIndex));
-
-      usedIndices.add(randomIndex);
-
-      try {
-        const randomQuestion = await (randomQuestionsBySubtheme.at as any)(
-          ctx,
-          {
-            namespace: args.subthemeId,
-            index: randomIndex,
-          },
-        );
-        if (randomQuestion?.id) {
-          questionIds.push(randomQuestion.id);
-        }
-      } catch (error) {
-        console.warn(
-          `Failed to get random question at index ${randomIndex} for subtheme ${args.subthemeId}:`,
-          error,
-        );
-      }
-    }
-
-    return questionIds;
+    return await selectRandomIdsFromAggregate(
+      () =>
+        (randomQuestionsBySubtheme.count as any)(ctx, {
+          namespace: args.subthemeId,
+          bounds: {},
+        }),
+      (index: number) =>
+        (randomQuestionsBySubtheme.at as any)(ctx, index, {
+          namespace: args.subthemeId,
+        }),
+      args.count,
+    );
   },
 });
 
@@ -926,42 +665,18 @@ export const getRandomQuestionsByGroup = query({
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
-    const totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
-      namespace: args.groupId,
-      bounds: {},
-    });
-
-    if (totalCount === 0) return [];
-
-    const questionIds: Id<'questions'>[] = [];
-    const maxAttempts = Math.min(args.count * 3, totalCount);
-    const usedIndices = new Set<number>();
-
-    for (let i = 0; i < args.count && usedIndices.size < maxAttempts; i++) {
-      let randomIndex: number;
-      do {
-        randomIndex = Math.floor(Math.random() * totalCount);
-      } while (usedIndices.has(randomIndex));
-
-      usedIndices.add(randomIndex);
-
-      try {
-        const randomQuestion = await (randomQuestionsByGroup.at as any)(ctx, {
+    return await selectRandomIdsFromAggregate(
+      () =>
+        (randomQuestionsByGroup.count as any)(ctx, {
           namespace: args.groupId,
-          index: randomIndex,
-        });
-        if (randomQuestion?.id) {
-          questionIds.push(randomQuestion.id);
-        }
-      } catch (error) {
-        console.warn(
-          `Failed to get random question at index ${randomIndex} for group ${args.groupId}:`,
-          error,
-        );
-      }
-    }
-
-    return questionIds;
+          bounds: {},
+        }),
+      (index: number) =>
+        (randomQuestionsByGroup.at as any)(ctx, index, {
+          namespace: args.groupId,
+        }),
+      args.count,
+    );
   },
 });
 
@@ -995,7 +710,8 @@ export const getRandomQuestionsByUserModeOptimized = query({
 });
 
 /**
- * Get random questions from hierarchical user-specific aggregates (FAST!)
+ * Get random questions from user-specific sets (incorrect/bookmarked) with hierarchical filtering
+ * Updated to use userStatsCounts table and direct database queries instead of aggregates
  */
 async function getRandomFromHierarchicalAggregates(
   ctx: QueryCtx,
@@ -1008,123 +724,86 @@ async function getRandomFromHierarchicalAggregates(
     groupId?: Id<'groups'>;
   },
 ): Promise<Id<'questions'>[]> {
-  let totalCount: number;
-  let randomGetter: (index: number) => Promise<any>;
-  let namespace: string;
+  let questionIds: Id<'questions'>[] = [];
 
-  // Determine which hierarchical aggregate to use
-  if (args.groupId) {
-    namespace = `${args.userId}_${args.groupId}`;
-    if (args.mode === 'incorrect') {
-      totalCount = await (incorrectByGroupByUser.count as any)(ctx, {
-        namespace,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (incorrectByGroupByUser.at as any)(ctx, { namespace, index });
+  if (args.mode === 'incorrect') {
+    // Get incorrectly answered questions for this user with hierarchical filtering
+    const query = ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', args.userId));
+
+    const allStats = await query.collect();
+
+    // Filter to only incorrect stats
+    const incorrectStats = allStats.filter(stat => stat.isIncorrect);
+
+    // Filter by hierarchy if specified
+    if (args.groupId || args.subthemeId || args.themeId) {
+      const filteredStats: typeof incorrectStats = [];
+
+      for (const stat of incorrectStats) {
+        const question = await ctx.db.get(stat.questionId);
+        if (!question) continue;
+
+        // Check hierarchy match
+        if (args.groupId && question.groupId !== args.groupId) continue;
+        if (args.subthemeId && question.subthemeId !== args.subthemeId)
+          continue;
+        if (args.themeId && question.themeId !== args.themeId) continue;
+
+        filteredStats.push(stat);
+      }
+
+      questionIds = filteredStats.map(stat => stat.questionId);
     } else {
-      totalCount = await (bookmarkedByGroupByUser.count as any)(ctx, {
-        namespace,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (bookmarkedByGroupByUser.at as any)(ctx, { namespace, index });
+      questionIds = incorrectStats.map(stat => stat.questionId);
     }
-  } else if (args.subthemeId) {
-    namespace = `${args.userId}_${args.subthemeId}`;
-    if (args.mode === 'incorrect') {
-      totalCount = await (incorrectBySubthemeByUser.count as any)(ctx, {
-        namespace,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (incorrectBySubthemeByUser.at as any)(ctx, { namespace, index });
+  } else if (args.mode === 'bookmarked') {
+    // Get bookmarked questions for this user with hierarchical filtering
+    const query = ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId));
+
+    const bookmarks = await query.collect();
+
+    // Filter by hierarchy if specified
+    if (args.groupId || args.subthemeId || args.themeId) {
+      const filteredBookmarks: typeof bookmarks = [];
+
+      for (const bookmark of bookmarks) {
+        const question = await ctx.db.get(bookmark.questionId);
+        if (!question) continue;
+
+        // Check hierarchy match
+        if (args.groupId && question.groupId !== args.groupId) continue;
+        if (args.subthemeId && question.subthemeId !== args.subthemeId)
+          continue;
+        if (args.themeId && question.themeId !== args.themeId) continue;
+
+        filteredBookmarks.push(bookmark);
+      }
+
+      questionIds = filteredBookmarks.map(bookmark => bookmark.questionId);
     } else {
-      totalCount = await (bookmarkedBySubthemeByUser.count as any)(ctx, {
-        namespace,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (bookmarkedBySubthemeByUser.at as any)(ctx, { namespace, index });
-    }
-  } else if (args.themeId) {
-    namespace = `${args.userId}_${args.themeId}`;
-    if (args.mode === 'incorrect') {
-      totalCount = await (incorrectByThemeByUser.count as any)(ctx, {
-        namespace,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (incorrectByThemeByUser.at as any)(ctx, { namespace, index });
-    } else {
-      totalCount = await (bookmarkedByThemeByUser.count as any)(ctx, {
-        namespace,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (bookmarkedByThemeByUser.at as any)(ctx, { namespace, index });
-    }
-  } else {
-    // Fall back to basic user aggregates for global queries
-    if (args.mode === 'incorrect') {
-      totalCount = await (incorrectByUser.count as any)(ctx, {
-        namespace: args.userId,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (incorrectByUser.at as any)(ctx, { namespace: args.userId, index });
-    } else {
-      totalCount = await (bookmarkedByUser.count as any)(ctx, {
-        namespace: args.userId,
-        bounds: {},
-      });
-      randomGetter = (index: number) =>
-        (bookmarkedByUser.at as any)(ctx, { namespace: args.userId, index });
+      questionIds = bookmarks.map(bookmark => bookmark.questionId);
     }
   }
 
-  // If no questions available, return empty
-  if (totalCount === 0) {
+  if (questionIds.length === 0) {
     return [];
   }
 
-  // Get random questions efficiently
-  const questionIds: Id<'questions'>[] = [];
-  const requestedCount = Math.min(args.count, totalCount);
-  const usedIndices = new Set<number>();
-
-  for (let i = 0; i < requestedCount; i++) {
-    let randomIndex: number;
-    let attempts = 0;
-
-    // Find an unused index (max 20 attempts to avoid infinite loops)
-    do {
-      randomIndex = Math.floor(Math.random() * totalCount);
-      attempts++;
-    } while (usedIndices.has(randomIndex) && attempts < 20);
-
-    if (attempts >= 20) break; // Avoid infinite loops
-
-    usedIndices.add(randomIndex);
-
-    try {
-      const result = await randomGetter(randomIndex);
-      if (result?.id) {
-        questionIds.push(result.id);
-      }
-    } catch (error) {
-      console.warn(
-        `Failed to get random question at index ${randomIndex}:`,
-        error,
-      );
-    }
-  }
-
-  return questionIds;
+  // Shuffle and return the requested count
+  const shuffled = questionIds.sort(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(args.count, shuffled.length));
 }
 
 /**
  * Optimized unanswered questions using pagination instead of .collect()
+ */
+/**
+ * Get random unanswered questions with hierarchical filtering
+ * Updated to use userQuestionStats table directly instead of aggregates
  */
 async function getRandomUnansweredQuestions(
   ctx: QueryCtx,
@@ -1136,96 +815,56 @@ async function getRandomUnansweredQuestions(
     groupId?: Id<'groups'>;
   },
 ): Promise<Id<'questions'>[]> {
-  // Use paginated approach to avoid loading all answered questions into memory
-  const answeredIds = new Set<Id<'questions'>>();
-  let cursor: string | null = null;
-  const batchSize = 100; // Process in small batches
+  // Get all answered questions for this user
+  const allStats = await ctx.db
+    .query('userQuestionStats')
+    .withIndex('by_user', q => q.eq('userId', args.userId))
+    .collect();
 
-  // Load answered questions in batches
-  while (answeredIds.size < 5000) {
-    // Reasonable limit to prevent infinite pagination
-    const result: any = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user', (q: any) => q.eq('userId', args.userId))
-      .paginate({ cursor, numItems: batchSize });
+  // Filter to only answered stats
+  const answeredStats = allStats.filter(stat => stat.hasAnswered);
 
-    result.page.forEach((stat: any) => answeredIds.add(stat.questionId));
+  const answeredQuestionIds = new Set(
+    answeredStats.map(stat => stat.questionId),
+  );
 
-    if (result.isDone) break;
-    cursor = result.continueCursor;
-  }
-
-  // Get random questions from appropriate aggregate
-  let totalCount: number;
-  let randomQuestionGetter: (index: number) => Promise<any>;
+  // Get all questions in the specified scope
+  let allQuestions: any[] = [];
 
   if (args.groupId) {
-    totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
-      namespace: args.groupId,
-      bounds: {},
-    });
-    randomQuestionGetter = index =>
-      (randomQuestionsByGroup.at as any)(ctx, {
-        namespace: args.groupId,
-        index,
-      });
+    allQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_group', q => q.eq('groupId', args.groupId!))
+      .collect();
   } else if (args.subthemeId) {
-    totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
-      namespace: args.subthemeId,
-      bounds: {},
-    });
-    randomQuestionGetter = index =>
-      (randomQuestionsBySubtheme.at as any)(ctx, {
-        namespace: args.subthemeId,
-        index,
-      });
+    allQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId!))
+      .collect();
   } else if (args.themeId) {
-    totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
-      namespace: args.themeId,
-      bounds: {},
-    });
-    randomQuestionGetter = index =>
-      (randomQuestionsByTheme.at as any)(ctx, {
-        namespace: args.themeId,
-        index,
-      });
+    allQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_theme', q => q.eq('themeId', args.themeId!))
+      .collect();
   } else {
-    totalCount = await (randomQuestions.count as any)(ctx, {
-      namespace: 'global',
-      bounds: {},
-    });
-    randomQuestionGetter = index => (randomQuestions.at as any)(ctx, index);
+    // Get all questions
+    allQuestions = await ctx.db.query('questions').collect();
   }
 
-  // Find unanswered questions
-  const questionIds: Id<'questions'>[] = [];
-  const usedIndices = new Set<number>();
-  let attempts = 0;
-  const maxAttempts = Math.min(args.count * 5, 100); // Reasonable limit
+  // Filter out answered questions
+  const unansweredQuestions = allQuestions.filter(
+    question => !answeredQuestionIds.has(question._id),
+  );
 
-  while (questionIds.length < args.count && attempts < maxAttempts) {
-    let randomIndex: number;
-    do {
-      randomIndex = Math.floor(Math.random() * totalCount);
-    } while (usedIndices.has(randomIndex));
-
-    usedIndices.add(randomIndex);
-    attempts++;
-
-    try {
-      const randomQuestion = await randomQuestionGetter(randomIndex);
-      if (randomQuestion?.id && !answeredIds.has(randomQuestion.id)) {
-        questionIds.push(randomQuestion.id);
-      }
-    } catch (error) {
-      console.warn(
-        `Failed to get random question at index ${randomIndex}:`,
-        error,
-      );
-    }
+  if (unansweredQuestions.length === 0) {
+    return [];
   }
 
-  return questionIds;
+  // Shuffle and return the requested count
+  const shuffled = unansweredQuestions.sort(() => Math.random() - 0.5);
+  return shuffled
+    .slice(0, Math.min(args.count, shuffled.length))
+    .map(q => q._id);
 }
 
 /**
@@ -1312,201 +951,8 @@ export const getRandomQuestionsByUserModeBatch = query({
  * This combines aggregate-based random selection with user filtering
  * @deprecated Use getRandomQuestionsByUserModeOptimized instead
  */
-export const getRandomQuestionsByUserMode = query({
-  args: {
-    userId: v.id('users'),
-    mode: v.union(
-      v.literal('incorrect'),
-      v.literal('bookmarked'),
-      v.literal('unanswered'),
-    ),
-    count: v.number(),
-    themeId: v.optional(v.id('themes')),
-    subthemeId: v.optional(v.id('subthemes')),
-    groupId: v.optional(v.id('groups')),
-  },
-  returns: v.array(v.id('questions')),
-  handler: async (ctx, args) => {
-    const questionIds: Id<'questions'>[] = [];
-    const maxAttempts = args.count * 10; // Try more to account for filtering
-    let attempts = 0;
-
-    // Get user filter data based on mode
-    let userQuestionIds: Set<Id<'questions'>>;
-
-    switch (args.mode) {
-      case 'incorrect': {
-        const incorrectStats = await ctx.db
-          .query('userQuestionStats')
-          .withIndex('by_user_incorrect', q =>
-            q.eq('userId', args.userId).eq('isIncorrect', true),
-          )
-          .collect();
-        userQuestionIds = new Set(incorrectStats.map(s => s.questionId));
-        break;
-      }
-      case 'bookmarked': {
-        const bookmarks = await ctx.db
-          .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', args.userId))
-          .collect();
-        userQuestionIds = new Set(bookmarks.map(b => b.questionId));
-        break;
-      }
-      case 'unanswered': {
-        const answeredStats = await ctx.db
-          .query('userQuestionStats')
-          .withIndex('by_user', q => q.eq('userId', args.userId))
-          .collect();
-        const answeredIds = new Set(answeredStats.map(s => s.questionId));
-
-        // For unanswered, we'll use a different strategy - get random from aggregate then filter
-        let totalCount: number;
-        let randomQuestionGetter: (index: number) => Promise<any>;
-
-        if (args.groupId) {
-          totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
-            namespace: args.groupId,
-            bounds: {},
-          });
-          randomQuestionGetter = index =>
-            (randomQuestionsByGroup.at as any)(ctx, {
-              namespace: args.groupId,
-              index,
-            });
-        } else if (args.subthemeId) {
-          totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
-            namespace: args.subthemeId,
-            bounds: {},
-          });
-          randomQuestionGetter = index =>
-            (randomQuestionsBySubtheme.at as any)(ctx, {
-              namespace: args.subthemeId,
-              index,
-            });
-        } else if (args.themeId) {
-          totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
-            namespace: args.themeId,
-            bounds: {},
-          });
-          randomQuestionGetter = index =>
-            (randomQuestionsByTheme.at as any)(ctx, {
-              namespace: args.themeId,
-              index,
-            });
-        } else {
-          totalCount = await (randomQuestions.count as any)(ctx, {
-            namespace: 'global',
-            bounds: {},
-          });
-          randomQuestionGetter = index =>
-            (randomQuestions.at as any)(ctx, index);
-        }
-
-        const usedIndices = new Set<number>();
-
-        // Get random unanswered questions
-        while (questionIds.length < args.count && attempts < maxAttempts) {
-          let randomIndex: number;
-          do {
-            randomIndex = Math.floor(Math.random() * totalCount);
-          } while (usedIndices.has(randomIndex));
-
-          usedIndices.add(randomIndex);
-          attempts++;
-
-          try {
-            const randomQuestion = await randomQuestionGetter(randomIndex);
-            if (randomQuestion?.id && !answeredIds.has(randomQuestion.id)) {
-              questionIds.push(randomQuestion.id);
-            }
-          } catch (error) {
-            console.warn(
-              `Failed to get random question at index ${randomIndex}:`,
-              error,
-            );
-          }
-        }
-
-        return questionIds;
-      }
-    }
-
-    // For incorrect and bookmarked modes: get random questions then filter
-    if (userQuestionIds.size === 0) {
-      return [];
-    }
-
-    // Strategy: Use appropriate aggregate then filter by user data
-    let totalCount: number;
-    let randomQuestionGetter: (index: number) => Promise<any>;
-
-    if (args.groupId) {
-      totalCount = await (randomQuestionsByGroup.count as any)(ctx, {
-        namespace: args.groupId,
-        bounds: {},
-      });
-      randomQuestionGetter = index =>
-        (randomQuestionsByGroup.at as any)(ctx, {
-          namespace: args.groupId,
-          index,
-        });
-    } else if (args.subthemeId) {
-      totalCount = await (randomQuestionsBySubtheme.count as any)(ctx, {
-        namespace: args.subthemeId,
-        bounds: {},
-      });
-      randomQuestionGetter = index =>
-        (randomQuestionsBySubtheme.at as any)(ctx, {
-          namespace: args.subthemeId,
-          index,
-        });
-    } else if (args.themeId) {
-      totalCount = await (randomQuestionsByTheme.count as any)(ctx, {
-        namespace: args.themeId,
-        bounds: {},
-      });
-      randomQuestionGetter = index =>
-        (randomQuestionsByTheme.at as any)(ctx, {
-          namespace: args.themeId,
-          index,
-        });
-    } else {
-      totalCount = await (randomQuestions.count as any)(ctx, {
-        namespace: 'global',
-        bounds: {},
-      });
-      randomQuestionGetter = index => (randomQuestions.at as any)(ctx, index);
-    }
-
-    const usedIndices = new Set<number>();
-
-    // Get random questions that match user criteria
-    while (questionIds.length < args.count && attempts < maxAttempts) {
-      let randomIndex: number;
-      do {
-        randomIndex = Math.floor(Math.random() * totalCount);
-      } while (usedIndices.has(randomIndex));
-
-      usedIndices.add(randomIndex);
-      attempts++;
-
-      try {
-        const randomQuestion = await randomQuestionGetter(randomIndex);
-        if (randomQuestion?.id && userQuestionIds.has(randomQuestion.id)) {
-          questionIds.push(randomQuestion.id);
-        }
-      } catch (error) {
-        console.warn(
-          `Failed to get random question at index ${randomIndex}:`,
-          error,
-        );
-      }
-    }
-
-    return questionIds;
-  },
-});
+// Legacy getRandomQuestionsByUserMode removed in favor of
+// getRandomQuestionsByUserModeOptimized.
 
 /**
  * ============================================================================
@@ -1596,27 +1042,27 @@ export const getBatchQuestionCountsBySelection = query({
           if (args.filter === 'incorrect') {
             switch (selection.type) {
               case 'theme': {
-                count = await (incorrectByThemeByUser.count as any)(ctx, {
-                  namespace,
-                  bounds: {},
-                });
-
+                count = await getUserIncorrectCountByTheme(
+                  ctx,
+                  userId._id,
+                  selection.id as Id<'themes'>,
+                );
                 break;
               }
               case 'subtheme': {
-                count = await (incorrectBySubthemeByUser.count as any)(ctx, {
-                  namespace,
-                  bounds: {},
-                });
-
+                count = await getUserIncorrectCountBySubtheme(
+                  ctx,
+                  userId._id,
+                  selection.id as Id<'subthemes'>,
+                );
                 break;
               }
               case 'group': {
-                count = await (incorrectByGroupByUser.count as any)(ctx, {
-                  namespace,
-                  bounds: {},
-                });
-
+                count = await getUserIncorrectCountByGroup(
+                  ctx,
+                  userId._id,
+                  selection.id as Id<'groups'>,
+                );
                 break;
               }
               // No default
@@ -1624,27 +1070,27 @@ export const getBatchQuestionCountsBySelection = query({
           } else if (args.filter === 'bookmarked') {
             switch (selection.type) {
               case 'theme': {
-                count = await (bookmarkedByThemeByUser.count as any)(ctx, {
-                  namespace,
-                  bounds: {},
-                });
-
+                count = await getUserBookmarksCountByTheme(
+                  ctx,
+                  userId._id,
+                  selection.id as Id<'themes'>,
+                );
                 break;
               }
               case 'subtheme': {
-                count = await (bookmarkedBySubthemeByUser.count as any)(ctx, {
-                  namespace,
-                  bounds: {},
-                });
-
+                count = await getUserBookmarksCountBySubtheme(
+                  ctx,
+                  userId._id,
+                  selection.id as Id<'subthemes'>,
+                );
                 break;
               }
               case 'group': {
-                count = await (bookmarkedByGroupByUser.count as any)(ctx, {
-                  namespace,
-                  bounds: {},
-                });
-
+                count = await getUserBookmarksCountByGroup(
+                  ctx,
+                  userId._id,
+                  selection.id as Id<'groups'>,
+                );
                 break;
               }
               // No default
@@ -1725,201 +1171,10 @@ export const getBatchQuestionCountsBySelection = query({
 /**
  * Get user theme statistics using aggregates for efficient chart data
  */
-export const getUserThemeStatsWithAggregates = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      themeId: v.id('themes'),
-      themeName: v.string(),
-      total: v.number(),
-      correct: v.number(),
-      percentage: v.number(),
-    }),
-  ),
-  handler: async (
-    ctx,
-  ): Promise<
-    Array<{
-      themeId: Id<'themes'>;
-      themeName: string;
-      total: number;
-      correct: number;
-      percentage: number;
-    }>
-  > => {
-    const userId = await getCurrentUserOrThrow(ctx);
+// getUserThemeStatsWithAggregates function removed
+// This function is no longer needed as it's been replaced by the more efficient
+// getUserStatsFast function in userStats.ts that uses the userStatsCounts table
 
-    // Get all themes first
-    const themes = await ctx.db.query('themes').collect();
-
-    if (themes.length === 0) {
-      return [];
-    }
-
-    // Get theme statistics in parallel using aggregates
-    const themeStatsPromises: Promise<{
-      themeId: Id<'themes'>;
-      themeName: string;
-      total: number;
-      correct: number;
-      percentage: number;
-    }>[] = themes.map(
-      async (
-        theme,
-      ): Promise<{
-        themeId: Id<'themes'>;
-        themeName: string;
-        total: number;
-        correct: number;
-        percentage: number;
-      }> => {
-        const [totalAnswered, totalIncorrect]: [number, number] =
-          await Promise.all([
-            ctx.runQuery(
-              api.aggregateQueries.getUserAnsweredCountByThemeQuery,
-              {
-                themeId: theme._id,
-              },
-            ),
-            ctx.runQuery(
-              api.aggregateQueries.getUserIncorrectCountByThemeQuery,
-              {
-                themeId: theme._id,
-              },
-            ),
-          ]);
-
-        const totalCorrect = totalAnswered - totalIncorrect;
-        const percentage =
-          totalAnswered > 0
-            ? Math.round((totalCorrect / totalAnswered) * 100)
-            : 0;
-
-        return {
-          themeId: theme._id,
-          themeName: theme.name,
-          total: totalAnswered,
-          correct: totalCorrect,
-          percentage,
-        };
-      },
-    );
-
-    const themeStats: Array<{
-      themeId: Id<'themes'>;
-      themeName: string;
-      total: number;
-      correct: number;
-      percentage: number;
-    }> = await Promise.all(themeStatsPromises);
-
-    // Filter out themes with no answered questions and sort by total answered (descending)
-    return themeStats
-      .filter(
-        (stat: {
-          themeId: Id<'themes'>;
-          themeName: string;
-          total: number;
-          correct: number;
-          percentage: number;
-        }) => stat.total > 0,
-      )
-      .sort(
-        (
-          a: {
-            themeId: Id<'themes'>;
-            themeName: string;
-            total: number;
-            correct: number;
-            percentage: number;
-          },
-          b: {
-            themeId: Id<'themes'>;
-            themeName: string;
-            total: number;
-            correct: number;
-            percentage: number;
-          },
-        ) => b.total - a.total,
-      );
-  },
-});
-
-/**
- * Get user weekly progress using aggregates for efficient chart data
- * Note: This still uses table scan for weekly grouping but is more efficient than the old approach
- */
-export const getUserWeeklyProgressWithAggregates = query({
-  args: {},
-  returns: v.array(
-    v.object({
-      week: v.string(),
-      totalAnswered: v.number(),
-      weeklyAnswered: v.number(),
-    }),
-  ),
-  handler: async (
-    ctx,
-  ): Promise<
-    Array<{
-      week: string;
-      totalAnswered: number;
-      weeklyAnswered: number;
-    }>
-  > => {
-    const userId = await getCurrentUserOrThrow(ctx);
-
-    // Get answered count using aggregate for validation
-    const totalAnsweredCount: number = await getUserAnsweredCount(
-      ctx,
-      userId._id,
-    );
-
-    if (totalAnsweredCount === 0) {
-      return [];
-    }
-
-    // Still need to scan for weekly grouping, but we can optimize the query
-    const answeredStats = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user_answered', q =>
-        q.eq('userId', userId._id).eq('hasAnswered', true),
-      )
-      .collect();
-
-    if (answeredStats.length === 0) {
-      return [];
-    }
-
-    // Group by week and calculate cumulative totals
-    const weeklyData = new Map<string, number>();
-
-    // Count questions answered per week (using creation time - when first answered)
-    for (const stat of answeredStats) {
-      const weekString = getWeekString(stat._creationTime);
-      weeklyData.set(weekString, (weeklyData.get(weekString) || 0) + 1);
-    }
-
-    // Convert to array and sort by week
-    const sortedWeeks: [string, number][] = [...weeklyData.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
-      .slice(-12); // Get last 12 weeks
-
-    // Calculate cumulative totals
-    let cumulativeTotal = 0;
-    const result: Array<{
-      week: string;
-      totalAnswered: number;
-      weeklyAnswered: number;
-    }> = sortedWeeks.map(([week, weeklyCount]) => {
-      cumulativeTotal += weeklyCount;
-      return {
-        week,
-        totalAnswered: cumulativeTotal,
-        weeklyAnswered: weeklyCount,
-      };
-    });
-
-    return result;
-  },
-});
+// getUserWeeklyProgressWithAggregates function removed
+// This function is no longer needed as it's been replaced by the more efficient
+// getUserWeeklyProgress function in userStats.ts that uses the userStatsCounts table

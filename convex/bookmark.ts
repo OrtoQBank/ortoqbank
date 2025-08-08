@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 
+import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
@@ -31,6 +32,10 @@ export const toggleBookmark = mutation({
     // If bookmark exists, delete it
     if (existingBookmark) {
       await ctx.db.delete(existingBookmark._id);
+
+      // Update userStatsCounts - decrease bookmark counts
+      await updateBookmarkCounts(ctx, userId._id, question, false);
+
       return { success: true, bookmarked: false };
     }
 
@@ -45,6 +50,9 @@ export const toggleBookmark = mutation({
     };
 
     await ctx.db.insert('userBookmarks', bookmarkData);
+
+    // Update userStatsCounts - increase bookmark counts
+    await updateBookmarkCounts(ctx, userId._id, question, true);
 
     return { success: true, bookmarked: true };
   },
@@ -176,3 +184,86 @@ export const removeAllBookmarksForQuestion = mutation({
     return { success: true, count: bookmarks.length };
   },
 });
+
+/**
+ * Helper function to update bookmark counts in userStatsCounts
+ */
+async function updateBookmarkCounts(
+  ctx: any,
+  userId: Id<'users'>,
+  question: any,
+  isBookmarked: boolean,
+) {
+  // Get or create user counts record
+  let userCounts = await ctx.db
+    .query('userStatsCounts')
+    .withIndex('by_user', (q: any) => q.eq('userId', userId))
+    .first();
+
+  if (!userCounts) {
+    // Initialize counts for new user
+    userCounts = {
+      userId,
+      totalAnswered: 0,
+      totalIncorrect: 0,
+      totalBookmarked: 0,
+      answeredByTheme: {},
+      incorrectByTheme: {},
+      bookmarkedByTheme: {},
+      answeredBySubtheme: {},
+      incorrectBySubtheme: {},
+      bookmarkedBySubtheme: {},
+      answeredByGroup: {},
+      incorrectByGroup: {},
+      bookmarkedByGroup: {},
+      lastUpdated: Date.now(),
+    };
+
+    const countsId = await ctx.db.insert('userStatsCounts', userCounts);
+    userCounts = { ...userCounts, _id: countsId };
+  }
+
+  const delta = isBookmarked ? 1 : -1;
+
+  // Prepare updates
+  const updates: any = {
+    totalBookmarked: Math.max(0, userCounts.totalBookmarked + delta),
+    lastUpdated: Date.now(),
+  };
+
+  // Update bookmarked by theme
+  if (question.themeId) {
+    updates.bookmarkedByTheme = {
+      ...userCounts.bookmarkedByTheme,
+      [question.themeId]: Math.max(
+        0,
+        (userCounts.bookmarkedByTheme[question.themeId] || 0) + delta,
+      ),
+    };
+  }
+
+  // Update bookmarked by subtheme
+  if (question.subthemeId) {
+    updates.bookmarkedBySubtheme = {
+      ...userCounts.bookmarkedBySubtheme,
+      [question.subthemeId]: Math.max(
+        0,
+        (userCounts.bookmarkedBySubtheme[question.subthemeId] || 0) + delta,
+      ),
+    };
+  }
+
+  // Update bookmarked by group
+  if (question.groupId) {
+    updates.bookmarkedByGroup = {
+      ...userCounts.bookmarkedByGroup,
+      [question.groupId]: Math.max(
+        0,
+        (userCounts.bookmarkedByGroup[question.groupId] || 0) + delta,
+      ),
+    };
+  }
+
+  // Apply updates
+  await ctx.db.patch(userCounts._id, updates);
+}

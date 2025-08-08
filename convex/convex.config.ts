@@ -31,26 +31,11 @@ app.use(aggregate, { name: 'randomQuestionsBySubtheme' });
 app.use(aggregate, { name: 'randomQuestionsByGroup' });
 
 // =============================================================================
-// SECTION 3: USER-SPECIFIC COUNT AGGREGATES
-// Used for question modes: unanswered, incorrect, bookmarked
+// SECTION 3: USER-SPECIFIC COUNT AGGREGATES - REMOVED
+// Replaced by userStatsCounts table for better performance
 // =============================================================================
 
-// Basic user-specific counts (across all categories)
-app.use(aggregate, { name: 'answeredByUser' });
-app.use(aggregate, { name: 'incorrectByUser' });
-app.use(aggregate, { name: 'bookmarkedByUser' });
-
-// Hierarchical user-specific counts (user + category breakdown)
-app.use(aggregate, { name: 'answeredByThemeByUser' });
-app.use(aggregate, { name: 'answeredBySubthemeByUser' });
-app.use(aggregate, { name: 'answeredByGroupByUser' });
-
-app.use(aggregate, { name: 'incorrectByThemeByUser' });
-app.use(aggregate, { name: 'incorrectBySubthemeByUser' });
-app.use(aggregate, { name: 'incorrectByGroupByUser' });
-
-app.use(aggregate, { name: 'bookmarkedByThemeByUser' });
-app.use(aggregate, { name: 'bookmarkedBySubthemeByUser' });
-app.use(aggregate, { name: 'bookmarkedByGroupByUser' });
+// All user-specific aggregates have been replaced by the userStatsCounts table
+// This provides much better performance (1-2 DB calls vs 1000+ aggregate calls)
 
 export default app;

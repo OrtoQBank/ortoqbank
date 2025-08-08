@@ -1,7 +1,7 @@
 'use client';
 
-import { useQuery } from 'convex/react';
 import { InfoIcon as InfoCircle } from 'lucide-react';
+import { useMemo } from 'react';
 
 import { Label } from '@/components/ui/label';
 import {
@@ -11,12 +11,15 @@ import {
 } from '@/components/ui/popover';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
-import { api } from '../../../../../../convex/_generated/api';
+import { useFormContext } from '../context/FormContext';
 
 type QuestionModeSelectorProps = {
   value: string;
   onChange: (value: 'all' | 'incorrect' | 'unanswered' | 'bookmarked') => void;
   error?: string;
+  selectedThemes: string[];
+  selectedSubthemes: string[];
+  selectedGroups: string[];
 };
 
 type ModeKey = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
@@ -25,10 +28,21 @@ export function QuestionModeSelector({
   value,
   onChange,
   error,
+  selectedThemes,
+  selectedSubthemes,
+  selectedGroups,
 }: QuestionModeSelectorProps) {
-  // Fetch counts for all question modes
-  const counts = useQuery(api.aggregateQueries.getAllQuestionCounts, {});
-  const loading = counts === undefined;
+  const { isLoading, calculateQuestionCounts } = useFormContext();
+
+  // Memoized counts calculation (global counts - don't change with selections)
+  const counts = useMemo(() => {
+    if (isLoading) return null;
+
+    // Call with empty arrays to get global counts only
+    const result = calculateQuestionCounts([], [], []);
+
+    return typeof result === 'object' ? result : null;
+  }, [calculateQuestionCounts, isLoading]);
 
   const options: { id: string; label: string; apiKey: ModeKey }[] = [
     { id: 'all', label: 'Todas', apiKey: 'all' },
@@ -64,7 +78,7 @@ export function QuestionModeSelector({
             <Label htmlFor={id} className="flex items-center gap-2">
               <span>{label}</span>
               <span className="text-muted-foreground text-xs">
-                {loading ? '...' : (counts?.[apiKey] ?? 0)}
+                {isLoading ? '...' : (counts?.[apiKey] ?? 0)}
               </span>
             </Label>
           </div>

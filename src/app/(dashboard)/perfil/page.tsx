@@ -1,5 +1,6 @@
 'use client';
 
+import { useMutation } from 'convex/react';
 import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { useState } from 'react';
 import {
@@ -53,29 +54,15 @@ function getStatsValues(stats: any) {
 }
 
 export default function ProfilePage() {
-  // Use the lightweight summary stats function with aggregates for initial load
-  const statsSummary = useQuery(
-    api.userStats.getUserStatsSummaryWithAggregates,
-  );
+  // Use the ultra-fast getUserStatsFast function (replaces getUserStatsSummaryWithAggregates)
+  const userStats = useQuery(api.userStats.getUserStatsFast);
   const [showThemeStats, setShowThemeStats] = useState(false);
 
-  // Only fetch theme stats with aggregate data when requested
-  const themeStats = useQuery(
-    api.aggregateQueries.getUserThemeStatsWithAggregates,
-    showThemeStats ? {} : 'skip',
-  );
+  // Determine if we're loading the data
+  const isLoadingSummary = userStats === undefined;
 
-  // Determine if we're loading the initial summary data
-  const isLoadingSummary = statsSummary === undefined;
-
-  // Determine if we're loading the theme data
-  const isLoadingThemeData = showThemeStats && themeStats === undefined;
-
-  // Check if we have theme data available
-  const hasThemeData = themeStats && themeStats.length > 0;
-
-  // Use the summary stats for card calculations (theme stats are only for charts)
-  const stats = statsSummary;
+  // Use the userStats directly (includes both summary and theme stats)
+  const stats = userStats;
 
   // Extract the values safely
   const values = getStatsValues(stats);
@@ -269,14 +256,18 @@ export default function ProfilePage() {
         </div>
       )}
 
-      {/* Theme stats - only show after user requests them */}
-      {!isLoadingSummary && !showThemeStats && values && (
-        <div className="mt-6 flex justify-center">
-          <Button onClick={() => setShowThemeStats(true)} variant="outline">
-            Carregar estatísticas por tema
-          </Button>
-        </div>
-      )}
+      {/* Theme stats - now included in the main query */}
+      {!isLoadingSummary &&
+        !showThemeStats &&
+        values &&
+        userStats &&
+        userStats.byTheme.length > 0 && (
+          <div className="mt-6 flex justify-center">
+            <Button onClick={() => setShowThemeStats(true)} variant="outline">
+              Ver estatísticas por tema
+            </Button>
+          </div>
+        )}
 
       {showThemeStats && (
         <div
@@ -284,19 +275,7 @@ export default function ProfilePage() {
             process.env.NODE_ENV === 'development' ? 'md:grid-cols-2' : ''
           }`}
         >
-          {isLoadingThemeData ? (
-            <>
-              <Skeleton className="h-[300px] w-full rounded-lg" />
-              {process.env.NODE_ENV === 'development' && (
-                <Skeleton className="h-[300px] w-full rounded-lg" />
-              )}
-            </>
-          ) : hasThemeData && themeStats ? (
-            <>
-              <ThemeBarChart themeStats={themeStats} />
-              {process.env.NODE_ENV === 'development' && <ThemeRadarChart />}
-            </>
-          ) : (
+          {!userStats || userStats.byTheme.length === 0 ? (
             <>
               <div className="bg-card text-card-foreground flex h-[300px] items-center justify-center rounded-lg border p-3 shadow-sm">
                 <p className="text-muted-foreground text-sm">
@@ -311,9 +290,55 @@ export default function ProfilePage() {
                 </div>
               )}
             </>
+          ) : (
+            <>
+              <ThemeBarChart themeStats={userStats.byTheme} />
+              {process.env.NODE_ENV === 'development' && <ThemeRadarChart />}
+            </>
           )}
         </div>
       )}
+
+      {/* Danger zone: reset stats */}
+      <div className="mt-8 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">
+              Zerar estatísticas
+            </h3>
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Isto vai limpar suas estatísticas de respostas (não afeta questões
+              salvas).
+            </p>
+          </div>
+          <ResetStatsButton />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ResetStatsButton() {
+  const [isPending, setIsPending] = useState(false);
+  const reset = useMutation(api.userStats.resetMyStatsCounts);
+
+  return (
+    <Button
+      variant="destructive"
+      disabled={isPending}
+      onClick={async () => {
+        try {
+          setIsPending(true);
+          await reset({});
+          if (typeof globalThis !== 'undefined' && globalThis.location) {
+            globalThis.location.reload();
+          }
+        } finally {
+          setIsPending(false);
+        }
+      }}
+    >
+      {isPending ? 'Limpando…' : 'Zerar estatísticas'}
+    </Button>
   );
 }

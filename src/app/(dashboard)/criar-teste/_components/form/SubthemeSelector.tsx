@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex/react';
+import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { useCallback, useMemo, useState } from 'react';
 
@@ -9,6 +9,7 @@ import { Label } from '@/components/ui/label';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
+import { useFormContext } from '../context/FormContext';
 
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };
@@ -34,6 +35,9 @@ function SubthemeQuestionCount({
   subthemeId: string;
   questionMode: string;
 }) {
+  if (questionMode === 'unanswered') {
+    return <UnansweredSubthemeCount subthemeId={subthemeId} />;
+  }
   if (questionMode === 'incorrect') {
     return <IncorrectSubthemeCount subthemeId={subthemeId} />;
   }
@@ -46,16 +50,14 @@ function SubthemeQuestionCount({
 }
 
 function IncorrectSubthemeCount({ subthemeId }: { subthemeId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserIncorrectCountBySubthemeQuery,
-    {
-      subthemeId: subthemeId as Id<'subthemes'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count =
+    userCountsForQuizCreation.bySubtheme[subthemeId]?.incorrect || 0;
 
   return (
     <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
@@ -65,16 +67,14 @@ function IncorrectSubthemeCount({ subthemeId }: { subthemeId: string }) {
 }
 
 function BookmarkedSubthemeCount({ subthemeId }: { subthemeId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserBookmarksCountBySubthemeQuery,
-    {
-      subthemeId: subthemeId as Id<'subthemes'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count =
+    userCountsForQuizCreation.bySubtheme[subthemeId]?.bookmarked || 0;
 
   return (
     <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">
@@ -99,6 +99,27 @@ function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
   );
 }
 
+function UnansweredSubthemeCount({ subthemeId }: { subthemeId: string }) {
+  const total = useQuery(api.aggregateQueries.getSubthemeQuestionCountQuery, {
+    subthemeId: subthemeId as Id<'subthemes'>,
+  });
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
+
+  if (total === undefined || isLoading || !userCountsForQuizCreation) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  const answered =
+    userCountsForQuizCreation.bySubtheme[subthemeId]?.answered || 0;
+  const unanswered = Math.max(0, (total as number) - answered);
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {unanswered}
+    </span>
+  );
+}
+
 function GroupQuestionCount({
   groupId,
   questionMode,
@@ -106,6 +127,9 @@ function GroupQuestionCount({
   groupId: string;
   questionMode: string;
 }) {
+  if (questionMode === 'unanswered') {
+    return <UnansweredGroupCount groupId={groupId} />;
+  }
   if (questionMode === 'incorrect') {
     return <IncorrectGroupCount groupId={groupId} />;
   }
@@ -118,16 +142,13 @@ function GroupQuestionCount({
 }
 
 function IncorrectGroupCount({ groupId }: { groupId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserIncorrectCountByGroupQuery,
-    {
-      groupId: groupId as Id<'groups'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count = userCountsForQuizCreation.byGroup[groupId]?.incorrect || 0;
 
   return (
     <span className="ml-1 rounded-full bg-red-100 px-1.5 py-0.5 text-xs text-red-600">
@@ -137,16 +158,13 @@ function IncorrectGroupCount({ groupId }: { groupId: string }) {
 }
 
 function BookmarkedGroupCount({ groupId }: { groupId: string }) {
-  const count = useQuery(
-    api.aggregateQueries.getUserBookmarksCountByGroupQuery,
-    {
-      groupId: groupId as Id<'groups'>,
-    },
-  );
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
 
-  if (count === undefined) {
+  if (isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
   }
+
+  const count = userCountsForQuizCreation.byGroup[groupId]?.bookmarked || 0;
 
   return (
     <span className="ml-1 rounded-full bg-blue-100 px-1.5 py-0.5 text-xs text-blue-600">
@@ -167,6 +185,26 @@ function StandardGroupCount({ groupId }: { groupId: string }) {
   return (
     <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
       {count}
+    </span>
+  );
+}
+
+function UnansweredGroupCount({ groupId }: { groupId: string }) {
+  const total = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
+    groupId: groupId as Id<'groups'>,
+  });
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
+
+  if (total === undefined || isLoading || !userCountsForQuizCreation) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  const answered = userCountsForQuizCreation.byGroup[groupId]?.answered || 0;
+  const unanswered = Math.max(0, (total as number) - answered);
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {unanswered}
     </span>
   );
 }

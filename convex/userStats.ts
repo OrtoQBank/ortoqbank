@@ -1,23 +1,9 @@
 import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
-import { internalMutation, query } from './_generated/server';
-import {
-  getTotalQuestionCount,
-  getUserAnsweredCount,
-  getUserBookmarksCount,
-  getUserIncorrectCount,
-} from './aggregateQueries.js';
-import {
-  answeredByGroupByUser,
-  answeredBySubthemeByUser,
-  answeredByThemeByUser,
-  answeredByUser,
-  incorrectByGroupByUser,
-  incorrectBySubthemeByUser,
-  incorrectByThemeByUser,
-  incorrectByUser,
-} from './aggregates';
+import { internalMutation, mutation, query } from './_generated/server';
+import { getTotalQuestionCount } from './aggregateQueries.js';
+// Removed user-specific aggregate imports - replaced by userStatsCounts table
 import { getCurrentUserOrThrow } from './users';
 import { getWeekString } from './utils';
 
@@ -48,144 +34,40 @@ type UserStatsSummary = {
   totalQuestions: number;
 };
 
-/**
- * Get user statistics from the persistent userQuestionStats table
- * Uses aggregate to reduce bandwidth and improve efficiency
- */
-export const getUserStatsFromTable = query({
-  args: {},
-  handler: async (ctx): Promise<UserStats> => {
-    const userId = await getCurrentUserOrThrow(ctx);
+// OLD getUserStatsFromTable function removed - replaced by getUserStatsFast
 
-    // Use efficient aggregates for user stats
-    const [totalAnswered, totalIncorrect, totalBookmarked] = await Promise.all([
-      getUserAnsweredCount(ctx, userId._id),
-      getUserIncorrectCount(ctx, userId._id),
-      getUserBookmarksCount(ctx, userId._id),
-    ]);
-
-    const totalCorrect = totalAnswered - totalIncorrect;
-
-    // Still need to collect user stats for theme breakdown
-    const userStatsSummary = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
-
-    // Get total questions count using aggregate
-    const totalQuestions = await getTotalQuestionCount(ctx);
-
-    // Efficiently process theme stats using a group approach
-    // We'll use a Map to store stats by theme
-    const themeStatsMap = new Map<
-      Id<'themes'>,
-      { correct: number; total: number }
-    >();
-
-    // First, efficiently fetch all themes to have their names ready
-    const themeIds = new Set<Id<'themes'>>();
-    for (const stat of userStatsSummary) {
-      // Fetch the question to get its themeId
-      const question = await ctx.db.get(stat.questionId);
-      if (question) {
-        themeIds.add(question.themeId);
-      }
-    }
-
-    // Fetch all needed themes in one batch
-    const themeIdsArray = [...themeIds];
-    const themes = await Promise.all(themeIdsArray.map(id => ctx.db.get(id)));
-
-    // Create a map of theme IDs to theme names
-    const themeNameMap = new Map<Id<'themes'>, string>();
-    themes.forEach(theme => {
-      if (theme) {
-        themeNameMap.set(theme._id, theme.name);
-      }
-    });
-
-    // Now process each user stat to build theme stats
-    for (const stat of userStatsSummary) {
-      const question = await ctx.db.get(stat.questionId);
-      if (!question) continue;
-
-      const themeId = question.themeId;
-
-      if (!themeStatsMap.has(themeId)) {
-        themeStatsMap.set(themeId, { correct: 0, total: 0 });
-      }
-
-      const themeStat = themeStatsMap.get(themeId)!;
-
-      if (stat.hasAnswered) {
-        themeStat.total++;
-        if (!stat.isIncorrect) {
-          themeStat.correct++;
-        }
-      }
-    }
-
-    // Convert Map to array for frontend
-    const themeStats = [...themeStatsMap.entries()]
-      .map(([themeId, stats]) => ({
-        themeId,
-        themeName: themeNameMap.get(themeId) || 'Unknown Theme',
-        total: stats.total,
-        correct: stats.correct,
-        percentage:
-          stats.total > 0 ? Math.round((stats.correct / stats.total) * 100) : 0,
-      }))
-      .sort((a, b) => b.total - a.total);
-
-    return {
-      overall: {
-        totalAnswered,
-        totalCorrect,
-        totalIncorrect,
-        totalBookmarked,
-        correctPercentage:
-          totalAnswered > 0
-            ? Math.round((totalCorrect / totalAnswered) * 100)
-            : 0,
-      },
-      byTheme: themeStats,
-      totalQuestions,
-    };
-  },
-});
+// OLD getUserStatsSummaryWithAggregates function removed - replaced by getUserStatsFast
 
 /**
- * Get user statistics summary using aggregates for faster performance
+ * Transform flat count records into structured format
  */
-export const getUserStatsSummaryWithAggregates = query({
-  args: {},
-  handler: async (ctx): Promise<UserStatsSummary> => {
-    const userId = await getCurrentUserOrThrow(ctx);
+function transformCounts(
+  answeredCounts: Record<string, number>,
+  incorrectCounts: Record<string, number>,
+  bookmarkedCounts: Record<string, number>,
+) {
+  const result: Record<
+    string,
+    { answered: number; incorrect: number; bookmarked: number }
+  > = {};
 
-    // Using our aggregate helpers for efficient counting
-    const [totalQuestions, totalAnswered, totalIncorrect, totalBookmarked] =
-      await Promise.all([
-        getTotalQuestionCount(ctx),
-        getUserAnsweredCount(ctx, userId._id),
-        getUserIncorrectCount(ctx, userId._id),
-        getUserBookmarksCount(ctx, userId._id),
-      ]);
+  // Get all unique keys from all count types
+  const allKeys = new Set([
+    ...Object.keys(answeredCounts),
+    ...Object.keys(incorrectCounts),
+    ...Object.keys(bookmarkedCounts),
+  ]);
 
-    // Calculate derived values
-    const totalCorrect = totalAnswered - totalIncorrect;
-    const correctPercentage =
-      totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0;
-
-    return {
-      totalAnswered,
-      totalCorrect,
-      totalIncorrect,
-      totalBookmarked,
-      correctPercentage,
-      totalQuestions,
+  for (const key of allKeys) {
+    result[key] = {
+      answered: answeredCounts[key] || 0,
+      incorrect: incorrectCounts[key] || 0,
+      bookmarked: bookmarkedCounts[key] || 0,
     };
-  },
-});
+  }
+
+  return result;
+}
 
 /**
  * Internal mutation to update question statistics when a user answers a question
@@ -259,74 +141,363 @@ export const _updateQuestionStats = internalMutation({
       statRecord = { ...newStatData, _id: statId, _creationTime: now };
     }
 
-    // REAL-TIME AGGREGATE UPDATES using batch processing for better performance
+    // REAL-TIME AGGREGATE UPDATES - REMOVED
+    // All user-specific aggregate logic has been replaced by the userStatsCounts table
+    // which is updated in the updateUserStatsCounts helper function below
 
-    // Batch all answered aggregate operations
-    const answeredAggregateOps = [
-      () => answeredByUser.insertIfDoesNotExist(ctx, statRecord),
-      question.themeId
-        ? () => answeredByThemeByUser.insertIfDoesNotExist(ctx, statRecord)
-        : null,
-      question.subthemeId
-        ? () => answeredBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord)
-        : null,
-      question.groupId
-        ? () => answeredByGroupByUser.insertIfDoesNotExist(ctx, statRecord)
-        : null,
-    ].filter(Boolean) as (() => Promise<any>)[];
-
-    // Execute answered aggregates in parallel
-    await Promise.all(answeredAggregateOps.map(op => op()));
-
-    // Handle incorrect aggregates based on answer correctness
-    if (!args.isCorrect) {
-      // Batch all incorrect aggregate insert operations
-      const incorrectInsertOps = [
-        () => incorrectByUser.insertIfDoesNotExist(ctx, statRecord),
-        question.themeId
-          ? () => incorrectByThemeByUser.insertIfDoesNotExist(ctx, statRecord)
-          : null,
-        question.subthemeId
-          ? () =>
-              incorrectBySubthemeByUser.insertIfDoesNotExist(ctx, statRecord)
-          : null,
-        question.groupId
-          ? () => incorrectByGroupByUser.insertIfDoesNotExist(ctx, statRecord)
-          : null,
-      ].filter(Boolean) as (() => Promise<any>)[];
-
-      // Execute incorrect insert aggregates in parallel
-      await Promise.all(incorrectInsertOps.map(op => op()));
-    } else if (wasIncorrectBefore && args.isCorrect) {
-      // Batch all incorrect aggregate delete operations
-      const incorrectDeleteOps = [
-        () => incorrectByUser.delete(ctx, statRecord),
-        question.themeId
-          ? () => incorrectByThemeByUser.delete(ctx, statRecord)
-          : null,
-        question.subthemeId
-          ? () => incorrectBySubthemeByUser.delete(ctx, statRecord)
-          : null,
-        question.groupId
-          ? () => incorrectByGroupByUser.delete(ctx, statRecord)
-          : null,
-      ].filter(Boolean) as (() => Promise<any>)[];
-
-      // Execute incorrect delete aggregates in parallel with error handling
-      try {
-        await Promise.all(incorrectDeleteOps.map(op => op()));
-      } catch (error) {
-        // Gracefully handle missing entries - they might not exist in aggregates
-        console.warn(
-          'Could not delete from incorrect aggregates (entry may not exist):',
-          error,
-        );
-      }
-    }
+    // UPDATE userStatsCounts table for performance
+    await updateUserStatsCounts(ctx, {
+      userId,
+      questionId: args.questionId,
+      isCorrect: args.isCorrect,
+      wasIncorrectBefore,
+      isNewAnswer: !existingStat,
+      question,
+    });
 
     return {
       success: true,
       action: existingStat ? 'updated' : 'created',
+    };
+  },
+});
+
+/**
+ * Helper function to update userStatsCounts when a question is answered
+ */
+async function updateUserStatsCounts(
+  ctx: any,
+  params: {
+    userId: Id<'users'>;
+    questionId: Id<'questions'>;
+    isCorrect: boolean;
+    wasIncorrectBefore: boolean;
+    isNewAnswer: boolean;
+    question: any;
+  },
+) {
+  const { userId, isCorrect, wasIncorrectBefore, isNewAnswer, question } =
+    params;
+
+  // Get or create user counts record
+  let userCounts = await ctx.db
+    .query('userStatsCounts')
+    .withIndex('by_user', (q: any) => q.eq('userId', userId))
+    .first();
+
+  if (!userCounts) {
+    // Initialize counts for new user
+    userCounts = {
+      userId,
+      totalAnswered: 0,
+      totalIncorrect: 0,
+      totalBookmarked: 0,
+      answeredByTheme: {},
+      incorrectByTheme: {},
+      bookmarkedByTheme: {},
+      answeredBySubtheme: {},
+      incorrectBySubtheme: {},
+      bookmarkedBySubtheme: {},
+      answeredByGroup: {},
+      incorrectByGroup: {},
+      bookmarkedByGroup: {},
+      lastUpdated: Date.now(),
+    };
+
+    const countsId = await ctx.db.insert('userStatsCounts', userCounts);
+    userCounts = { ...userCounts, _id: countsId };
+  }
+
+  // Prepare updates
+  const updates: any = {
+    lastUpdated: Date.now(),
+  };
+
+  // Update answered counts (only for first-time answers)
+  if (isNewAnswer) {
+    updates.totalAnswered = userCounts.totalAnswered + 1;
+
+    // Update answered by theme
+    if (question.themeId) {
+      updates.answeredByTheme = {
+        ...userCounts.answeredByTheme,
+        [question.themeId]:
+          (userCounts.answeredByTheme[question.themeId] || 0) + 1,
+      };
+    }
+
+    // Update answered by subtheme
+    if (question.subthemeId) {
+      updates.answeredBySubtheme = {
+        ...userCounts.answeredBySubtheme,
+        [question.subthemeId]:
+          (userCounts.answeredBySubtheme[question.subthemeId] || 0) + 1,
+      };
+    }
+
+    // Update answered by group
+    if (question.groupId) {
+      updates.answeredByGroup = {
+        ...userCounts.answeredByGroup,
+        [question.groupId]:
+          (userCounts.answeredByGroup[question.groupId] || 0) + 1,
+      };
+    }
+  }
+
+  // Handle incorrect count changes
+  if (!isCorrect && !wasIncorrectBefore) {
+    // New incorrect answer
+    updates.totalIncorrect = userCounts.totalIncorrect + 1;
+
+    if (question.themeId) {
+      updates.incorrectByTheme = {
+        ...userCounts.incorrectByTheme,
+        [question.themeId]:
+          (userCounts.incorrectByTheme[question.themeId] || 0) + 1,
+      };
+    }
+
+    if (question.subthemeId) {
+      updates.incorrectBySubtheme = {
+        ...userCounts.incorrectBySubtheme,
+        [question.subthemeId]:
+          (userCounts.incorrectBySubtheme[question.subthemeId] || 0) + 1,
+      };
+    }
+
+    if (question.groupId) {
+      updates.incorrectByGroup = {
+        ...userCounts.incorrectByGroup,
+        [question.groupId]:
+          (userCounts.incorrectByGroup[question.groupId] || 0) + 1,
+      };
+    }
+  } else if (isCorrect && wasIncorrectBefore) {
+    // Changed from incorrect to correct
+    updates.totalIncorrect = Math.max(0, userCounts.totalIncorrect - 1);
+
+    if (question.themeId) {
+      updates.incorrectByTheme = {
+        ...userCounts.incorrectByTheme,
+        [question.themeId]: Math.max(
+          0,
+          (userCounts.incorrectByTheme[question.themeId] || 0) - 1,
+        ),
+      };
+    }
+
+    if (question.subthemeId) {
+      updates.incorrectBySubtheme = {
+        ...userCounts.incorrectBySubtheme,
+        [question.subthemeId]: Math.max(
+          0,
+          (userCounts.incorrectBySubtheme[question.subthemeId] || 0) - 1,
+        ),
+      };
+    }
+
+    if (question.groupId) {
+      updates.incorrectByGroup = {
+        ...userCounts.incorrectByGroup,
+        [question.groupId]: Math.max(
+          0,
+          (userCounts.incorrectByGroup[question.groupId] || 0) - 1,
+        ),
+      };
+    }
+  }
+
+  // Apply updates
+  await ctx.db.patch(userCounts._id, updates);
+}
+
+/**
+ * Ultra-fast user statistics using pre-computed counts table
+ * This replaces getUserStatsFromTable for much better performance
+ */
+export const getUserStatsFast = query({
+  args: {},
+  returns: v.object({
+    overall: v.object({
+      totalAnswered: v.number(),
+      totalCorrect: v.number(),
+      totalIncorrect: v.number(),
+      totalBookmarked: v.number(),
+      correctPercentage: v.number(),
+    }),
+    byTheme: v.array(
+      v.object({
+        themeId: v.id('themes'),
+        themeName: v.string(),
+        total: v.number(),
+        correct: v.number(),
+        percentage: v.number(),
+      }),
+    ),
+    totalQuestions: v.number(),
+  }),
+  handler: async (ctx): Promise<UserStats> => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Get pre-computed counts (ultra-fast single lookup)
+    const userCounts = await ctx.db
+      .query('userStatsCounts')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .first();
+
+    // Get total questions count using existing aggregate
+    const totalQuestions = await getTotalQuestionCount(ctx);
+
+    // Handle new users with no counts yet
+    if (!userCounts) {
+      return {
+        overall: {
+          totalAnswered: 0,
+          totalCorrect: 0,
+          totalIncorrect: 0,
+          totalBookmarked: 0,
+          correctPercentage: 0,
+        },
+        byTheme: [],
+        totalQuestions,
+      };
+    }
+
+    // Calculate derived values
+    const totalCorrect = userCounts.totalAnswered - userCounts.totalIncorrect;
+    const correctPercentage =
+      userCounts.totalAnswered > 0
+        ? Math.round((totalCorrect / userCounts.totalAnswered) * 100)
+        : 0;
+
+    // Get theme names for the themes that have counts
+    const themeIdsWithCounts = Object.keys(
+      userCounts.answeredByTheme,
+    ) as Id<'themes'>[];
+    const themes = await Promise.all(
+      themeIdsWithCounts.map(id => ctx.db.get(id)),
+    );
+
+    // Create theme statistics
+    const themeStats = themeIdsWithCounts
+      .map((themeId, index) => {
+        const theme = themes[index];
+        if (!theme) return null;
+
+        const total = userCounts.answeredByTheme[themeId] || 0;
+        const incorrect = userCounts.incorrectByTheme[themeId] || 0;
+        const correct = total - incorrect;
+        const percentage = total > 0 ? Math.round((correct / total) * 100) : 0;
+
+        return {
+          themeId,
+          themeName: theme.name,
+          total,
+          correct,
+          percentage,
+        };
+      })
+      .filter((stat): stat is NonNullable<typeof stat> => stat !== null)
+      .sort((a, b) => b.total - a.total);
+
+    return {
+      overall: {
+        totalAnswered: userCounts.totalAnswered,
+        totalCorrect,
+        totalIncorrect: userCounts.totalIncorrect,
+        totalBookmarked: userCounts.totalBookmarked,
+        correctPercentage,
+      },
+      byTheme: themeStats,
+      totalQuestions,
+    };
+  },
+});
+
+/**
+ * Get all user counts optimized for quiz creation page
+ * Single fetch with all counts for efficient filtering UI
+ */
+export const getUserCountsForQuizCreation = query({
+  args: {},
+  returns: v.object({
+    global: v.object({
+      totalAnswered: v.number(),
+      totalIncorrect: v.number(),
+      totalBookmarked: v.number(),
+    }),
+    byTheme: v.record(
+      v.id('themes'),
+      v.object({
+        answered: v.number(),
+        incorrect: v.number(),
+        bookmarked: v.number(),
+      }),
+    ),
+    bySubtheme: v.record(
+      v.id('subthemes'),
+      v.object({
+        answered: v.number(),
+        incorrect: v.number(),
+        bookmarked: v.number(),
+      }),
+    ),
+    byGroup: v.record(
+      v.id('groups'),
+      v.object({
+        answered: v.number(),
+        incorrect: v.number(),
+        bookmarked: v.number(),
+      }),
+    ),
+  }),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Single lookup gets all counts
+    const userCounts = await ctx.db
+      .query('userStatsCounts')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .first();
+
+    // Handle new users with no counts
+    if (!userCounts) {
+      return {
+        global: {
+          totalAnswered: 0,
+          totalIncorrect: 0,
+          totalBookmarked: 0,
+        },
+        byTheme: {},
+        bySubtheme: {},
+        byGroup: {},
+      };
+    }
+
+    // Use the transformCounts helper function
+
+    return {
+      global: {
+        totalAnswered: userCounts.totalAnswered,
+        totalIncorrect: userCounts.totalIncorrect,
+        totalBookmarked: userCounts.totalBookmarked,
+      },
+      byTheme: transformCounts(
+        userCounts.answeredByTheme,
+        userCounts.incorrectByTheme,
+        userCounts.bookmarkedByTheme,
+      ),
+      bySubtheme: transformCounts(
+        userCounts.answeredBySubtheme,
+        userCounts.incorrectBySubtheme,
+        userCounts.bookmarkedBySubtheme,
+      ),
+      byGroup: transformCounts(
+        userCounts.answeredByGroup,
+        userCounts.incorrectByGroup,
+        userCounts.bookmarkedByGroup,
+      ),
     };
   },
 });
@@ -479,5 +650,377 @@ export const getUserWeeklyProgress = query({
     });
 
     return result;
+  },
+});
+
+/**
+ * Reset the current user's statistics counts to a fresh state.
+ * Does NOT modify bookmarks-related counts.
+ */
+export const resetMyStatsCounts = mutation({
+  args: {},
+  returns: v.object({ success: v.boolean() }),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // 1) Delete all per-question stats for this user
+    const statsForUser = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .collect();
+
+    for (const stat of statsForUser) {
+      await ctx.db.delete(stat._id);
+    }
+
+    // 2) Reset aggregate counts (answered/incorrect) but keep bookmarks-related counts
+    const counts = await ctx.db
+      .query('userStatsCounts')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .first();
+
+    if (!counts) {
+      // Nothing to reset, treat as success
+      return { success: true };
+    }
+
+    await ctx.db.patch(counts._id, {
+      totalAnswered: 0,
+      totalIncorrect: 0,
+      answeredByTheme: {},
+      incorrectByTheme: {},
+      answeredBySubtheme: {},
+      incorrectBySubtheme: {},
+      answeredByGroup: {},
+      incorrectByGroup: {},
+      lastUpdated: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+/**
+ * Initialize userStatsCounts for a specific user by computing counts from existing data
+ * This function should be called once per user during migration
+ */
+export const initializeUserStatsCounts = mutation({
+  args: { userId: v.id('users') },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+    counts: v.optional(
+      v.object({
+        totalAnswered: v.number(),
+        totalIncorrect: v.number(),
+        totalBookmarked: v.number(),
+      }),
+    ),
+  }),
+  handler: async (ctx, args) => {
+    // Check if counts already exist for this user
+    const existingCounts = await ctx.db
+      .query('userStatsCounts')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .first();
+
+    if (existingCounts) {
+      return {
+        success: false,
+        message: 'User stats counts already exist',
+      };
+    }
+
+    // Get all user question stats
+    const userStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .collect();
+
+    // Get all user bookmarks
+    const userBookmarks = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .collect();
+
+    // Initialize count objects
+    const answeredByTheme: Record<Id<'themes'>, number> = {};
+    const incorrectByTheme: Record<Id<'themes'>, number> = {};
+    const bookmarkedByTheme: Record<Id<'themes'>, number> = {};
+
+    const answeredBySubtheme: Record<Id<'subthemes'>, number> = {};
+    const incorrectBySubtheme: Record<Id<'subthemes'>, number> = {};
+    const bookmarkedBySubtheme: Record<Id<'subthemes'>, number> = {};
+
+    const answeredByGroup: Record<Id<'groups'>, number> = {};
+    const incorrectByGroup: Record<Id<'groups'>, number> = {};
+    const bookmarkedByGroup: Record<Id<'groups'>, number> = {};
+
+    let totalAnswered = 0;
+    let totalIncorrect = 0;
+
+    // Process answered questions
+    for (const stat of userStats) {
+      if (stat.hasAnswered) {
+        totalAnswered++;
+
+        // Count by theme
+        if (stat.themeId) {
+          answeredByTheme[stat.themeId] =
+            (answeredByTheme[stat.themeId] || 0) + 1;
+        }
+
+        // Count by subtheme
+        if (stat.subthemeId) {
+          answeredBySubtheme[stat.subthemeId] =
+            (answeredBySubtheme[stat.subthemeId] || 0) + 1;
+        }
+
+        // Count by group
+        if (stat.groupId) {
+          answeredByGroup[stat.groupId] =
+            (answeredByGroup[stat.groupId] || 0) + 1;
+        }
+
+        // Count incorrect answers
+        if (stat.isIncorrect) {
+          totalIncorrect++;
+
+          // Count incorrect by theme
+          if (stat.themeId) {
+            incorrectByTheme[stat.themeId] =
+              (incorrectByTheme[stat.themeId] || 0) + 1;
+          }
+
+          // Count incorrect by subtheme
+          if (stat.subthemeId) {
+            incorrectBySubtheme[stat.subthemeId] =
+              (incorrectBySubtheme[stat.subthemeId] || 0) + 1;
+          }
+
+          // Count incorrect by group
+          if (stat.groupId) {
+            incorrectByGroup[stat.groupId] =
+              (incorrectByGroup[stat.groupId] || 0) + 1;
+          }
+        }
+      }
+    }
+
+    // Process bookmarked questions
+    const totalBookmarked = userBookmarks.length;
+    for (const bookmark of userBookmarks) {
+      // Count by theme
+      if (bookmark.themeId) {
+        bookmarkedByTheme[bookmark.themeId] =
+          (bookmarkedByTheme[bookmark.themeId] || 0) + 1;
+      }
+
+      // Count by subtheme
+      if (bookmark.subthemeId) {
+        bookmarkedBySubtheme[bookmark.subthemeId] =
+          (bookmarkedBySubtheme[bookmark.subthemeId] || 0) + 1;
+      }
+
+      // Count by group
+      if (bookmark.groupId) {
+        bookmarkedByGroup[bookmark.groupId] =
+          (bookmarkedByGroup[bookmark.groupId] || 0) + 1;
+      }
+    }
+
+    // Insert the computed counts
+    await ctx.db.insert('userStatsCounts', {
+      userId: args.userId,
+      totalAnswered,
+      totalIncorrect,
+      totalBookmarked,
+      answeredByTheme,
+      incorrectByTheme,
+      bookmarkedByTheme,
+      answeredBySubtheme,
+      incorrectBySubtheme,
+      bookmarkedBySubtheme,
+      answeredByGroup,
+      incorrectByGroup,
+      bookmarkedByGroup,
+      lastUpdated: Date.now(),
+    });
+
+    return {
+      success: true,
+      message: `Successfully initialized counts for user ${args.userId}`,
+      counts: {
+        totalAnswered,
+        totalIncorrect,
+        totalBookmarked,
+      },
+    };
+  },
+});
+
+/**
+ * Initialize userStatsCounts for all users in the system
+ * This is a migration function that should be run once
+ */
+export const initializeAllUserStatsCounts = mutation({
+  args: {
+    batchSize: v.optional(v.number()), // Process users in batches to avoid timeouts
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+    processedUsers: v.number(),
+    skippedUsers: v.number(),
+    errors: v.array(v.string()),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 10; // Default to 10 users at a time
+
+    let processedUsers = 0;
+    let skippedUsers = 0;
+    const errors: string[] = [];
+
+    let cursor: string | null = null;
+
+    // Paginate through all users, batch by batch
+    // Loop continues until `isDone` is true
+    while (true) {
+      const page = await ctx.db
+        .query('users')
+        .order('asc')
+        .paginate({ numItems: batchSize, cursor });
+
+      for (const user of page.page) {
+        try {
+          // Check if counts already exist for this user
+          const existingCounts = await ctx.db
+            .query('userStatsCounts')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .first();
+
+          if (existingCounts) {
+            skippedUsers++;
+            continue;
+          }
+
+          // Inline the initialization logic to avoid nested mutation calls
+          const userStats = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .collect();
+
+          const userBookmarks = await ctx.db
+            .query('userBookmarks')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .collect();
+
+          // Initialize count objects
+          const answeredByTheme: Record<Id<'themes'>, number> = {};
+          const incorrectByTheme: Record<Id<'themes'>, number> = {};
+          const bookmarkedByTheme: Record<Id<'themes'>, number> = {};
+
+          const answeredBySubtheme: Record<Id<'subthemes'>, number> = {};
+          const incorrectBySubtheme: Record<Id<'subthemes'>, number> = {};
+          const bookmarkedBySubtheme: Record<Id<'subthemes'>, number> = {};
+
+          const answeredByGroup: Record<Id<'groups'>, number> = {};
+          const incorrectByGroup: Record<Id<'groups'>, number> = {};
+          const bookmarkedByGroup: Record<Id<'groups'>, number> = {};
+
+          let totalAnswered = 0;
+          let totalIncorrect = 0;
+
+          // Process answered questions
+          for (const stat of userStats) {
+            if (stat.hasAnswered) {
+              totalAnswered++;
+
+              if (stat.themeId) {
+                answeredByTheme[stat.themeId] =
+                  (answeredByTheme[stat.themeId] || 0) + 1;
+              }
+              if (stat.subthemeId) {
+                answeredBySubtheme[stat.subthemeId] =
+                  (answeredBySubtheme[stat.subthemeId] || 0) + 1;
+              }
+              if (stat.groupId) {
+                answeredByGroup[stat.groupId] =
+                  (answeredByGroup[stat.groupId] || 0) + 1;
+              }
+
+              if (stat.isIncorrect) {
+                totalIncorrect++;
+                if (stat.themeId) {
+                  incorrectByTheme[stat.themeId] =
+                    (incorrectByTheme[stat.themeId] || 0) + 1;
+                }
+                if (stat.subthemeId) {
+                  incorrectBySubtheme[stat.subthemeId] =
+                    (incorrectBySubtheme[stat.subthemeId] || 0) + 1;
+                }
+                if (stat.groupId) {
+                  incorrectByGroup[stat.groupId] =
+                    (incorrectByGroup[stat.groupId] || 0) + 1;
+                }
+              }
+            }
+          }
+
+          // Process bookmarked questions
+          const totalBookmarked = userBookmarks.length;
+          for (const bookmark of userBookmarks) {
+            if (bookmark.themeId) {
+              bookmarkedByTheme[bookmark.themeId] =
+                (bookmarkedByTheme[bookmark.themeId] || 0) + 1;
+            }
+            if (bookmark.subthemeId) {
+              bookmarkedBySubtheme[bookmark.subthemeId] =
+                (bookmarkedBySubtheme[bookmark.subthemeId] || 0) + 1;
+            }
+            if (bookmark.groupId) {
+              bookmarkedByGroup[bookmark.groupId] =
+                (bookmarkedByGroup[bookmark.groupId] || 0) + 1;
+            }
+          }
+
+          // Insert the computed counts
+          await ctx.db.insert('userStatsCounts', {
+            userId: user._id,
+            totalAnswered,
+            totalIncorrect,
+            totalBookmarked,
+            answeredByTheme,
+            incorrectByTheme,
+            bookmarkedByTheme,
+            answeredBySubtheme,
+            incorrectBySubtheme,
+            bookmarkedBySubtheme,
+            answeredByGroup,
+            incorrectByGroup,
+            bookmarkedByGroup,
+            lastUpdated: Date.now(),
+          });
+
+          processedUsers++;
+        } catch (error) {
+          errors.push(
+            `Failed to initialize counts for user ${user._id}: ${error}`,
+          );
+          skippedUsers++;
+        }
+      }
+
+      if (page.isDone) break;
+      cursor = page.continueCursor;
+    }
+
+    return {
+      success: true,
+      message: `Migration completed: ${processedUsers} users processed, ${skippedUsers} skipped`,
+      processedUsers,
+      skippedUsers,
+      errors,
+    };
   },
 });

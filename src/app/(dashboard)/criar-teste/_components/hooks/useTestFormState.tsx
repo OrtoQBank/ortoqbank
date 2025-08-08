@@ -1,14 +1,13 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useQuery } from 'convex/react';
-import { GenericQueryCtx } from 'convex/server';
-import { useEffect, useState } from 'react';
+import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useMemo } from 'react';
 import { useForm } from 'react-hook-form';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
+import { useFormContext } from '../context/FormContext';
 import { type TestFormData, testFormSchema } from '../schema';
 
 // Map UI question modes to API question modes
@@ -31,12 +30,18 @@ export const mapQuestionMode = (
   }
 };
 
+// This function has been moved to FormContext.tsx for better organization and memoization
+
 export function useTestFormState() {
-  const { isLoaded, isSignedIn } = useUser();
-  const [availableQuestionCount, setAvailableQuestionCount] = useState<
-    number | undefined
-  >();
-  const [isCountLoading, setIsCountLoading] = useState(false);
+  // Get cached data and memoized calculations from context
+  const {
+    userCountsForQuizCreation,
+    totalQuestions,
+    hierarchicalData,
+    isAuthenticated,
+    isLoading,
+    calculateQuestionCounts,
+  } = useFormContext();
 
   const form = useForm<TestFormData>({
     resolver: zodResolver(testFormSchema),
@@ -60,22 +65,23 @@ export function useTestFormState() {
   const questionMode = watch('questionMode');
   const numQuestions = watch('numQuestions');
 
-  // Only query when user is authenticated
-  const isAuthenticated = isLoaded && isSignedIn;
+  // Determine when we should fetch filtered counts from the server for 'all'/'unanswered'
+  const mappedMode = mapQuestionMode(questionMode || 'all');
+  const hasFilters =
+    (selectedThemes?.length || 0) > 0 ||
+    (selectedSubthemes?.length || 0) > 0 ||
+    (selectedGroups?.length || 0) > 0;
+  const shouldFetchFilteredCount =
+    isAuthenticated &&
+    hasFilters &&
+    (mappedMode === 'all' || mappedMode === 'unanswered');
 
-  // Query the count of available questions based on current selection (optimized system)
-  // Use hierarchical selection query when themes/subthemes/groups are selected,
-  // otherwise fall back to global filter query
-  const hasHierarchicalSelections =
-    selectedThemes.length > 0 ||
-    selectedSubthemes.length > 0 ||
-    selectedGroups.length > 0;
-
-  const countWithSelections = useQuery(
+  // Server-side filtered count using aggregates for 'all' and table logic for 'unanswered'
+  const filteredCount = useQuery(
     api.aggregateQueries.getQuestionCountBySelection,
-    isAuthenticated && hasHierarchicalSelections
+    shouldFetchFilteredCount
       ? {
-          filter: mapQuestionMode(questionMode || 'all'),
+          filter: mappedMode,
           selectedThemes: selectedThemes as Id<'themes'>[],
           selectedSubthemes: selectedSubthemes as Id<'subthemes'>[],
           selectedGroups: selectedGroups as Id<'groups'>[],
@@ -83,23 +89,38 @@ export function useTestFormState() {
       : 'skip',
   );
 
-  const countWithoutSelections = useQuery(
-    api.aggregateQueries.getQuestionCountByFilter,
-    isAuthenticated && !hasHierarchicalSelections
-      ? { filter: mapQuestionMode(questionMode || 'all') }
-      : 'skip',
-  );
+  // Memoized question count calculation (only recalculates when selections actually change)
+  const availableQuestionCount = useMemo(() => {
+    if (!isAuthenticated || isLoading) return 0;
 
-  // Use the appropriate count based on whether hierarchical selections are made
-  const countQuestions = hasHierarchicalSelections
-    ? countWithSelections
-    : countWithoutSelections;
+    // Prefer server-filtered count when applicable and loaded
+    if (shouldFetchFilteredCount && filteredCount !== undefined) {
+      return filteredCount;
+    }
 
-  // Fetch hierarchical data only when authenticated
-  const hierarchicalData = useQuery(
-    api.themes.getHierarchicalData,
-    isAuthenticated ? {} : 'skip',
-  );
+    const count = calculateQuestionCounts(
+      selectedThemes as Id<'themes'>[],
+      selectedSubthemes as Id<'subthemes'>[],
+      selectedGroups as Id<'groups'>[],
+      mapQuestionMode(questionMode || 'all'),
+    );
+
+    return typeof count === 'number' ? count : count.all;
+  }, [
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    questionMode,
+    calculateQuestionCounts,
+    isAuthenticated,
+    isLoading,
+    shouldFetchFilteredCount,
+    filteredCount,
+  ]);
+
+  // Note: API fallback removed - we now rely entirely on local calculations
+  // For 'all' and 'unanswered' modes with hierarchical selections,
+  // we use the global total as a reasonable approximation
 
   return {
     form,
@@ -110,9 +131,13 @@ export function useTestFormState() {
     selectedThemes,
     selectedSubthemes,
     selectedGroups,
-    availableQuestionCount: countQuestions ?? 0,
-    isCountLoading: countQuestions === undefined && isAuthenticated,
+    availableQuestionCount,
+    isCountLoading:
+      isLoading || (shouldFetchFilteredCount && filteredCount === undefined),
     hierarchicalData,
+    userCountsForQuizCreation,
+    totalQuestions,
+    calculateQuestionCounts,
     mapQuestionMode,
     isAuthenticated,
   };

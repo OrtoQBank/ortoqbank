@@ -9,6 +9,7 @@ import NextTopLoader from 'nextjs-toploader';
 
 import ErrorBoundary from '@/components/error-boundary';
 import { PostHogProvider } from '@/components/PostHogProvider';
+import { ErrorLogger } from '@/components/providers/error-logger';
 import { Toaster } from '@/components/ui/toaster';
 
 import ConvexClientProvider from './convex-client-provider';
@@ -43,6 +44,7 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sifonn.variable} antialiased`}
       >
+        <ErrorLogger />
         <ErrorBoundary>
           <PostHogProvider>
             <ConvexClientProvider>
