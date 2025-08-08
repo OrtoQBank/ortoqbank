@@ -23,10 +23,10 @@ interface ThemeStats {
 
 // Helper function to determine fill color
 const getFillColor = (percentage: number): string => {
-  if (percentage > 70) {
+  if (percentage > 75) {
     return '#22c55e'; // green-500
   }
-  if (percentage > 40) {
+  if (percentage >= 60) {
     return '#3b82f6'; // blue-500 (medium performance)
   }
   return '#ef4444'; // red-500
@@ -82,10 +82,10 @@ export function ThemeBarChart({ themeStats = [] }: ThemeBarChartProps) {
             />
             <Legend
               payload={[
-                { value: 'Excelente (>70%)', type: 'rect', color: '#22c55e' },
-                { value: 'Bom (40-70%)', type: 'rect', color: '#3b82f6' },
+                { value: 'Excelente (>75%)', type: 'rect', color: '#22c55e' },
+                { value: 'Bom (60-75%)', type: 'rect', color: '#3b82f6' },
                 {
-                  value: 'Precisa Melhorar (<40%)',
+                  value: 'Precisa Melhorar (<60%)',
                   type: 'rect',
                   color: '#ef4444',
                 },
