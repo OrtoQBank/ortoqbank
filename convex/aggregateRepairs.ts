@@ -4,9 +4,7 @@
 
 import { v } from 'convex/values';
 
-import { internal } from './_generated/api';
-import { Doc, Id } from './_generated/dataModel';
-import { internalMutation, mutation } from './_generated/server';
+import { internalMutation } from './_generated/server';
 import {
   questionCountByGroup,
   questionCountBySubtheme,

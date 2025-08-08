@@ -29,6 +29,7 @@ import type * as termsActions from "../termsActions.js";
 import type * as themes from "../themes.js";
 import type * as triggers from "../triggers.js";
 import type * as userStats from "../userStats.js";
+import type * as userStatsCounts from "../userStatsCounts.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
 
@@ -68,6 +69,7 @@ declare const fullApi: ApiFromModules<{
   themes: typeof themes;
   triggers: typeof triggers;
   userStats: typeof userStats;
+  userStatsCounts: typeof userStatsCounts;
   users: typeof users;
   utils: typeof utils;
 }>;

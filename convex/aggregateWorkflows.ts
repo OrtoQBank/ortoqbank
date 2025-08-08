@@ -27,8 +27,8 @@
 import { WorkflowManager } from '@convex-dev/workflow';
 import { v } from 'convex/values';
 
-import { api, components, internal } from './_generated/api';
-import { internalMutation, mutation } from './_generated/server';
+import { components, internal } from './_generated/api';
+import { internalMutation } from './_generated/server';
 
 // Create the workflow manager
 export const workflow = new WorkflowManager(components.workflow);
