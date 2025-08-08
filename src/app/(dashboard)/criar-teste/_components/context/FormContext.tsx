@@ -70,14 +70,18 @@ const calculateLocalQuestionCounts = (
     selectedGroups.length === 0
   ) {
     switch (questionMode) {
-      case 'all':
+      case 'all': {
         return totalQuestions;
-      case 'unanswered':
+      }
+      case 'unanswered': {
         return Math.max(0, totalQuestions - userCounts.global.totalAnswered);
-      case 'incorrect':
+      }
+      case 'incorrect': {
         return userCounts.global.totalIncorrect;
-      case 'bookmarked':
+      }
+      case 'bookmarked': {
         return userCounts.global.totalBookmarked;
+      }
     }
   }
 
@@ -89,12 +93,14 @@ const calculateLocalQuestionCounts = (
     const groupData = userCounts.byGroup[groupId];
     if (groupData) {
       switch (questionMode) {
-        case 'incorrect':
+        case 'incorrect': {
           totalCount += groupData.incorrect;
           break;
-        case 'bookmarked':
+        }
+        case 'bookmarked': {
           totalCount += groupData.bookmarked;
           break;
+        }
       }
     }
   }
@@ -104,12 +110,14 @@ const calculateLocalQuestionCounts = (
     const subthemeData = userCounts.bySubtheme[subthemeId];
     if (subthemeData) {
       switch (questionMode) {
-        case 'incorrect':
+        case 'incorrect': {
           totalCount += subthemeData.incorrect;
           break;
-        case 'bookmarked':
+        }
+        case 'bookmarked': {
           totalCount += subthemeData.bookmarked;
           break;
+        }
       }
     }
   }
@@ -119,12 +127,14 @@ const calculateLocalQuestionCounts = (
     const themeData = userCounts.byTheme[themeId];
     if (themeData) {
       switch (questionMode) {
-        case 'incorrect':
+        case 'incorrect': {
           totalCount += themeData.incorrect;
           break;
-        case 'bookmarked':
+        }
+        case 'bookmarked': {
           totalCount += themeData.bookmarked;
           break;
+        }
       }
     }
   }

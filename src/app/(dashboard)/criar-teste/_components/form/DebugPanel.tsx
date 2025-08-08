@@ -73,13 +73,12 @@ export function DebugPanel({
     setIsDebugging(true);
     try {
       const result = await debugQuestionCollection({
-        testMode: formData.testMode as 'study' | 'exam',
         questionMode: formData.questionMode as
           | 'all'
           | 'unanswered'
           | 'incorrect'
           | 'bookmarked',
-        numQuestions: formData.numQuestions,
+        maxQuestions: formData.numQuestions,
         selectedThemes: formData.selectedThemes as any,
         selectedSubthemes: formData.selectedSubthemes as any,
         selectedGroups: formData.selectedGroups as any,
