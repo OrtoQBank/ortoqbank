@@ -49,6 +49,30 @@ export const getWorkflowStatus = internalMutation({
   },
 });
 
+/**
+ * Cancel a running workflow by ID
+ */
+export const cancelWorkflow = internalMutation({
+  args: { workflowId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await workflow.cancel(ctx, args.workflowId as any);
+    return null;
+  },
+});
+
+/**
+ * Cleanup a completed/canceled workflow's stored state
+ */
+export const cleanupWorkflow = internalMutation({
+  args: { workflowId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await workflow.cleanup(ctx, args.workflowId as any);
+    return null;
+  },
+});
+
 // userRepairInternalWorkflow REMOVED
 // User-specific aggregate workflows are no longer needed as they have been
 // replaced by the userStatsCounts table for better performance
@@ -295,48 +319,88 @@ export const section2RepairInternalWorkflow = workflow.define({
       ),
     ]);
 
-    // Step 4: Process themes in batches (1 theme per batch to stay <15s)
-    const themeBatchSize = 1;
+    // Step 4: Process themes (paginated per theme)
     let themeCount = 0;
-    for (let i = 0; i < themeIds.length; i += themeBatchSize) {
-      const batch = themeIds.slice(i, i + themeBatchSize);
-      const result = await step.runMutation(
-        internal.aggregateRepairs
-          .internalRepairProcessThemeRandomAggregatesBatch,
-        { themeIds: batch },
-        { name: `processRandomThemes_batch_${Math.floor(i / themeBatchSize)}` },
+    for (let i = 0; i < themeIds.length; i += 1) {
+      const themeId = themeIds[i];
+      await step.runMutation(
+        internal.aggregateRepairs.internalRepairClearThemeRandomAggregate,
+        { themeId },
+        { name: `randomTheme_clear_${i}` },
       );
-      themeCount += result.processed;
+      let pageCursor: string | null = null;
+      let pageIndex = 0;
+      do {
+        const page: {
+          processed: number;
+          nextCursor: string | null;
+          isDone: boolean;
+        } = await step.runMutation(
+          internal.aggregateRepairs.internalRepairProcessThemeRandomPage,
+          { themeId, cursor: pageCursor, batchSize: 25 },
+          { name: `randomTheme_page_${i}_${pageIndex}` },
+        );
+        pageCursor = page.nextCursor;
+        pageIndex += 1;
+        if (page.isDone) break;
+      } while (pageCursor);
+      themeCount += 1;
     }
 
-    // Step 5: Process subthemes in batches (1 subtheme per batch)
-    const subthemeBatchSize = 1;
+    // Step 5: Process subthemes (paginated per subtheme)
     let subthemeCount = 0;
-    for (let i = 0; i < subthemeIds.length; i += subthemeBatchSize) {
-      const batch = subthemeIds.slice(i, i + subthemeBatchSize);
-      const result = await step.runMutation(
-        internal.aggregateRepairs
-          .internalRepairProcessSubthemeRandomAggregatesBatch,
-        { subthemeIds: batch },
-        {
-          name: `processRandomSubthemes_batch_${Math.floor(i / subthemeBatchSize)}`,
-        },
+    for (let i = 0; i < subthemeIds.length; i += 1) {
+      const subthemeId = subthemeIds[i];
+      await step.runMutation(
+        internal.aggregateRepairs.internalRepairClearSubthemeRandomAggregate,
+        { subthemeId },
+        { name: `randomSubtheme_clear_${i}` },
       );
-      subthemeCount += result.processed;
+      let pageCursor: string | null = null;
+      let pageIndex = 0;
+      do {
+        const page: {
+          processed: number;
+          nextCursor: string | null;
+          isDone: boolean;
+        } = await step.runMutation(
+          internal.aggregateRepairs.internalRepairProcessSubthemeRandomPage,
+          { subthemeId, cursor: pageCursor, batchSize: 25 },
+          { name: `randomSubtheme_page_${i}_${pageIndex}` },
+        );
+        pageCursor = page.nextCursor;
+        pageIndex += 1;
+        if (page.isDone) break;
+      } while (pageCursor);
+      subthemeCount += 1;
     }
 
-    // Step 6: Process groups in batches (1 group per batch)
-    const groupBatchSize = 1;
+    // Step 6: Process groups (paginated per group)
     let groupCount = 0;
-    for (let i = 0; i < groupIds.length; i += groupBatchSize) {
-      const batch = groupIds.slice(i, i + groupBatchSize);
-      const result = await step.runMutation(
-        internal.aggregateRepairs
-          .internalRepairProcessGroupRandomAggregatesBatch,
-        { groupIds: batch },
-        { name: `processRandomGroups_batch_${Math.floor(i / groupBatchSize)}` },
+    for (let i = 0; i < groupIds.length; i += 1) {
+      const groupId = groupIds[i];
+      await step.runMutation(
+        internal.aggregateRepairs.internalRepairClearGroupRandomAggregate,
+        { groupId },
+        { name: `randomGroup_clear_${i}` },
       );
-      groupCount += result.processed;
+      let pageCursor: string | null = null;
+      let pageIndex = 0;
+      do {
+        const page: {
+          processed: number;
+          nextCursor: string | null;
+          isDone: boolean;
+        } = await step.runMutation(
+          internal.aggregateRepairs.internalRepairProcessGroupRandomPage,
+          { groupId, cursor: pageCursor, batchSize: 25 },
+          { name: `randomGroup_page_${i}_${pageIndex}` },
+        );
+        pageCursor = page.nextCursor;
+        pageIndex += 1;
+        if (page.isDone) break;
+      } while (pageCursor);
+      groupCount += 1;
     }
 
     const finalResult = {
