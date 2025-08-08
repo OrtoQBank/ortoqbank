@@ -65,9 +65,38 @@ export function useTestFormState() {
   const questionMode = watch('questionMode');
   const numQuestions = watch('numQuestions');
 
+  // Determine when we should fetch filtered counts from the server for 'all'/'unanswered'
+  const mappedMode = mapQuestionMode(questionMode || 'all');
+  const hasFilters =
+    (selectedThemes?.length || 0) > 0 ||
+    (selectedSubthemes?.length || 0) > 0 ||
+    (selectedGroups?.length || 0) > 0;
+  const shouldFetchFilteredCount =
+    isAuthenticated &&
+    hasFilters &&
+    (mappedMode === 'all' || mappedMode === 'unanswered');
+
+  // Server-side filtered count using aggregates for 'all' and table logic for 'unanswered'
+  const filteredCount = useQuery(
+    api.aggregateQueries.getQuestionCountBySelection,
+    shouldFetchFilteredCount
+      ? {
+          filter: mappedMode,
+          selectedThemes: selectedThemes as Id<'themes'>[],
+          selectedSubthemes: selectedSubthemes as Id<'subthemes'>[],
+          selectedGroups: selectedGroups as Id<'groups'>[],
+        }
+      : 'skip',
+  );
+
   // Memoized question count calculation (only recalculates when selections actually change)
   const availableQuestionCount = useMemo(() => {
     if (!isAuthenticated || isLoading) return 0;
+
+    // Prefer server-filtered count when applicable and loaded
+    if (shouldFetchFilteredCount && filteredCount !== undefined) {
+      return filteredCount;
+    }
 
     const count = calculateQuestionCounts(
       selectedThemes as Id<'themes'>[],
@@ -85,6 +114,8 @@ export function useTestFormState() {
     calculateQuestionCounts,
     isAuthenticated,
     isLoading,
+    shouldFetchFilteredCount,
+    filteredCount,
   ]);
 
   // Note: API fallback removed - we now rely entirely on local calculations
@@ -101,7 +132,8 @@ export function useTestFormState() {
     selectedSubthemes,
     selectedGroups,
     availableQuestionCount,
-    isCountLoading: isLoading,
+    isCountLoading:
+      isLoading || (shouldFetchFilteredCount && filteredCount === undefined),
     hierarchicalData,
     userCountsForQuizCreation,
     totalQuestions,

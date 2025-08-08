@@ -35,6 +35,9 @@ function SubthemeQuestionCount({
   subthemeId: string;
   questionMode: string;
 }) {
+  if (questionMode === 'unanswered') {
+    return <UnansweredSubthemeCount subthemeId={subthemeId} />;
+  }
   if (questionMode === 'incorrect') {
     return <IncorrectSubthemeCount subthemeId={subthemeId} />;
   }
@@ -96,6 +99,27 @@ function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
   );
 }
 
+function UnansweredSubthemeCount({ subthemeId }: { subthemeId: string }) {
+  const total = useQuery(api.aggregateQueries.getSubthemeQuestionCountQuery, {
+    subthemeId: subthemeId as Id<'subthemes'>,
+  });
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
+
+  if (total === undefined || isLoading || !userCountsForQuizCreation) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  const answered =
+    userCountsForQuizCreation.bySubtheme[subthemeId]?.answered || 0;
+  const unanswered = Math.max(0, (total as number) - answered);
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {unanswered}
+    </span>
+  );
+}
+
 function GroupQuestionCount({
   groupId,
   questionMode,
@@ -103,6 +127,9 @@ function GroupQuestionCount({
   groupId: string;
   questionMode: string;
 }) {
+  if (questionMode === 'unanswered') {
+    return <UnansweredGroupCount groupId={groupId} />;
+  }
   if (questionMode === 'incorrect') {
     return <IncorrectGroupCount groupId={groupId} />;
   }
@@ -158,6 +185,26 @@ function StandardGroupCount({ groupId }: { groupId: string }) {
   return (
     <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
       {count}
+    </span>
+  );
+}
+
+function UnansweredGroupCount({ groupId }: { groupId: string }) {
+  const total = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
+    groupId: groupId as Id<'groups'>,
+  });
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
+
+  if (total === undefined || isLoading || !userCountsForQuizCreation) {
+    return <span className="ml-1 text-xs text-gray-400">...</span>;
+  }
+
+  const answered = userCountsForQuizCreation.byGroup[groupId]?.answered || 0;
+  const unanswered = Math.max(0, (total as number) - answered);
+
+  return (
+    <span className="ml-1 rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {unanswered}
     </span>
   );
 }

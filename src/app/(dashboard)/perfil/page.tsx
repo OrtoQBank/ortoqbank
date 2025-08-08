@@ -1,5 +1,6 @@
 'use client';
 
+import { useMutation } from 'convex/react';
 import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { useState } from 'react';
 import {
@@ -297,6 +298,47 @@ export default function ProfilePage() {
           )}
         </div>
       )}
+
+      {/* Danger zone: reset stats */}
+      <div className="mt-8 rounded-lg border border-red-300 bg-red-50 p-4 dark:border-red-900 dark:bg-red-950">
+        <div className="flex items-center justify-between gap-2">
+          <div>
+            <h3 className="text-sm font-semibold text-red-700 dark:text-red-300">
+              Zerar estatísticas
+            </h3>
+            <p className="text-xs text-red-600 dark:text-red-400">
+              Isto vai limpar suas estatísticas de respostas (não afeta questões
+              salvas).
+            </p>
+          </div>
+          <ResetStatsButton />
+        </div>
+      </div>
     </div>
+  );
+}
+
+function ResetStatsButton() {
+  const [isPending, setIsPending] = useState(false);
+  const reset = useMutation(api.userStats.resetMyStatsCounts);
+
+  return (
+    <Button
+      variant="destructive"
+      disabled={isPending}
+      onClick={async () => {
+        try {
+          setIsPending(true);
+          await reset({});
+          if (typeof globalThis !== 'undefined' && globalThis.location) {
+            globalThis.location.reload();
+          }
+        } finally {
+          setIsPending(false);
+        }
+      }}
+    >
+      {isPending ? 'Limpando…' : 'Zerar estatísticas'}
+    </Button>
   );
 }

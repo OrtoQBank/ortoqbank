@@ -1,5 +1,6 @@
 import { v } from 'convex/values';
 
+import { api } from './_generated/api';
 import { Doc, Id } from './_generated/dataModel';
 import { mutation, type MutationCtx, type QueryCtx } from './_generated/server';
 import { QuestionMode } from './customQuizzes';
@@ -141,10 +142,25 @@ async function collectQuestions(
   );
 
   // Step 1: Get base question pool based on question mode
-  const baseQuestions =
-    questionMode === 'all'
-      ? await ctx.db.query('questions').collect()
-      : await getQuestionsByUserMode(ctx, userId, questionMode);
+  if (questionMode === 'all') {
+    // Use aggregate-backed random selection for ultra-fast 'all' mode
+    const questionIds = await collectAllModeQuestionIds(
+      ctx,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      maxQuestions,
+    );
+
+    const docs = await Promise.all(questionIds.map(id => ctx.db.get(id)));
+    const questions = docs.filter((q): q is Doc<'questions'> => q !== null);
+    console.log(
+      `🚀 'all' mode selected ${questions.length} questions via aggregates`,
+    );
+    return questions;
+  }
+
+  const baseQuestions = await getQuestionsByUserMode(ctx, userId, questionMode);
 
   console.log(
     `🚀 Base questions from mode '${questionMode}': ${baseQuestions.length}`,
@@ -172,6 +188,150 @@ async function collectQuestions(
     `🚀 Questions after hierarchy filtering: ${filteredQuestions.length}`,
   );
   return filteredQuestions;
+}
+
+/**
+ * Aggregate-backed random selection for questionMode 'all'.
+ * Respects hierarchy overrides: groups > subthemes > themes.
+ */
+async function collectAllModeQuestionIds(
+  ctx: QueryCtx | MutationCtx,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+): Promise<Array<Id<'questions'>>> {
+  // No filters: grab random questions globally
+  if (
+    selectedThemes.length === 0 &&
+    selectedSubthemes.length === 0 &&
+    selectedGroups.length === 0
+  ) {
+    return await ctx.runQuery(api.aggregateQueries.getRandomQuestions, {
+      count: maxQuestions,
+    });
+  }
+
+  // Determine overrides and map selected groups by subtheme
+  const overriddenSubthemes = new Set<Id<'subthemes'>>();
+  const overriddenThemesByGroups = new Set<Id<'themes'>>();
+  const groupsBySubtheme = new Map<Id<'subthemes'>, Set<Id<'groups'>>>();
+  let selectedGroupDocs: Array<Doc<'groups'> | null> = [];
+  if (selectedGroups.length > 0) {
+    selectedGroupDocs = await Promise.all(
+      selectedGroups.map(id => ctx.db.get(id)),
+    );
+    for (const g of selectedGroupDocs) {
+      if (g?.subthemeId) {
+        overriddenSubthemes.add(g.subthemeId);
+        if (!groupsBySubtheme.has(g.subthemeId)) {
+          groupsBySubtheme.set(g.subthemeId, new Set());
+        }
+        groupsBySubtheme.get(g.subthemeId)!.add(g._id as Id<'groups'>);
+      }
+    }
+
+    // Any selected group also overrides its parent theme. Compute themes of selected groups.
+    const uniqueSubthemeIds = [
+      ...new Set(
+        selectedGroupDocs
+          .map(g => g?.subthemeId)
+          .filter(Boolean) as Id<'subthemes'>[],
+      ),
+    ];
+    if (uniqueSubthemeIds.length > 0) {
+      const subthemeDocs = await Promise.all(
+        uniqueSubthemeIds.map(id => ctx.db.get(id)),
+      );
+      for (const st of subthemeDocs) {
+        if (st?.themeId) {
+          overriddenThemesByGroups.add(st.themeId);
+        }
+      }
+    }
+  }
+
+  // Themes overridden by selected subthemes
+  const overriddenThemes = new Set<Id<'themes'>>();
+  if (selectedSubthemes.length > 0) {
+    const subthemes = await Promise.all(
+      selectedSubthemes.map(id => ctx.db.get(id)),
+    );
+    for (const s of subthemes) {
+      if (s?.themeId) overriddenThemes.add(s.themeId);
+    }
+  }
+
+  // Apply overrides to selections
+  const effectiveSubthemesSet = new Set(
+    selectedSubthemes.filter(st => !overriddenSubthemes.has(st)),
+  );
+  const effectiveThemes = selectedThemes.filter(
+    th => !overriddenThemes.has(th) && !overriddenThemesByGroups.has(th),
+  );
+
+  // 1) Always include selected groups via random aggregate
+  const groupResults = await Promise.all(
+    selectedGroups.map(groupId =>
+      ctx.runQuery(api.aggregateQueries.getRandomQuestionsByGroup, {
+        groupId,
+        count: maxQuestions,
+      }),
+    ),
+  );
+
+  // 2) For each selected subtheme:
+  //    - If it has selected groups, include ONLY the complement (questions in subtheme without those groups)
+  //    - Otherwise include random-by-subtheme aggregate
+  const subthemeResults: Array<Array<Id<'questions'>>> = [];
+  for (const subthemeId of selectedSubthemes) {
+    const selectedGroupsForSubtheme = groupsBySubtheme.get(subthemeId);
+    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0) {
+      // Fetch complement via indexed query
+      const qDocs = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .collect();
+      const complementIds = qDocs
+        .filter(q => !q.groupId || !selectedGroupsForSubtheme.has(q.groupId))
+        .map(q => q._id as Id<'questions'>);
+      subthemeResults.push(complementIds);
+    } else if (effectiveSubthemesSet.has(subthemeId)) {
+      const ids = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsBySubtheme,
+        { subthemeId, count: maxQuestions },
+      );
+      subthemeResults.push(ids);
+    }
+  }
+
+  // 3) Include any themes that aren't covered by selected subthemes
+  const themeResults = await Promise.all(
+    effectiveThemes.map(themeId =>
+      ctx.runQuery(api.aggregateQueries.getRandomQuestionsByTheme, {
+        themeId,
+        count: maxQuestions,
+      }),
+    ),
+  );
+
+  // Combine, dedupe, and downsample
+  const combined = [
+    ...groupResults.flat(),
+    ...subthemeResults.flat(),
+    ...themeResults.flat(),
+  ];
+  const uniqueIds = [...new Set(combined)];
+
+  if (uniqueIds.length <= maxQuestions) return uniqueIds;
+
+  // Fisher-Yates shuffle then slice
+  const shuffled = [...uniqueIds];
+  for (let i = shuffled.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+  }
+  return shuffled.slice(0, maxQuestions);
 }
 
 /**

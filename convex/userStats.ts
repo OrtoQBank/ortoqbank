@@ -654,6 +654,53 @@ export const getUserWeeklyProgress = query({
 });
 
 /**
+ * Reset the current user's statistics counts to a fresh state.
+ * Does NOT modify bookmarks-related counts.
+ */
+export const resetMyStatsCounts = mutation({
+  args: {},
+  returns: v.object({ success: v.boolean() }),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // 1) Delete all per-question stats for this user
+    const statsForUser = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .collect();
+
+    for (const stat of statsForUser) {
+      await ctx.db.delete(stat._id);
+    }
+
+    // 2) Reset aggregate counts (answered/incorrect) but keep bookmarks-related counts
+    const counts = await ctx.db
+      .query('userStatsCounts')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .first();
+
+    if (!counts) {
+      // Nothing to reset, treat as success
+      return { success: true };
+    }
+
+    await ctx.db.patch(counts._id, {
+      totalAnswered: 0,
+      totalIncorrect: 0,
+      answeredByTheme: {},
+      incorrectByTheme: {},
+      answeredBySubtheme: {},
+      incorrectBySubtheme: {},
+      answeredByGroup: {},
+      incorrectByGroup: {},
+      lastUpdated: Date.now(),
+    });
+
+    return { success: true };
+  },
+});
+
+/**
  * Initialize userStatsCounts for a specific user by computing counts from existing data
  * This function should be called once per user during migration
  */

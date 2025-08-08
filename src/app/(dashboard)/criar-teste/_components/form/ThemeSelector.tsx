@@ -31,6 +31,9 @@ function ThemeQuestionCount({
   themeId: string;
   questionMode: string;
 }) {
+  if (questionMode === 'unanswered') {
+    return <UnansweredThemeCount themeId={themeId} />;
+  }
   if (questionMode === 'incorrect') {
     return <IncorrectThemeCount themeId={themeId} />;
   }
@@ -86,6 +89,26 @@ function StandardThemeCount({ themeId }: { themeId: string }) {
   return (
     <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
       {count}
+    </span>
+  );
+}
+
+function UnansweredThemeCount({ themeId }: { themeId: string }) {
+  const total = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
+    themeId: themeId as Id<'themes'>,
+  });
+  const { userCountsForQuizCreation, isLoading } = useFormContext();
+
+  if (total === undefined || isLoading || !userCountsForQuizCreation) {
+    return <span className="text-xs text-gray-400">...</span>;
+  }
+
+  const answered = userCountsForQuizCreation.byTheme[themeId]?.answered || 0;
+  const unanswered = Math.max(0, (total as number) - answered);
+
+  return (
+    <span className="rounded-full bg-gray-100 px-1.5 py-0.5 text-xs text-gray-500">
+      {unanswered}
     </span>
   );
 }
