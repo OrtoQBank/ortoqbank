@@ -20,6 +20,7 @@ import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as migrations from "../migrations.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
+import type * as promoCoupons from "../promoCoupons.js";
 import type * as questions from "../questions.js";
 import type * as questionsAggregateSync from "../questionsAggregateSync.js";
 import type * as quiz from "../quiz.js";
@@ -60,6 +61,7 @@ declare const fullApi: ApiFromModules<{
   init: typeof init;
   migrations: typeof migrations;
   presetQuizzes: typeof presetQuizzes;
+  promoCoupons: typeof promoCoupons;
   questions: typeof questions;
   questionsAggregateSync: typeof questionsAggregateSync;
   quiz: typeof quiz;

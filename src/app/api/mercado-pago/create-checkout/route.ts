@@ -1,9 +1,19 @@
+import { ConvexHttpClient } from 'convex/browser';
 import { Preference } from 'mercadopago';
 import { NextRequest, NextResponse } from 'next/server';
 
+import { api } from '@/../convex/_generated/api';
 import mpClient from '@/lib/mercado-pago';
 
 // Define coupon configurations with direct discount calculations
+type Coupon = {
+  type: 'percentage' | 'fixed' | 'fixed_price';
+  value: number;
+  description: string;
+  validFrom?: number; // epoch ms
+  validUntil?: number; // epoch ms
+};
+
 const COUPON_CONFIG = {
   // Base prices
   REGULAR_PRICE: 1999.9,
@@ -33,25 +43,61 @@ const COUPON_CONFIG = {
       value: 10,
       description: '10% de desconto',
     },
-  } as Record<
-    string,
-    {
-      type: 'percentage' | 'fixed' | 'fixed_price';
-      value: number;
-      description: string;
-    }
-  >,
+    // Time-bound 48h coupon: SOMOS1K (15%)
+    SOMOS1K: {
+      type: 'percentage',
+      value: 15,
+      description: '15% de desconto (SOMOS1K - 48h)',
+      validFrom: Date.now(),
+      validUntil: Date.now() + 48 * 60 * 60 * 1000,
+    },
+  } as Record<string, Coupon>,
 };
+
+function isCouponActive(coupon?: Coupon): boolean {
+  if (!coupon) return false;
+  const now = Date.now();
+  if (coupon.validFrom !== undefined && now < coupon.validFrom) return false;
+  if (coupon.validUntil !== undefined && now > coupon.validUntil) return false;
+  return true;
+}
+
+async function getDynamicCoupon(code?: string): Promise<Coupon | undefined> {
+  if (!code) return undefined;
+  try {
+    const convexUrl = process.env.NEXT_PUBLIC_CONVEX_URL;
+    if (!convexUrl) return undefined;
+    const client = new ConvexHttpClient(convexUrl);
+    const dynamic = await client.query(api.promoCoupons.getByCode, {
+      code: code.toUpperCase(),
+    });
+    if (!dynamic || !dynamic.active) return undefined;
+    return {
+      type: dynamic.type,
+      value: dynamic.value,
+      description: dynamic.description,
+      validFrom: dynamic.validFrom ?? undefined,
+      validUntil: dynamic.validUntil ?? undefined,
+    } satisfies Coupon;
+  } catch {
+    return undefined;
+  }
+}
 
 function calculateDiscountedPrice(
   originalPrice: number,
-  couponCode?: string,
+  couponCodeOrCoupon?: string | Coupon,
 ): {
   finalPrice: number;
   discountAmount: number;
   discountDescription: string;
 } {
-  if (!couponCode || !COUPON_CONFIG.coupons[couponCode.toUpperCase()]) {
+  const coupon: Coupon | undefined =
+    typeof couponCodeOrCoupon === 'string'
+      ? COUPON_CONFIG.coupons[couponCodeOrCoupon.toUpperCase()]
+      : couponCodeOrCoupon;
+
+  if (!coupon || !isCouponActive(coupon)) {
     return {
       finalPrice: originalPrice,
       discountAmount: 0,
@@ -59,7 +105,6 @@ function calculateDiscountedPrice(
     };
   }
 
-  const coupon = COUPON_CONFIG.coupons[couponCode.toUpperCase()];
   let finalPrice: number;
   let discountAmount: number;
 
@@ -104,9 +149,16 @@ export async function POST(req: NextRequest) {
     const REGULAR_PRICE = COUPON_CONFIG.REGULAR_PRICE;
     const PIX_PRICE = COUPON_CONFIG.PIX_PRICE;
 
+    // Prefer dynamic Convex coupon, fallback to static
+    const dynamicCoupon = await getDynamicCoupon(couponCode);
+    const effectiveCoupon = dynamicCoupon ?? couponCode;
+
     // Calculate prices with coupon discount
-    const regularPricing = calculateDiscountedPrice(REGULAR_PRICE, couponCode);
-    const pixPricing = calculateDiscountedPrice(PIX_PRICE, couponCode);
+    const regularPricing = calculateDiscountedPrice(
+      REGULAR_PRICE,
+      effectiveCoupon,
+    );
+    const pixPricing = calculateDiscountedPrice(PIX_PRICE, effectiveCoupon);
 
     const preference = new Preference(mpClient);
     const origin = req.headers.get('origin') || 'https://ortoqbank.com.br';
@@ -237,28 +289,34 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const coupon = COUPON_CONFIG.coupons[couponCode.toUpperCase()];
+  // Try dynamic coupon first, then static
+  const dynamicCoupon = await getDynamicCoupon(couponCode);
+  const staticCoupon = COUPON_CONFIG.coupons[couponCode.toUpperCase()];
+  const effectiveCoupon: Coupon | undefined = dynamicCoupon ?? staticCoupon;
 
-  if (!coupon) {
+  if (!effectiveCoupon) {
     return NextResponse.json({ valid: false, message: 'Cupom inválido' });
+  }
+  if (!isCouponActive(effectiveCoupon)) {
+    return NextResponse.json({ valid: false, message: 'Cupom expirado' });
   }
 
   const regularPricing = calculateDiscountedPrice(
     COUPON_CONFIG.REGULAR_PRICE,
-    couponCode,
+    dynamicCoupon ?? couponCode,
   );
   const pixPricing = calculateDiscountedPrice(
     COUPON_CONFIG.PIX_PRICE,
-    couponCode,
+    dynamicCoupon ?? couponCode,
   );
 
   return NextResponse.json({
     valid: true,
     coupon: {
       code: couponCode.toUpperCase(),
-      description: coupon.description,
-      type: coupon.type,
-      value: coupon.value,
+      description: effectiveCoupon.description,
+      type: effectiveCoupon.type,
+      value: effectiveCoupon.value,
     },
     pricing: {
       originalPrice: COUPON_CONFIG.REGULAR_PRICE,

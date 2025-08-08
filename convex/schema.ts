@@ -192,4 +192,19 @@ export default defineSchema({
 
     lastUpdated: v.number(),
   }).index('by_user', ['userId']),
+
+  // Admin-managed coupons for checkout
+  coupons: defineTable({
+    code: v.string(), // store uppercase
+    type: v.union(
+      v.literal('percentage'),
+      v.literal('fixed'),
+      v.literal('fixed_price'),
+    ),
+    value: v.number(),
+    description: v.string(),
+    active: v.boolean(),
+    validFrom: v.optional(v.number()), // epoch ms
+    validUntil: v.optional(v.number()), // epoch ms
+  }).index('by_code', ['code']),
 });

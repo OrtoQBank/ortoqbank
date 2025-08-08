@@ -43,6 +43,11 @@ const navItems = [
     label: 'Trilhas e Simulados',
     icon: SettingsIcon,
   },
+  {
+    href: '/admin/coupons',
+    label: 'Cupons',
+    icon: CogIcon,
+  },
 ];
 
 interface AdminNavProps {
