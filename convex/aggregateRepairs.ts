@@ -398,6 +398,46 @@ export const internalRepairProcessThemeRandomAggregatesBatch = internalMutation(
   },
 );
 
+// 15s-safe: process one theme's random aggregate in pages
+export const internalRepairClearThemeRandomAggregate = internalMutation({
+  args: { themeId: v.id('themes') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await randomQuestionsByTheme.clear(ctx, { namespace: args.themeId });
+    return null;
+  },
+});
+
+export const internalRepairProcessThemeRandomPage = internalMutation({
+  args: {
+    themeId: v.id('themes'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 25;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_theme', q => q.eq('themeId', args.themeId))
+      .paginate({ cursor: args.cursor, numItems: batchSize });
+
+    for (const question of result.page) {
+      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+    }
+
+    return {
+      processed: result.page.length,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
+
 /**
  * Process subtheme random aggregates batch (15-second safe)
  */
@@ -436,6 +476,45 @@ export const internalRepairProcessSubthemeRandomAggregatesBatch =
       return { processed };
     },
   });
+
+export const internalRepairClearSubthemeRandomAggregate = internalMutation({
+  args: { subthemeId: v.id('subthemes') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await randomQuestionsBySubtheme.clear(ctx, { namespace: args.subthemeId });
+    return null;
+  },
+});
+
+export const internalRepairProcessSubthemeRandomPage = internalMutation({
+  args: {
+    subthemeId: v.id('subthemes'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 25;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId))
+      .paginate({ cursor: args.cursor, numItems: batchSize });
+
+    for (const question of result.page) {
+      await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+    }
+
+    return {
+      processed: result.page.length,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
 
 /**
  * Process group random aggregates batch (15-second safe)
@@ -476,6 +555,45 @@ export const internalRepairProcessGroupRandomAggregatesBatch = internalMutation(
     },
   },
 );
+
+export const internalRepairClearGroupRandomAggregate = internalMutation({
+  args: { groupId: v.id('groups') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await randomQuestionsByGroup.clear(ctx, { namespace: args.groupId });
+    return null;
+  },
+});
+
+export const internalRepairProcessGroupRandomPage = internalMutation({
+  args: {
+    groupId: v.id('groups'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: v.object({
+    processed: v.number(),
+    nextCursor: v.union(v.string(), v.null()),
+    isDone: v.boolean(),
+  }),
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize || 25;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_group', q => q.eq('groupId', args.groupId))
+      .paginate({ cursor: args.cursor, numItems: batchSize });
+
+    for (const question of result.page) {
+      await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+    }
+
+    return {
+      processed: result.page.length,
+      nextCursor: result.continueCursor,
+      isDone: result.isDone,
+    };
+  },
+});
 
 // ============================================================================
 // SECTION 3: USER-SPECIFIC AGGREGATES REPAIR - REMOVED

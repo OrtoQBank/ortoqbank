@@ -146,8 +146,8 @@ export const section1RepairInternalWorkflow = workflow.define({
       ),
     ]);
 
-    // Step 4: Process themes in batches (5 themes per batch)
-    const themeBatchSize = 5;
+    // Step 4: Process themes in batches (1 theme per batch to stay <15s)
+    const themeBatchSize = 1;
     let themeCount = 0;
     for (let i = 0; i < themeIds.length; i += themeBatchSize) {
       const batch = themeIds.slice(i, i + themeBatchSize);
@@ -159,8 +159,8 @@ export const section1RepairInternalWorkflow = workflow.define({
       themeCount += result.processed;
     }
 
-    // Step 5: Process subthemes in batches (5 subthemes per batch)
-    const subthemeBatchSize = 5;
+    // Step 5: Process subthemes in batches (1 subtheme per batch)
+    const subthemeBatchSize = 1;
     let subthemeCount = 0;
     for (let i = 0; i < subthemeIds.length; i += subthemeBatchSize) {
       const batch = subthemeIds.slice(i, i + subthemeBatchSize);
@@ -172,8 +172,8 @@ export const section1RepairInternalWorkflow = workflow.define({
       subthemeCount += result.processed;
     }
 
-    // Step 6: Process groups in batches (5 groups per batch)
-    const groupBatchSize = 5;
+    // Step 6: Process groups in batches (1 group per batch)
+    const groupBatchSize = 1;
     let groupCount = 0;
     for (let i = 0; i < groupIds.length; i += groupBatchSize) {
       const batch = groupIds.slice(i, i + groupBatchSize);
@@ -295,8 +295,8 @@ export const section2RepairInternalWorkflow = workflow.define({
       ),
     ]);
 
-    // Step 4: Process themes in batches (5 themes per batch)
-    const themeBatchSize = 5;
+    // Step 4: Process themes in batches (1 theme per batch to stay <15s)
+    const themeBatchSize = 1;
     let themeCount = 0;
     for (let i = 0; i < themeIds.length; i += themeBatchSize) {
       const batch = themeIds.slice(i, i + themeBatchSize);
@@ -309,8 +309,8 @@ export const section2RepairInternalWorkflow = workflow.define({
       themeCount += result.processed;
     }
 
-    // Step 5: Process subthemes in batches (5 subthemes per batch)
-    const subthemeBatchSize = 5;
+    // Step 5: Process subthemes in batches (1 subtheme per batch)
+    const subthemeBatchSize = 1;
     let subthemeCount = 0;
     for (let i = 0; i < subthemeIds.length; i += subthemeBatchSize) {
       const batch = subthemeIds.slice(i, i + subthemeBatchSize);
@@ -325,8 +325,8 @@ export const section2RepairInternalWorkflow = workflow.define({
       subthemeCount += result.processed;
     }
 
-    // Step 6: Process groups in batches (5 groups per batch)
-    const groupBatchSize = 5;
+    // Step 6: Process groups in batches (1 group per batch)
+    const groupBatchSize = 1;
     let groupCount = 0;
     for (let i = 0; i < groupIds.length; i += groupBatchSize) {
       const batch = groupIds.slice(i, i + groupBatchSize);
