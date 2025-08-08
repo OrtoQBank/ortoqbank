@@ -115,7 +115,7 @@ export const section1RepairInternalWorkflow = workflow.define({
         isDone: boolean;
       } = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessQuestionsBatchGlobal,
-        { cursor, batchSize: 100 },
+        { cursor, batchSize: 25 },
         { name: `processQuestionsBatch_${batchCount}` },
       );
 
@@ -264,7 +264,7 @@ export const section2RepairInternalWorkflow = workflow.define({
         isDone: boolean;
       } = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessQuestionsBatchRandom,
-        { cursor, batchSize: 100 },
+        { cursor, batchSize: 25 },
         { name: `processRandomQuestionsBatch_${batchCount}` },
       );
 
@@ -429,7 +429,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
         isDone: boolean;
       } = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessQuestionsBatchGlobal,
-        { cursor: cursor1, batchSize: 100 },
+        { cursor: cursor1, batchSize: 25 },
         { name: `comprehensive_section1_batch_${batchCount1}` },
       );
 
@@ -497,7 +497,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
         isDone: boolean;
       } = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessQuestionsBatchRandom,
-        { cursor: cursor2, batchSize: 100 },
+        { cursor: cursor2, batchSize: 25 },
         { name: `comprehensive_section2_batch_${batchCount2}` },
       );
 

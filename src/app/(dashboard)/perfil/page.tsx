@@ -234,8 +234,16 @@ export default function ProfilePage() {
                         className="fill-white font-semibold"
                         stroke="none"
                         fontSize={14}
-                        formatter={(value: number, entry: any) => {
-                          return `${value}`;
+                        formatter={(value: number) => {
+                          const total = correctnessData.reduce(
+                            (sum, item) => sum + item.value,
+                            0,
+                          );
+                          const percent =
+                            total === 0
+                              ? 0
+                              : ((value / total) * 100).toFixed(0);
+                          return `${percent}%`;
                         }}
                       />
                     </Pie>
