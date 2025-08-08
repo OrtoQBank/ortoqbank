@@ -877,136 +877,147 @@ export const initializeAllUserStatsCounts = mutation({
   handler: async (ctx, args) => {
     const batchSize = args.batchSize || 10; // Default to 10 users at a time
 
-    // Get all users
-    const allUsers = await ctx.db.query('users').take(batchSize);
-
     let processedUsers = 0;
     let skippedUsers = 0;
     const errors: string[] = [];
 
-    for (const user of allUsers) {
-      try {
-        // Check if counts already exist for this user
-        const existingCounts = await ctx.db
-          .query('userStatsCounts')
-          .withIndex('by_user', q => q.eq('userId', user._id))
-          .first();
+    let cursor: string | null = null;
 
-        if (existingCounts) {
-          skippedUsers++;
-          continue;
-        }
+    // Paginate through all users, batch by batch
+    // Loop continues until `isDone` is true
+    while (true) {
+      const page = await ctx.db
+        .query('users')
+        .order('asc')
+        .paginate({ numItems: batchSize, cursor });
 
-        // Inline the initialization logic to avoid nested mutation calls
-        const userStats = await ctx.db
-          .query('userQuestionStats')
-          .withIndex('by_user', q => q.eq('userId', user._id))
-          .collect();
+      for (const user of page.page) {
+        try {
+          // Check if counts already exist for this user
+          const existingCounts = await ctx.db
+            .query('userStatsCounts')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .first();
 
-        const userBookmarks = await ctx.db
-          .query('userBookmarks')
-          .withIndex('by_user', q => q.eq('userId', user._id))
-          .collect();
+          if (existingCounts) {
+            skippedUsers++;
+            continue;
+          }
 
-        // Initialize count objects
-        const answeredByTheme: Record<Id<'themes'>, number> = {};
-        const incorrectByTheme: Record<Id<'themes'>, number> = {};
-        const bookmarkedByTheme: Record<Id<'themes'>, number> = {};
+          // Inline the initialization logic to avoid nested mutation calls
+          const userStats = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .collect();
 
-        const answeredBySubtheme: Record<Id<'subthemes'>, number> = {};
-        const incorrectBySubtheme: Record<Id<'subthemes'>, number> = {};
-        const bookmarkedBySubtheme: Record<Id<'subthemes'>, number> = {};
+          const userBookmarks = await ctx.db
+            .query('userBookmarks')
+            .withIndex('by_user', q => q.eq('userId', user._id))
+            .collect();
 
-        const answeredByGroup: Record<Id<'groups'>, number> = {};
-        const incorrectByGroup: Record<Id<'groups'>, number> = {};
-        const bookmarkedByGroup: Record<Id<'groups'>, number> = {};
+          // Initialize count objects
+          const answeredByTheme: Record<Id<'themes'>, number> = {};
+          const incorrectByTheme: Record<Id<'themes'>, number> = {};
+          const bookmarkedByTheme: Record<Id<'themes'>, number> = {};
 
-        let totalAnswered = 0;
-        let totalIncorrect = 0;
+          const answeredBySubtheme: Record<Id<'subthemes'>, number> = {};
+          const incorrectBySubtheme: Record<Id<'subthemes'>, number> = {};
+          const bookmarkedBySubtheme: Record<Id<'subthemes'>, number> = {};
 
-        // Process answered questions
-        for (const stat of userStats) {
-          if (stat.hasAnswered) {
-            totalAnswered++;
+          const answeredByGroup: Record<Id<'groups'>, number> = {};
+          const incorrectByGroup: Record<Id<'groups'>, number> = {};
+          const bookmarkedByGroup: Record<Id<'groups'>, number> = {};
 
-            if (stat.themeId) {
-              answeredByTheme[stat.themeId] =
-                (answeredByTheme[stat.themeId] || 0) + 1;
-            }
-            if (stat.subthemeId) {
-              answeredBySubtheme[stat.subthemeId] =
-                (answeredBySubtheme[stat.subthemeId] || 0) + 1;
-            }
-            if (stat.groupId) {
-              answeredByGroup[stat.groupId] =
-                (answeredByGroup[stat.groupId] || 0) + 1;
-            }
+          let totalAnswered = 0;
+          let totalIncorrect = 0;
 
-            if (stat.isIncorrect) {
-              totalIncorrect++;
+          // Process answered questions
+          for (const stat of userStats) {
+            if (stat.hasAnswered) {
+              totalAnswered++;
+
               if (stat.themeId) {
-                incorrectByTheme[stat.themeId] =
-                  (incorrectByTheme[stat.themeId] || 0) + 1;
+                answeredByTheme[stat.themeId] =
+                  (answeredByTheme[stat.themeId] || 0) + 1;
               }
               if (stat.subthemeId) {
-                incorrectBySubtheme[stat.subthemeId] =
-                  (incorrectBySubtheme[stat.subthemeId] || 0) + 1;
+                answeredBySubtheme[stat.subthemeId] =
+                  (answeredBySubtheme[stat.subthemeId] || 0) + 1;
               }
               if (stat.groupId) {
-                incorrectByGroup[stat.groupId] =
-                  (incorrectByGroup[stat.groupId] || 0) + 1;
+                answeredByGroup[stat.groupId] =
+                  (answeredByGroup[stat.groupId] || 0) + 1;
+              }
+
+              if (stat.isIncorrect) {
+                totalIncorrect++;
+                if (stat.themeId) {
+                  incorrectByTheme[stat.themeId] =
+                    (incorrectByTheme[stat.themeId] || 0) + 1;
+                }
+                if (stat.subthemeId) {
+                  incorrectBySubtheme[stat.subthemeId] =
+                    (incorrectBySubtheme[stat.subthemeId] || 0) + 1;
+                }
+                if (stat.groupId) {
+                  incorrectByGroup[stat.groupId] =
+                    (incorrectByGroup[stat.groupId] || 0) + 1;
+                }
               }
             }
           }
+
+          // Process bookmarked questions
+          const totalBookmarked = userBookmarks.length;
+          for (const bookmark of userBookmarks) {
+            if (bookmark.themeId) {
+              bookmarkedByTheme[bookmark.themeId] =
+                (bookmarkedByTheme[bookmark.themeId] || 0) + 1;
+            }
+            if (bookmark.subthemeId) {
+              bookmarkedBySubtheme[bookmark.subthemeId] =
+                (bookmarkedBySubtheme[bookmark.subthemeId] || 0) + 1;
+            }
+            if (bookmark.groupId) {
+              bookmarkedByGroup[bookmark.groupId] =
+                (bookmarkedByGroup[bookmark.groupId] || 0) + 1;
+            }
+          }
+
+          // Insert the computed counts
+          await ctx.db.insert('userStatsCounts', {
+            userId: user._id,
+            totalAnswered,
+            totalIncorrect,
+            totalBookmarked,
+            answeredByTheme,
+            incorrectByTheme,
+            bookmarkedByTheme,
+            answeredBySubtheme,
+            incorrectBySubtheme,
+            bookmarkedBySubtheme,
+            answeredByGroup,
+            incorrectByGroup,
+            bookmarkedByGroup,
+            lastUpdated: Date.now(),
+          });
+
+          processedUsers++;
+        } catch (error) {
+          errors.push(
+            `Failed to initialize counts for user ${user._id}: ${error}`,
+          );
+          skippedUsers++;
         }
-
-        // Process bookmarked questions
-        const totalBookmarked = userBookmarks.length;
-        for (const bookmark of userBookmarks) {
-          if (bookmark.themeId) {
-            bookmarkedByTheme[bookmark.themeId] =
-              (bookmarkedByTheme[bookmark.themeId] || 0) + 1;
-          }
-          if (bookmark.subthemeId) {
-            bookmarkedBySubtheme[bookmark.subthemeId] =
-              (bookmarkedBySubtheme[bookmark.subthemeId] || 0) + 1;
-          }
-          if (bookmark.groupId) {
-            bookmarkedByGroup[bookmark.groupId] =
-              (bookmarkedByGroup[bookmark.groupId] || 0) + 1;
-          }
-        }
-
-        // Insert the computed counts
-        await ctx.db.insert('userStatsCounts', {
-          userId: user._id,
-          totalAnswered,
-          totalIncorrect,
-          totalBookmarked,
-          answeredByTheme,
-          incorrectByTheme,
-          bookmarkedByTheme,
-          answeredBySubtheme,
-          incorrectBySubtheme,
-          bookmarkedBySubtheme,
-          answeredByGroup,
-          incorrectByGroup,
-          bookmarkedByGroup,
-          lastUpdated: Date.now(),
-        });
-
-        processedUsers++;
-      } catch (error) {
-        errors.push(
-          `Failed to initialize counts for user ${user._id}: ${error}`,
-        );
-        skippedUsers++;
       }
+
+      if (page.isDone) break;
+      cursor = page.continueCursor;
     }
 
     return {
       success: true,
-      message: `Migration batch completed: ${processedUsers} users processed, ${skippedUsers} skipped`,
+      message: `Migration completed: ${processedUsers} users processed, ${skippedUsers} skipped`,
       processedUsers,
       skippedUsers,
       errors,
