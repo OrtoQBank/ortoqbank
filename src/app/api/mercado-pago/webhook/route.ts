@@ -141,7 +141,15 @@ export async function POST(request: Request) {
                       { status: 400 },
                     );
                   }
-                } catch {}
+                } catch (error) {
+                  Sentry.captureException(error, {
+                    tags: { operation: 'payment-sanity-check' },
+                  });
+                  return NextResponse.json(
+                    { error: 'Internal validation error' },
+                    { status: 500 },
+                  );
+                }
 
                 await handleMercadoPagoPayment(paymentData);
 

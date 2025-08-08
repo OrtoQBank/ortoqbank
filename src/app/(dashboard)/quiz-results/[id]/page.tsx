@@ -1,16 +1,10 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
+import { SignInButton, useUser } from '@clerk/nextjs';
 import { useQuery } from 'convex/react';
-import {
-  ArrowLeft,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  XCircle,
-} from 'lucide-react';
-import { useParams, useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { CheckCircle, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
+import { useParams } from 'next/navigation';
+import { useState } from 'react';
 
 import StructuredContentRenderer from '@/components/common/StructuredContentRenderer';
 import QuestionContent from '@/components/quiz/QuestionContent';
@@ -39,7 +33,6 @@ const isCustomQuiz = (
 };
 
 export default function UniversalQuizResultsPage() {
-  const router = useRouter();
   const { id } = useParams();
   const quizId = id as Id<'presetQuizzes'> | Id<'customQuizzes'>;
   const { user, isLoaded, isSignedIn } = useUser();
@@ -77,6 +70,21 @@ export default function UniversalQuizResultsPage() {
 
   // Get the most recent session (index 0)
   const session = completedSessions[0];
+
+  // If auth state is loaded and the user is not signed in, prevent loading loop
+  if (isLoaded && !isSignedIn) {
+    return (
+      <div className="container mx-auto p-6">
+        <h1 className="mb-2 text-2xl font-bold">Autenticação necessária</h1>
+        <p className="text-muted-foreground mb-4">
+          Faça login para visualizar os resultados deste teste.
+        </p>
+        <SignInButton forceRedirectUrl={`/quiz-results/${id}`}>
+          <Button>Entrar</Button>
+        </SignInButton>
+      </div>
+    );
+  }
 
   if (!quiz || !user || !session || !quiz.questions[currentQuestionIndex]) {
     return (
