@@ -93,25 +93,36 @@ export default function QuizProgress({
             const isNavigable = !isExamMode && questionIndex <= maxAllowedIndex;
 
             // Determine button color based on answer status
-            let buttonColorClass =
-              currentIndex === questionIndex
-                ? 'ring-2 ring-offset-1 ring-blue-500 bg-blue-100'
-                : 'bg-gray-100';
+            let buttonColorClass;
 
-            if (answerFeedback[questionIndex]) {
+            if (isExamMode) {
+              // In exam mode, keep all buttons grey
               buttonColorClass =
                 currentIndex === questionIndex
-                  ? 'ring-2 ring-offset-1 ring-blue-500 ' +
-                    (answerFeedback[questionIndex]?.isCorrect
-                      ? 'bg-green-100'
-                      : 'bg-red-100')
-                  : answerFeedback[questionIndex]?.isCorrect
-                    ? 'bg-green-100 text-green-800'
-                    : 'bg-red-100 text-red-800';
-            } else if (currentIndex !== questionIndex) {
-              buttonColorClass = isNavigable
-                ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                : 'bg-gray-100 text-gray-400'; // Disabled look
+                  ? 'ring-2 ring-offset-1 ring-blue-500 bg-gray-100'
+                  : 'bg-gray-100 text-gray-700';
+            } else {
+              // In study mode, show colors based on answer feedback
+              buttonColorClass =
+                currentIndex === questionIndex
+                  ? 'ring-2 ring-offset-1 ring-blue-500 bg-blue-100'
+                  : 'bg-gray-100';
+
+              if (answerFeedback[questionIndex]) {
+                buttonColorClass =
+                  currentIndex === questionIndex
+                    ? 'ring-2 ring-offset-1 ring-blue-500 ' +
+                      (answerFeedback[questionIndex]?.isCorrect
+                        ? 'bg-green-100'
+                        : 'bg-red-100')
+                    : answerFeedback[questionIndex]?.isCorrect
+                      ? 'bg-green-100 text-green-800'
+                      : 'bg-red-100 text-red-800';
+              } else if (currentIndex !== questionIndex) {
+                buttonColorClass = isNavigable
+                  ? 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                  : 'bg-gray-100 text-gray-400'; // Disabled look
+              }
             }
 
             return (
