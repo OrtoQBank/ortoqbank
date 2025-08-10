@@ -1,3 +1,4 @@
+import * as Sentry from '@sentry/nextjs';
 import { ConvexHttpClient } from 'convex/browser';
 import { Preference } from 'mercadopago';
 import { NextRequest, NextResponse } from 'next/server';
@@ -5,7 +6,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { api } from '@/../convex/_generated/api';
 import mpClient from '@/lib/mercado-pago';
 
-// Define coupon configurations with direct discount calculations
+// Define coupon structure returned from Convex
 type Coupon = {
   type: 'percentage' | 'fixed' | 'fixed_price';
   value: number;
@@ -14,45 +15,9 @@ type Coupon = {
   validUntil?: number; // epoch ms
 };
 
-const COUPON_CONFIG = {
-  // Base prices
-  REGULAR_PRICE: 1999.9,
-  PIX_PRICE: 1899.9,
-
-  // Coupon discounts (percentage, fixed amount, or fixed price)
-  coupons: {
-    DESCONTO10: {
-      type: 'percentage',
-      value: 10,
-      description: '10% de desconto',
-    },
-    SAVE50: { type: 'fixed', value: 50, description: 'R$ 50 de desconto' },
-    ESTUDANTE: {
-      type: 'percentage',
-      value: 15,
-      description: '15% desconto estudante',
-    },
-    PROMO100: { type: 'fixed', value: 100, description: 'R$ 100 de desconto' },
-    GRUPO25: {
-      type: 'fixed_price',
-      value: 1500,
-      description: 'Preço especial grupo R$ 1500',
-    },
-    APRENDA: {
-      type: 'percentage',
-      value: 10,
-      description: '10% de desconto',
-    },
-    // Time-bound 48h coupon: SOMOS1K (15%)
-    SOMOS1K: {
-      type: 'percentage',
-      value: 15,
-      description: '15% de desconto (SOMOS1K - 48h)',
-      validFrom: Date.now(),
-      validUntil: Date.now() + 48 * 60 * 60 * 1000,
-    },
-  } as Record<string, Coupon>,
-};
+// Base prices (kept as local constants)
+const REGULAR_PRICE = 1999.9;
+const PIX_PRICE = 1899.9;
 
 function isCouponActive(coupon?: Coupon): boolean {
   if (!coupon) return false;
@@ -86,17 +51,12 @@ async function getDynamicCoupon(code?: string): Promise<Coupon | undefined> {
 
 function calculateDiscountedPrice(
   originalPrice: number,
-  couponCodeOrCoupon?: string | Coupon,
+  coupon?: Coupon,
 ): {
   finalPrice: number;
   discountAmount: number;
   discountDescription: string;
 } {
-  const coupon: Coupon | undefined =
-    typeof couponCodeOrCoupon === 'string'
-      ? COUPON_CONFIG.coupons[couponCodeOrCoupon.toUpperCase()]
-      : couponCodeOrCoupon;
-
   if (!coupon || !isCouponActive(coupon)) {
     return {
       finalPrice: originalPrice,
@@ -134,6 +94,11 @@ function calculateDiscountedPrice(
 }
 
 export async function POST(req: NextRequest) {
+  // Basic per-IP rate limit (best-effort, process-local)
+  if (isRateLimited(req, 'create-checkout', 20, 60_000)) {
+    return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+  }
+
   const {
     testeId,
     userEmail,
@@ -146,22 +111,31 @@ export async function POST(req: NextRequest) {
   } = await req.json();
 
   try {
-    const REGULAR_PRICE = COUPON_CONFIG.REGULAR_PRICE;
-    const PIX_PRICE = COUPON_CONFIG.PIX_PRICE;
-
-    // Prefer dynamic Convex coupon, fallback to static
+    Sentry.addBreadcrumb({
+      message: 'Create checkout request received',
+      category: 'checkout',
+      level: 'info',
+      data: { testeId, userEmail: !!userEmail, couponCode: couponCode || '' },
+    });
+    // Fetch dynamic Convex coupon (no static fallback)
     const dynamicCoupon = await getDynamicCoupon(couponCode);
-    const effectiveCoupon = dynamicCoupon ?? couponCode;
+    Sentry.addBreadcrumb({
+      message: 'Coupon resolved',
+      category: 'checkout',
+      level: 'info',
+      data: { hasCoupon: !!dynamicCoupon },
+    });
 
     // Calculate prices with coupon discount
     const regularPricing = calculateDiscountedPrice(
       REGULAR_PRICE,
-      effectiveCoupon,
+      dynamicCoupon,
     );
-    const pixPricing = calculateDiscountedPrice(PIX_PRICE, effectiveCoupon);
+    const pixPricing = calculateDiscountedPrice(PIX_PRICE, dynamicCoupon);
 
     const preference = new Preference(mpClient);
-    const origin = req.headers.get('origin') || 'https://ortoqbank.com.br';
+    const origin =
+      process.env.NEXT_PUBLIC_SITE_URL || 'https://ortoqbank.com.br';
 
     // Create item title with coupon info if applicable
     let itemTitle = 'Ortoqbank 2025';
@@ -179,9 +153,15 @@ export async function POST(req: NextRequest) {
           testeId,
           userEmail,
           couponCode: couponCode?.toUpperCase() || undefined,
+          // Duplicate keys in snake_case to simplify webhook validation
+          coupon_code: couponCode?.toUpperCase() || undefined,
           originalPrice: REGULAR_PRICE,
           discountAmount: regularPricing.discountAmount,
           finalPrice: regularPricing.finalPrice,
+          original_price: REGULAR_PRICE,
+          discount_amount: regularPricing.discountAmount,
+          final_price: regularPricing.finalPrice,
+          currency: 'BRL',
         },
         ...(userEmail && {
           payer: {
@@ -258,6 +238,13 @@ export async function POST(req: NextRequest) {
       throw new Error('Failed to create preference');
     }
 
+    Sentry.addBreadcrumb({
+      message: 'Preference created',
+      category: 'checkout',
+      level: 'info',
+      data: { preferenceId: createdPreference.id },
+    });
+
     return NextResponse.json({
       preferenceId: createdPreference.id,
       initPoint: createdPreference.init_point,
@@ -269,6 +256,9 @@ export async function POST(req: NextRequest) {
       discountDescription: regularPricing.discountDescription,
     });
   } catch (error) {
+    Sentry.captureException(error, {
+      tags: { operation: 'create-checkout' },
+    });
     console.error('Error creating Mercado Pago preference:', error);
     return NextResponse.json(
       { error: 'Failed to create checkout preference' },
@@ -279,6 +269,11 @@ export async function POST(req: NextRequest) {
 
 // Endpoint to validate coupon codes
 export async function GET(req: NextRequest) {
+  // Basic per-IP rate limit (best-effort, process-local)
+  if (isRateLimited(req, 'validate-coupon', 60, 60_000)) {
+    return NextResponse.json({ error: 'Too Many Requests' }, { status: 429 });
+  }
+
   const { searchParams } = new URL(req.url);
   const couponCode = searchParams.get('coupon');
 
@@ -289,10 +284,9 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  // Try dynamic coupon first, then static
+  // Validate only against dynamic coupons stored in Convex
   const dynamicCoupon = await getDynamicCoupon(couponCode);
-  const staticCoupon = COUPON_CONFIG.coupons[couponCode.toUpperCase()];
-  const effectiveCoupon: Coupon | undefined = dynamicCoupon ?? staticCoupon;
+  const effectiveCoupon: Coupon | undefined = dynamicCoupon;
 
   if (!effectiveCoupon) {
     return NextResponse.json({ valid: false, message: 'Cupom inválido' });
@@ -301,14 +295,8 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ valid: false, message: 'Cupom expirado' });
   }
 
-  const regularPricing = calculateDiscountedPrice(
-    COUPON_CONFIG.REGULAR_PRICE,
-    dynamicCoupon ?? couponCode,
-  );
-  const pixPricing = calculateDiscountedPrice(
-    COUPON_CONFIG.PIX_PRICE,
-    dynamicCoupon ?? couponCode,
-  );
+  const regularPricing = calculateDiscountedPrice(REGULAR_PRICE, dynamicCoupon);
+  const pixPricing = calculateDiscountedPrice(PIX_PRICE, dynamicCoupon);
 
   return NextResponse.json({
     valid: true,
@@ -319,11 +307,52 @@ export async function GET(req: NextRequest) {
       value: effectiveCoupon.value,
     },
     pricing: {
-      originalPrice: COUPON_CONFIG.REGULAR_PRICE,
-      originalPixPrice: COUPON_CONFIG.PIX_PRICE,
+      originalPrice: REGULAR_PRICE,
+      originalPixPrice: PIX_PRICE,
       discountAmount: regularPricing.discountAmount,
       finalRegularPrice: regularPricing.finalPrice,
       finalPixPrice: pixPricing.finalPrice,
     },
   });
+}
+
+// -----------------
+// Simple per-IP rate limiter (process-local, best-effort)
+// -----------------
+const globalAny = globalThis as any;
+type WindowCounter = { count: number; resetAt: number };
+if (!globalAny.__mpRateLimit) {
+  globalAny.__mpRateLimit = new Map<string, WindowCounter>();
+}
+const RATE_MAP: Map<string, WindowCounter> = globalAny.__mpRateLimit;
+
+function getClientIp(req: NextRequest): string {
+  const xf = req.headers.get('x-forwarded-for');
+  if (xf) return xf.split(',')[0].trim();
+  const realIp = req.headers.get('x-real-ip');
+  if (realIp) return realIp;
+  return 'unknown';
+}
+
+function isRateLimited(
+  req: NextRequest,
+  routeKey: string,
+  limit: number,
+  windowMs: number,
+): boolean {
+  try {
+    const ip = getClientIp(req);
+    const key = `${routeKey}:${ip}`;
+    const now = Date.now();
+    const entry = RATE_MAP.get(key);
+    if (!entry || now > entry.resetAt) {
+      RATE_MAP.set(key, { count: 1, resetAt: now + windowMs });
+      return false;
+    }
+    if (entry.count >= limit) return true;
+    entry.count += 1;
+    return false;
+  } catch {
+    return false;
+  }
 }
