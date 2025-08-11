@@ -96,11 +96,20 @@ export default function QuizProgress({
             let buttonColorClass;
 
             if (isExamMode) {
-              // In exam mode, keep all buttons grey
-              buttonColorClass =
-                currentIndex === questionIndex
-                  ? 'ring-2 ring-offset-1 ring-blue-500 bg-gray-100'
-                  : 'bg-gray-100 text-gray-700';
+              // In exam mode, keep all buttons grey but use darker grey for answered questions
+              if (answerFeedback[questionIndex]) {
+                // Answered question - darker grey
+                buttonColorClass =
+                  currentIndex === questionIndex
+                    ? 'ring-2 ring-offset-1 ring-blue-500 bg-gray-300 text-gray-800'
+                    : 'bg-gray-300 text-gray-800';
+              } else {
+                // Unanswered question - lighter grey
+                buttonColorClass =
+                  currentIndex === questionIndex
+                    ? 'ring-2 ring-offset-1 ring-blue-500 bg-gray-100'
+                    : 'bg-gray-100 text-gray-700';
+              }
             } else {
               // In study mode, show colors based on answer feedback
               buttonColorClass =
