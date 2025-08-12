@@ -22,9 +22,14 @@ const isWebhookRoute = createRouteMatcher([
   '/api/webhooks/clerk(.*)', // ✅ Add this
 ]);
 
+// Define event routes that should bypass authentication
+const isEventRoute = createRouteMatcher([
+  '/simulado-nacional-2025(.*)',
+]);
+
 export default clerkMiddleware(async (auth, request) => {
-  // Skip authentication for webhook routes
-  if (isWebhookRoute(request)) return NextResponse.next();
+  // Skip authentication for webhook routes and event routes
+  if (isWebhookRoute(request) || isEventRoute(request)) return NextResponse.next();
 
   if (isProtectedRoute(request)) await auth.protect();
   if (
