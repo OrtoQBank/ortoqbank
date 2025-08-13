@@ -1,34 +1,71 @@
 'use client';
 
-import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from 'convex/react';
-import { api } from '../../../../convex/_generated/api';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  CheckCircle,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
+  Target,
+  Trophy,
+  Users,
+  XCircle,
+} from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useState } from 'react';
+
+import StructuredContentRenderer from '@/components/common/StructuredContentRenderer';
+import QuestionContent from '@/components/quiz/QuestionContent';
+import QuizProgressResults from '@/components/quiz/QuizProgressResults';
 import { Badge } from '@/components/ui/badge';
-import { Trophy, Clock, Target, Users, Medal, Star, Award } from 'lucide-react';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent } from '@/components/ui/card';
+import { formatDate } from '@/lib/utils';
+
+import { api } from '../../../../convex/_generated/api';
 
 const EVENT_NAME = 'simulado-nacional-2025';
+
+// Helper function for styling answers
+const getAlternativeClassName = (isUserAnswer: boolean, isCorrect: boolean) => {
+  if (isUserAnswer && isCorrect) return 'border-green-500 bg-green-50';
+  if (isUserAnswer && !isCorrect) return 'border-red-500 bg-red-50';
+  if (isCorrect) return 'border-green-500 bg-green-50';
+  return '';
+};
 
 export default function EventResultsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email');
 
+  // State for current question review
+  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
+
+  // Fetch event data
   const eventUser = useQuery(
     api.eventQuiz.getEventUser,
     email ? { email, eventName: EVENT_NAME } : 'skip',
   );
+
+  const session = useQuery(
+    api.eventQuiz.getEventQuizSession,
+    eventUser ? { eventUserId: eventUser._id, eventName: EVENT_NAME } : 'skip',
+  );
+
+  const quizData = useQuery(
+    api.eventQuiz.getEventQuizQuestions,
+    session ? { sessionId: session._id } : 'skip',
+  );
+
   const userScore = useQuery(
     api.eventQuiz.getEventUserScore,
     eventUser ? { eventUserId: eventUser._id, eventName: EVENT_NAME } : 'skip',
   );
+
   const leaderboard = useQuery(api.eventQuiz.getEventLeaderboard, {
     eventName: EVENT_NAME,
-    limit: 20,
-  });
-  const eventStats = useQuery(api.eventQuiz.getEventStats, {
-    eventName: EVENT_NAME,
+    limit: 10,
   });
 
   if (!email) {
@@ -46,22 +83,23 @@ export default function EventResultsPage() {
     );
   }
 
-  if (!eventUser) {
+  if (!eventUser || !session || !quizData || !userScore) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
-        <Card className="max-w-md">
-          <CardContent className="p-6 text-center">
-            <p className="mb-4 text-red-600">Usuário não encontrado</p>
-            <Button onClick={() => router.push('/simulado-nacional-2025')}>
-              Voltar para Inscrição
-            </Button>
-          </CardContent>
-        </Card>
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
+        <div className="container mx-auto max-w-3xl pt-16">
+          <Card>
+            <CardContent className="p-6 text-center">
+              <h1 className="mb-6 text-2xl font-bold">
+                Carregando resultados...
+              </h1>
+            </CardContent>
+          </Card>
+        </div>
       </div>
     );
   }
 
-  if (!eventUser.hasCompletedExam || !userScore) {
+  if (!eventUser.hasCompletedExam) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
         <Card className="max-w-md">
@@ -86,7 +124,27 @@ export default function EventResultsPage() {
 
   // Find user's rank in leaderboard
   const userRank = leaderboard?.findIndex(entry => entry.email === email) ?? -1;
-  const userLeaderboardEntry = userRank >= 0 ? leaderboard![userRank] : null;
+
+  // Calculate results
+  const totalQuestions = quizData.questions.length;
+  const correctAnswers = session.answerFeedback.filter(
+    (fb: { isCorrect: boolean }) => fb.isCorrect,
+  ).length;
+  const score = Math.round((correctAnswers / totalQuestions) * 100);
+
+  // Current question data for review
+  const question = quizData.questions[currentQuestionIndex];
+  const userAnswer = session.answers[currentQuestionIndex];
+  const feedback = session.answerFeedback[currentQuestionIndex];
+
+  // Simple navigation functions
+  const goToPrevious = () => {
+    setCurrentQuestionIndex(prev => Math.max(0, prev - 1));
+  };
+
+  const goToNext = () => {
+    setCurrentQuestionIndex(prev => Math.min(totalQuestions - 1, prev + 1));
+  };
 
   const formatTime = (minutes: number) => {
     const hours = Math.floor(minutes / 60);
@@ -94,56 +152,22 @@ export default function EventResultsPage() {
     return `${hours}h ${mins}m`;
   };
 
-  const getRankIcon = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return <Trophy className="h-6 w-6 text-yellow-500" />;
-      case 2:
-        return <Medal className="h-6 w-6 text-gray-400" />;
-      case 3:
-        return <Award className="h-6 w-6 text-orange-600" />;
-      default:
-        return <Star className="h-6 w-6 text-blue-500" />;
-    }
-  };
-
-  const getRankBadge = (rank: number) => {
-    switch (rank) {
-      case 1:
-        return (
-          <Badge className="bg-yellow-500 text-yellow-900">🥇 1º Lugar</Badge>
-        );
-      case 2:
-        return <Badge className="bg-gray-400 text-gray-900">🥈 2º Lugar</Badge>;
-      case 3:
-        return (
-          <Badge className="bg-orange-600 text-orange-100">🥉 3º Lugar</Badge>
-        );
-      default:
-        return <Badge variant="outline">{rank}º Lugar</Badge>;
-    }
-  };
-
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="mx-auto max-w-6xl pt-8">
-        {/* Header */}
-        <div className="mb-8 text-center">
-          <div className="mb-4 flex items-center justify-center">
-            {userRank === 0 ? (
-              <Trophy className="h-20 w-20 text-yellow-500" />
-            ) : (
-              <Target className="h-20 w-20 text-blue-500" />
-            )}
-          </div>
-          <h1 className="mb-2 text-4xl font-bold text-gray-900">
+      <div className="container mx-auto max-w-3xl rounded-lg border bg-white p-6">
+        <div className="mb-4 flex flex-col items-center justify-center">
+          <h1 className="text-2xl font-bold">
             {userRank === 0
               ? '🎉 Parabéns, Campeão!'
-              : 'Resultados do Simulado Nacional 2025'}
+              : 'Simulado Nacional 2025'}
           </h1>
-          <p className="text-xl text-gray-600">
+          <p className="text-lg text-gray-600">
             {eventUser.firstName} {eventUser.lastName}
           </p>
+          <p className="text-muted-foreground mt-1 text-sm">
+            Completado em {formatDate(session._creationTime)}
+          </p>
+
           {userRank === 0 && (
             <div className="mt-4 rounded-lg border border-yellow-300 bg-yellow-100 p-4">
               <p className="text-lg font-bold text-yellow-800">
@@ -156,230 +180,142 @@ export default function EventResultsPage() {
           )}
         </div>
 
-        <div className="mb-8 grid gap-6 lg:grid-cols-3">
-          {/* User Score Card */}
-          <div className="lg:col-span-2">
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Target className="h-5 w-5" />
-                  Seu Desempenho
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="grid gap-6 md:grid-cols-2">
-                  <div className="space-y-4">
-                    <div className="text-center">
-                      <div className="mb-2 text-4xl font-bold text-blue-600">
-                        {userScore.percentage.toFixed(1)}%
-                      </div>
-                      <p className="text-gray-600">Aproveitamento</p>
-                    </div>
+        {/* Results summary */}
+        <div className="mb-6 rounded-lg p-4">
+          <div className="flex items-center justify-center gap-8">
+            <div className="flex flex-col items-center">
+              <CheckCircle className="h-8 w-8 text-green-500" />
+              <span className="mt-1 font-medium">{correctAnswers}</span>
+              <span className="text-muted-foreground text-sm">Corretas</span>
+            </div>
 
-                    <div className="grid grid-cols-2 gap-4 text-center">
-                      <div>
-                        <div className="text-2xl font-bold text-green-600">
-                          {userScore.score}
-                        </div>
-                        <p className="text-sm text-gray-600">Acertos</p>
-                      </div>
-                      <div>
-                        <div className="text-2xl font-bold text-red-600">
-                          {userScore.totalQuestions - userScore.score}
-                        </div>
-                        <p className="text-sm text-gray-600">Erros</p>
-                      </div>
-                    </div>
-                  </div>
+            <div className="flex flex-col items-center">
+              <XCircle className="h-8 w-8 text-red-500" />
+              <span className="mt-1 font-medium">
+                {totalQuestions - correctAnswers}
+              </span>
+              <span className="text-muted-foreground text-sm">Incorretas</span>
+            </div>
 
-                  <div className="space-y-4">
-                    <div className="flex items-center justify-between rounded-lg bg-gray-50 p-3">
-                      <span className="text-sm font-medium">
-                        Questões totais:
-                      </span>
-                      <span className="font-bold">
-                        {userScore.totalQuestions}
-                      </span>
-                    </div>
-
-                    <div className="flex items-center justify-between rounded-lg bg-gray-50 p-3">
-                      <span className="flex items-center gap-1 text-sm font-medium">
-                        <Clock className="h-4 w-4" />
-                        Tempo utilizado:
-                      </span>
-                      <span className="font-bold">
-                        {formatTime(userScore.timeSpentMinutes)}
-                      </span>
-                    </div>
-
-                    {userLeaderboardEntry && (
-                      <div className="flex items-center justify-between rounded-lg bg-blue-50 p-3">
-                        <span className="text-sm font-medium">
-                          Sua classificação:
-                        </span>
-                        <div className="flex items-center gap-2">
-                          {getRankIcon(userRank + 1)}
-                          {getRankBadge(userRank + 1)}
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
+            <div className="flex flex-col items-center">
+              <div className="flex items-center justify-center rounded-full text-2xl font-bold">
+                {score}%
+              </div>
+              <span className="mt-1">&nbsp;</span>
+              <span className="text-muted-foreground text-sm">Pontuação</span>
+            </div>
           </div>
 
-          {/* Event Stats */}
-          <div>
-            <Card>
-              <CardHeader>
-                <CardTitle className="flex items-center gap-2">
-                  <Users className="h-5 w-5" />
-                  Estatísticas do Evento
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                {eventStats ? (
-                  <div className="space-y-4">
-                    <div className="text-center">
-                      <div className="text-2xl font-bold text-blue-600">
-                        {eventStats.totalRegistered}
-                      </div>
-                      <p className="text-sm text-gray-600">
-                        Participantes inscritos
-                      </p>
-                    </div>
-
-                    <div className="space-y-2 text-sm">
-                      <div className="flex justify-between">
-                        <span>Finalizaram:</span>
-                        <span className="font-medium">
-                          {eventStats.totalCompleted}
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Taxa de conclusão:</span>
-                        <span className="font-medium">
-                          {eventStats.completionRate.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Média geral:</span>
-                        <span className="font-medium">
-                          {eventStats.averageScore.toFixed(1)}%
-                        </span>
-                      </div>
-                      <div className="flex justify-between">
-                        <span>Tempo médio:</span>
-                        <span className="font-medium">
-                          {formatTime(eventStats.averageTimeMinutes)}
-                        </span>
-                      </div>
-                    </div>
-                  </div>
-                ) : (
-                  <div>Carregando estatísticas...</div>
-                )}
-              </CardContent>
-            </Card>
-          </div>
+          {userRank >= 0 && (
+            <div className="mt-4 text-center">
+              <Badge variant={userRank < 3 ? 'default' : 'outline'}>
+                #{userRank + 1} no ranking geral
+              </Badge>
+            </div>
+          )}
         </div>
 
-        {/* Leaderboard */}
-        <Card>
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Trophy className="h-5 w-5" />
-              Classificação Geral
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {leaderboard ? (
-              <div className="space-y-2">
-                {leaderboard.map((entry, index) => (
-                  <div
-                    key={index}
-                    className={`flex items-center justify-between rounded-lg p-4 transition-colors ${
-                      entry.email === email
-                        ? 'border-2 border-blue-300 bg-blue-100'
-                        : 'bg-gray-50 hover:bg-gray-100'
-                    }`}
-                  >
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        {getRankIcon(entry.rank)}
-                        <span className="text-lg font-bold">#{entry.rank}</span>
-                      </div>
+        {/* Question Navigator (using QuizProgressResults) */}
+        <div className="mb-6">
+          <QuizProgressResults
+            currentIndex={currentQuestionIndex}
+            totalQuestions={totalQuestions}
+            onNavigate={setCurrentQuestionIndex}
+            answerFeedback={session.answerFeedback}
+            visibleCount={10} // Show more questions at once for review
+          />
+        </div>
 
-                      <div>
-                        <div className="font-medium">
-                          {entry.name}
-                          {entry.email === email && (
-                            <Badge variant="outline" className="ml-2">
-                              Você
-                            </Badge>
-                          )}
-                          {entry.isWinner && (
-                            <Badge className="ml-2 bg-yellow-500 text-yellow-900">
-                              VENCEDOR
-                            </Badge>
-                          )}
-                        </div>
-                        {entry.university && (
-                          <div className="text-sm text-gray-600">
-                            {entry.university}
-                          </div>
-                        )}
-                      </div>
-                    </div>
+        {/* Question content */}
+        <div className="my-6 border-t p-4">
+          <h3 className="text-md my-4 font-medium">
+            Questão {currentQuestionIndex + 1}
+          </h3>
 
-                    <div className="text-right">
-                      <div className="text-lg font-bold">
-                        {entry.percentage.toFixed(1)}%
-                      </div>
-                      <div className="text-sm text-gray-600">
-                        {entry.score}/{entry.totalQuestions} •{' '}
-                        {formatTime(entry.timeSpentMinutes)}
-                      </div>
-                    </div>
+          <QuestionContent stringContent={question.questionTextString} />
+
+          <div className="mt-4 space-y-2">
+            {question.alternatives.map((alternative, i) => {
+              const isCorrect = i === feedback?.correctAlternative;
+              const isUserAnswer = i === userAnswer;
+
+              return (
+                <div
+                  key={i}
+                  className={`flex items-center rounded-lg border p-3 ${getAlternativeClassName(
+                    isUserAnswer,
+                    isCorrect,
+                  )}`}
+                >
+                  <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full border">
+                    {String.fromCodePoint(65 + i)}
                   </div>
-                ))}
-
-                {leaderboard.length === 0 && (
-                  <div className="py-8 text-center text-gray-500">
-                    Nenhum resultado disponível ainda.
-                  </div>
-                )}
-              </div>
-            ) : (
-              <div className="py-8 text-center">
-                <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-blue-600"></div>
-                <p>Carregando classificação...</p>
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {/* Actions */}
-        <div className="mt-8 space-y-4 text-center">
-          <div className="flex flex-col justify-center gap-4 sm:flex-row">
-            <Button
-              variant="outline"
-              onClick={() => router.push('/simulado-nacional-2025')}
-            >
-              Voltar ao Início
-            </Button>
-
-            <Button onClick={() => window.location.reload()}>
-              Atualizar Resultados
-            </Button>
+                  <div>{alternative}</div>
+                </div>
+              );
+            })}
           </div>
 
-          <p className="mx-auto max-w-2xl text-sm text-gray-600">
-            Os resultados são atualizados em tempo real. O vencedor será
-            contactado pelos dados fornecidos no cadastro para receber o prêmio
-            de 1 ano gratuito do aplicativo.
-          </p>
+          {/* Feedback */}
+          {feedback && (
+            <div
+              className={`mt-4 rounded-md p-3 ${
+                feedback.isCorrect
+                  ? 'border-green-500 bg-green-50'
+                  : 'border-red-500 bg-red-50'
+              }`}
+            >
+              <div className="font-medium">
+                {feedback.isCorrect
+                  ? 'Resposta Correta!'
+                  : 'Resposta Incorreta'}
+              </div>
+              {feedback.explanation && (
+                <div className="mt-2">
+                  <div className="text-sm font-medium">Explicação:</div>
+                  <div className="mt-1 text-sm">
+                    <StructuredContentRenderer
+                      stringContent={
+                        typeof feedback.explanation === 'string'
+                          ? feedback.explanation
+                          : JSON.stringify(feedback.explanation)
+                      }
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* Navigation buttons */}
+        <div className="flex justify-between">
+          <Button
+            onClick={goToPrevious}
+            disabled={currentQuestionIndex === 0}
+            variant="outline"
+            size="sm"
+          >
+            <ChevronLeft className="mr-1 h-4 w-4" /> Anterior
+          </Button>
+
+          <Button
+            onClick={goToNext}
+            disabled={currentQuestionIndex === totalQuestions - 1}
+            variant="outline"
+            size="sm"
+          >
+            Próxima <ChevronRight className="ml-1 h-4 w-4" />
+          </Button>
+        </div>
+
+        <div className="mt-8 flex justify-center">
+          <Button
+            variant="outline"
+            onClick={() => router.push('/simulado-nacional-2025')}
+          >
+            Voltar ao Início
+          </Button>
         </div>
       </div>
     </div>

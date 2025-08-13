@@ -1,18 +1,21 @@
 'use client';
 
 import { useMutation, useQuery } from 'convex/react';
-import { AlertTriangle, CheckCircle, Clock } from 'lucide-react';
+import { AlertTriangle, CheckCircle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
+import BookmarkButton from '@/components/common/BookmarkButton';
+import QuestionContent from '@/components/quiz/QuestionContent';
+import QuizAlternatives from '@/components/quiz/QuizAlternatives';
+import QuizFeedback from '@/components/quiz/QuizFeedback';
+import QuizNavigation from '@/components/quiz/QuizNavigation';
+import QuizProgress from '@/components/quiz/QuizProgress';
 import { AlternativeIndex } from '@/components/quiz/types';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
 
 import { api } from '../../../../convex/_generated/api';
-import EventQuestionContent from '../components/EventQuestionContent';
-import EventQuizAlternatives from '../components/EventQuizAlternatives';
 import EventTimer from '../components/EventTimer';
 import { useEventSession } from '../hooks/useEventSession';
 
@@ -22,19 +25,6 @@ export default function EventQuizPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const email = searchParams.get('email');
-
-  // Use event session hook
-  const eventSession = useEventSession(EVENT_NAME);
-
-  const [currentQuestionIndex, setCurrentQuestionIndex] = useState(0);
-  const [selectedAlternative, setSelectedAlternative] = useState<
-    AlternativeIndex | undefined
-  >();
-  const [answeredQuestions, setAnsweredQuestions] = useState<Set<number>>(
-    new Set(),
-  );
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  const [showConfirmFinish, setShowConfirmFinish] = useState(false);
 
   // Queries and mutations
   const eventUser = useQuery(
@@ -54,18 +44,13 @@ export default function EventQuizPage() {
   const submitAnswer = useMutation(api.eventQuiz.submitEventQuizAnswer);
   const completeQuiz = useMutation(api.eventQuiz.completeEventQuiz);
 
-  // Redirect if no email or create session
+  // Redirect if no email
   useEffect(() => {
     if (!email) {
       router.push('/simulado-nacional-2025');
       return;
     }
-
-    // Create session if none exists
-    if (!eventSession.isLoading && !eventSession.session) {
-      eventSession.createSession(email);
-    }
-  }, [email, router, eventSession]);
+  }, [email, router]);
 
   // Auto-start quiz if user doesn't have a session
   useEffect(() => {
@@ -87,92 +72,21 @@ export default function EventQuizPage() {
     autoStartQuiz();
   }, [eventUser, session, startQuiz]);
 
-  // Load previous answers
-  useEffect(() => {
-    if (session && session.answers) {
-      const answered = new Set<number>();
-      session.answers.forEach((answer, index) => {
-        if (answer !== undefined) answered.add(index);
-      });
-      setAnsweredQuestions(answered);
-
-      // Set current question to first unanswered or last question
-      const firstUnanswered = session.answers.findIndex(
-        (answer, index) =>
-          answer === undefined && index < session.questions.length,
-      );
-      setCurrentQuestionIndex(
-        firstUnanswered === -1
-          ? Math.min(session.currentQuestionIndex, session.questions.length - 1)
-          : firstUnanswered,
-      );
-    }
-  }, [session]);
-
-  // Load selected answer for current question
-  useEffect(() => {
-    if (
-      session &&
-      session.answers &&
-      session.answers[currentQuestionIndex] !== undefined
-    ) {
-      setSelectedAlternative(
-        session.answers[currentQuestionIndex] as AlternativeIndex,
-      );
-    } else {
-      setSelectedAlternative(undefined);
-    }
-  }, [currentQuestionIndex, session]);
-
-  const handleSubmitAnswer = async () => {
-    if (selectedAlternative === undefined || !session) return;
-
-    setIsSubmitting(true);
-    try {
-      await submitAnswer({
-        sessionId: session._id,
-        questionIndex: currentQuestionIndex,
-        selectedAlternative,
-      });
-
-      setAnsweredQuestions(prev => new Set([...prev, currentQuestionIndex]));
-
-      // Move to next unanswered question
-      const nextUnanswered = session.questions.findIndex(
-        (_, index) =>
-          index > currentQuestionIndex && !answeredQuestions.has(index),
-      );
-
-      if (nextUnanswered === -1) {
-        // All questions answered, go to next question or stay at last
-        setCurrentQuestionIndex(
-          Math.min(currentQuestionIndex + 1, session.questions.length - 1),
-        );
-      } else {
-        setCurrentQuestionIndex(nextUnanswered);
-      }
-    } catch (error: any) {
-      alert(error.message || 'Erro ao enviar resposta');
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleFinishExam = async () => {
+  const handleTimeExpired = async () => {
     if (!session) return;
 
     try {
-      const result = await completeQuiz({ sessionId: session._id });
+      await completeQuiz({ sessionId: session._id });
       router.push(
         `/simulado-nacional-2025/results?email=${encodeURIComponent(email!)}`,
       );
     } catch (error: any) {
-      alert(error.message || 'Erro ao finalizar exame');
+      console.error('Error completing quiz on time expiry:', error);
+      // Still navigate to results even if completion fails
+      router.push(
+        `/simulado-nacional-2025/results?email=${encodeURIComponent(email!)}`,
+      );
     }
-  };
-
-  const handleTimeExpired = () => {
-    handleFinishExam();
   };
 
   if (!email) {
@@ -255,198 +169,211 @@ export default function EventQuizPage() {
     );
   }
 
-  const currentQuestion = quizData.questions[currentQuestionIndex];
-  const totalQuestions = quizData.questions.length;
-  const answeredCount = answeredQuestions.size;
-  const isLastQuestion = currentQuestionIndex === totalQuestions - 1;
-
+  // Render the quiz using the same pattern as Quiz.tsx
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 p-4">
-      <div className="mx-auto max-w-4xl">
-        {/* Header */}
-        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-            <div>
-              <h1 className="text-xl font-bold text-gray-900">
-                Simulado Nacional 2025
-              </h1>
-              <p className="text-sm text-gray-600">
-                Questão {currentQuestionIndex + 1} de {totalQuestions} •
-                {answeredCount} respondidas
-              </p>
-            </div>
-
-            <div className="flex items-center gap-4">
-              <EventTimer
-                expiresAt={session.expiresAt}
-                onExpired={handleTimeExpired}
-              />
-              <Badge
-                variant={
-                  answeredCount === totalQuestions ? 'default' : 'secondary'
-                }
-              >
-                {Math.round((answeredCount / totalQuestions) * 100)}% completo
-              </Badge>
-            </div>
-          </div>
-        </div>
-
-        {/* Progress Bar */}
-        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
-          <div className="mb-2 flex items-center justify-between">
-            <span className="text-sm font-medium">Progresso</span>
-            <span className="text-sm text-gray-600">
-              {answeredCount}/{totalQuestions}
-            </span>
-          </div>
-          <div className="h-2 w-full rounded-full bg-gray-200">
-            <div
-              className="h-2 rounded-full bg-blue-600 transition-all duration-300"
-              style={{ width: `${(answeredCount / totalQuestions) * 100}%` }}
-            />
-          </div>
-        </div>
-
-        {/* Question Navigation */}
-        <div className="mb-6 rounded-lg bg-white p-4 shadow-sm">
-          <div className="flex flex-wrap gap-2">
-            {quizData.questions.map((_, index) => (
-              <button
-                key={index}
-                onClick={() => setCurrentQuestionIndex(index)}
-                className={`h-10 w-10 rounded-lg text-sm font-medium transition-colors ${
-                  index === currentQuestionIndex
-                    ? 'bg-blue-600 text-white'
-                    : answeredQuestions.has(index)
-                      ? 'bg-green-100 text-green-800 hover:bg-green-200'
-                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {index + 1}
-              </button>
-            ))}
-          </div>
-        </div>
-
-        {/* Question Card */}
-        <Card className="mb-6">
-          <CardHeader>
-            <CardTitle className="flex items-center justify-between">
-              <span>Questão {currentQuestionIndex + 1}</span>
-              {currentQuestion.questionCode && (
-                <Badge variant="outline">
-                  Código: {currentQuestion.questionCode}
-                </Badge>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <EventQuestionContent
-              stringContent={currentQuestion.questionTextString}
-            />
-
-            <EventQuizAlternatives
-              alternatives={currentQuestion.alternatives}
-              selectedAlternative={selectedAlternative}
-              onSelect={setSelectedAlternative}
-              disabled={false}
-              showFeedback={false}
-            />
-          </CardContent>
-        </Card>
-
-        {/* Actions */}
-        <div className="rounded-lg bg-white p-4 shadow-sm">
-          <div className="flex flex-col gap-4 md:flex-row md:justify-between">
-            <div className="flex gap-2">
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setCurrentQuestionIndex(Math.max(0, currentQuestionIndex - 1))
-                }
-                disabled={currentQuestionIndex === 0}
-              >
-                Anterior
-              </Button>
-              <Button
-                variant="outline"
-                onClick={() =>
-                  setCurrentQuestionIndex(
-                    Math.min(totalQuestions - 1, currentQuestionIndex + 1),
-                  )
-                }
-                disabled={currentQuestionIndex === totalQuestions - 1}
-              >
-                Próxima
-              </Button>
-            </div>
-
-            <div className="flex gap-2">
-              {answeredQuestions.has(currentQuestionIndex) ? (
-                <Button
-                  variant="outline"
-                  onClick={handleSubmitAnswer}
-                  disabled={selectedAlternative === undefined || isSubmitting}
-                >
-                  {isSubmitting ? 'Salvando...' : 'Alterar Resposta'}
-                </Button>
-              ) : (
-                <Button
-                  onClick={handleSubmitAnswer}
-                  disabled={selectedAlternative === undefined || isSubmitting}
-                >
-                  {isSubmitting ? 'Salvando...' : 'Responder'}
-                </Button>
-              )}
-
-              {answeredCount === totalQuestions && (
-                <Button
-                  variant="default"
-                  onClick={() => setShowConfirmFinish(true)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  Finalizar Exame
-                </Button>
-              )}
-            </div>
-          </div>
-        </div>
-
-        {/* Finish Confirmation Dialog */}
-        {showConfirmFinish && (
-          <div className="bg-opacity-50 fixed inset-0 z-50 flex items-center justify-center bg-black p-4">
-            <Card className="max-w-md">
-              <CardHeader>
-                <CardTitle>Finalizar Exame</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <p className="mb-4">
-                  Tem certeza que deseja finalizar o exame? Esta ação não pode
-                  ser desfeita.
-                </p>
-                <p className="mb-6 text-sm text-gray-600">
-                  Você respondeu {answeredCount} de {totalQuestions} questões.
-                </p>
-                <div className="flex justify-end gap-2">
-                  <Button
-                    variant="outline"
-                    onClick={() => setShowConfirmFinish(false)}
-                  >
-                    Cancelar
-                  </Button>
-                  <Button
-                    onClick={handleFinishExam}
-                    className="bg-green-600 hover:bg-green-700"
-                  >
-                    Confirmar
-                  </Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-        )}
+      <div className="mb-6 flex items-center justify-center">
+        <EventTimer
+          expiresAt={session.expiresAt}
+          onExpired={handleTimeExpired}
+        />
       </div>
+      <EventQuizStepper
+        session={session}
+        quizData={quizData}
+        eventUser={eventUser}
+        submitAnswer={submitAnswer}
+        completeQuiz={completeQuiz}
+        router={router}
+        email={email}
+      />
+    </div>
+  );
+}
+
+function EventQuizStepper({
+  session,
+  quizData,
+  eventUser,
+  submitAnswer,
+  completeQuiz,
+  router,
+  email,
+}: {
+  session: NonNullable<ReturnType<typeof useQuery>>;
+  quizData: NonNullable<ReturnType<typeof useQuery>>;
+  eventUser: NonNullable<ReturnType<typeof useQuery>>;
+  submitAnswer: ReturnType<typeof useMutation>;
+  completeQuiz: ReturnType<typeof useMutation>;
+  router: ReturnType<typeof useRouter>;
+  email: string;
+}) {
+  const [isLoading, setIsLoading] = useState(false);
+  const [selectedAlternative, setSelectedAlternative] = useState<
+    AlternativeIndex | undefined
+  >();
+  const [feedback, setFeedback] = useState<
+    | {
+        isCorrect: boolean;
+        message: string;
+        explanation?: string;
+        answered: boolean;
+        correctAlternative?: AlternativeIndex;
+      }
+    | undefined
+  >();
+
+  // Current question index - in exam mode it's from progress
+  const currentStepIndex = Math.min(
+    session.currentQuestionIndex,
+    quizData.questions.length - 1,
+  );
+
+  useEffect(() => {
+    const historicalAnswer = session.answers[currentStepIndex];
+    const historicalFeedback = session.answerFeedback?.[currentStepIndex];
+
+    if (historicalAnswer !== undefined && historicalFeedback) {
+      setSelectedAlternative(historicalAnswer as AlternativeIndex);
+      setFeedback({
+        isCorrect: historicalFeedback.isCorrect,
+        message: historicalFeedback.isCorrect ? 'Correto!' : 'Incorreto',
+        explanation:
+          typeof historicalFeedback.explanation === 'string'
+            ? historicalFeedback.explanation
+            : JSON.stringify(historicalFeedback.explanation),
+        answered: true,
+        correctAlternative:
+          historicalFeedback.correctAlternative as AlternativeIndex,
+      });
+    } else {
+      setSelectedAlternative(undefined);
+      setFeedback(undefined);
+    }
+  }, [currentStepIndex, session.answers, session.answerFeedback]);
+
+  const handleAnswerSubmit = async () => {
+    if (selectedAlternative === undefined) return;
+
+    setIsLoading(true);
+    try {
+      if (!session.isComplete) {
+        await submitAnswer({
+          sessionId: session._id,
+          questionIndex: currentStepIndex,
+          selectedAlternative,
+        });
+      }
+
+      // Check if this was the last question in exam mode
+      if (currentStepIndex === quizData.questions.length - 1) {
+        await handleComplete();
+      }
+    } catch (error) {
+      console.error('Error submitting answer:', error);
+
+      // If we're on the last question, still try to navigate to results
+      if (currentStepIndex === quizData.questions.length - 1) {
+        router.push(
+          `/simulado-nacional-2025/results?email=${encodeURIComponent(email)}`,
+        );
+      }
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const currentQuestion = quizData.questions[currentStepIndex];
+
+  const handleComplete = async () => {
+    try {
+      if (
+        session &&
+        !session.isComplete &&
+        session.answers &&
+        session.answers.length > 0
+      ) {
+        try {
+          await completeQuiz({ sessionId: session._id });
+        } catch (error) {
+          console.error('Error completing quiz (non-blocking):', error);
+        }
+      }
+
+      router.push(
+        `/simulado-nacional-2025/results?email=${encodeURIComponent(email)}`,
+      );
+    } catch (error) {
+      console.error('Error in handleComplete:', error);
+      router.push(
+        `/simulado-nacional-2025/results?email=${encodeURIComponent(email)}`,
+      );
+    }
+  };
+
+  return (
+    <div className="container mx-auto mt-6 max-w-3xl rounded-3xl border bg-white p-6 md:mt-16">
+      <div className="mb-6 flex items-center justify-between">
+        <div>
+          <QuizProgress
+            currentIndex={currentStepIndex}
+            totalQuestions={quizData.questions.length}
+            mode="exam"
+            answerFeedback={session.answerFeedback}
+            onNavigate={undefined} // Disabled in exam mode
+          />
+        </div>
+
+        <div className="flex flex-col items-center">
+          <div className="flex items-center">
+            <BookmarkButton
+              questionId={currentQuestion._id}
+              isBookmarked={false} // Event quiz doesn't use bookmarks
+            />
+          </div>
+          {currentQuestion.questionCode && (
+            <span className="text-muted-foreground text-xs opacity-70">
+              Código: {currentQuestion.questionCode}
+            </span>
+          )}
+        </div>
+      </div>
+
+      <div className="my-6">
+        <QuestionContent stringContent={currentQuestion.questionTextString} />
+        <QuizAlternatives
+          alternatives={currentQuestion.alternatives || []}
+          selectedAlternative={selectedAlternative}
+          onSelect={i => setSelectedAlternative(i)}
+          disabled={!!feedback?.answered}
+          showFeedback={!!feedback?.answered} // Show feedback based on answered state
+          correctAlternative={feedback?.correctAlternative}
+        />
+      </div>
+
+      {feedback && (
+        <QuizFeedback
+          isCorrect={feedback.isCorrect}
+          message={feedback.message}
+          explanation={feedback.explanation}
+        />
+      )}
+
+      <QuizNavigation
+        mode="exam"
+        isFirst={currentStepIndex === 0}
+        isLast={currentStepIndex === quizData.questions.length - 1}
+        hasAnswered={!!feedback?.answered}
+        hasSelectedOption={selectedAlternative !== undefined}
+        isLoading={isLoading}
+        onPrevious={() => {}} // Disabled in exam mode
+        onNext={
+          currentStepIndex === quizData.questions.length - 1
+            ? handleComplete
+            : () => {}
+        }
+        onSubmit={handleAnswerSubmit}
+      />
     </div>
   );
 }
