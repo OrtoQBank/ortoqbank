@@ -207,4 +207,95 @@ export default defineSchema({
     validFrom: v.optional(v.number()), // epoch ms
     validUntil: v.optional(v.number()), // epoch ms
   }).index('by_code', ['code']),
+
+  // Event tables for special weekend exams (simulado-nacional-2025)
+  eventUsers: defineTable({
+    email: v.string(),
+    firstName: v.string(),
+    lastName: v.string(),
+    phone: v.optional(v.string()),
+    university: v.optional(v.string()),
+    graduationYear: v.optional(v.number()),
+    city: v.optional(v.string()),
+    state: v.optional(v.string()),
+    socialMedia: v.optional(
+      v.object({
+        instagram: v.optional(v.string()),
+        linkedin: v.optional(v.string()),
+        whatsapp: v.optional(v.string()),
+      }),
+    ),
+    eventName: v.string(), // "simulado-nacional-2025"
+    registeredAt: v.number(),
+    hasStartedExam: v.optional(v.boolean()),
+    examStartedAt: v.optional(v.number()),
+    hasCompletedExam: v.optional(v.boolean()),
+    examCompletedAt: v.optional(v.number()),
+  })
+    .index('by_email_event', ['email', 'eventName'])
+    .index('by_event', ['eventName'])
+    .index('by_completed', ['eventName', 'hasCompletedExam']),
+
+  eventScores: defineTable({
+    eventUserId: v.id('eventUsers'),
+    eventName: v.string(), // "simulado-nacional-2025"
+    score: v.number(), // Number of correct answers
+    totalQuestions: v.number(),
+    percentage: v.number(), // score/totalQuestions * 100
+    timeSpentMinutes: v.number(), // Time taken in minutes
+    answers: v.array(v.number()), // User's answers
+    questionIds: v.array(v.id('eventQuestions')), // Questions in the exam (now eventQuestions)
+    completedAt: v.number(),
+    isWinner: v.optional(v.boolean()), // To mark the winner
+  })
+    .index('by_event_score', ['eventName', 'score'])
+    .index('by_event_time', ['eventName', 'timeSpentMinutes'])
+    .index('by_event_user', ['eventUserId', 'eventName'])
+    .index('by_event_leaderboard', [
+      'eventName',
+      'percentage',
+      'timeSpentMinutes',
+    ]),
+
+  // Event-specific questions (isolated from main app)
+  eventQuestions: defineTable({
+    eventName: v.string(), // "simulado-nacional-2025"
+    title: v.string(),
+    questionTextString: v.string(),
+    explanationTextString: v.string(),
+    alternatives: v.array(v.string()),
+    correctAlternativeIndex: v.number(),
+    questionCode: v.optional(v.string()),
+    themeId: v.optional(v.id('themes')), // Reference to main theme if needed
+    difficulty: v.optional(
+      v.union(v.literal('easy'), v.literal('medium'), v.literal('hard')),
+    ),
+    tags: v.optional(v.array(v.string())),
+    isActive: v.optional(v.boolean()), // Can disable questions
+  })
+    .index('by_event', ['eventName'])
+    .index('by_event_active', ['eventName', 'isActive'])
+    .searchIndex('search_by_title', { searchField: 'title' }),
+
+  eventQuizSessions: defineTable({
+    eventUserId: v.id('eventUsers'),
+    eventName: v.string(),
+    questions: v.array(v.id('eventQuestions')), // Now references eventQuestions
+    currentQuestionIndex: v.number(),
+    answers: v.array(v.number()),
+    answerFeedback: v.array(
+      v.object({
+        isCorrect: v.boolean(),
+        explanation: v.string(),
+        correctAlternative: v.optional(v.number()),
+      }),
+    ),
+    startedAt: v.number(),
+    expiresAt: v.number(), // 4 hours from start
+    isComplete: v.boolean(),
+    isExpired: v.optional(v.boolean()),
+  })
+    .index('by_event_user', ['eventUserId', 'eventName'])
+    .index('by_expiry', ['expiresAt'])
+    .index('by_event_active', ['eventName', 'isComplete']),
 });
