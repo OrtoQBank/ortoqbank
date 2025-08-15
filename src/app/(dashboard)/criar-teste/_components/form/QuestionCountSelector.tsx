@@ -1,6 +1,9 @@
 'use client';
 
 import { InfoIcon as InfoCircle } from 'lucide-react';
+import { memo } from 'react';
+import { Control, useWatch } from 'react-hook-form';
+import { TestFormData } from '../schema';
 
 import { Input } from '@/components/ui/input';
 import {
@@ -10,16 +13,17 @@ import {
 } from '@/components/ui/popover';
 
 type QuestionCountSelectorProps = {
-  value: number;
+  control: Control<TestFormData>;
   onChange: (value: number) => void;
   error?: string;
 };
 
-export function QuestionCountSelector({
-  value,
+export const QuestionCountSelector = memo(function QuestionCountSelector({
+  control,
   onChange,
   error,
 }: QuestionCountSelectorProps) {
+  const value = useWatch({ control, name: 'numQuestions' });
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-2">
@@ -65,4 +69,4 @@ export function QuestionCountSelector({
       {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
-}
+});

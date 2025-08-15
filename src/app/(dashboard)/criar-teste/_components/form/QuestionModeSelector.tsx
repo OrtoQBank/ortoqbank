@@ -1,7 +1,9 @@
 'use client';
 
 import { InfoIcon as InfoCircle } from 'lucide-react';
-import { useMemo } from 'react';
+import { useMemo, memo } from 'react';
+import { Control, useWatch } from 'react-hook-form';
+import { TestFormData } from '../schema';
 
 import { Label } from '@/components/ui/label';
 import {
@@ -14,24 +16,19 @@ import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { useFormContext } from '../context/FormContext';
 
 type QuestionModeSelectorProps = {
-  value: string;
+  control: Control<TestFormData>;
   onChange: (value: 'all' | 'incorrect' | 'unanswered' | 'bookmarked') => void;
   error?: string;
-  selectedThemes: string[];
-  selectedSubthemes: string[];
-  selectedGroups: string[];
 };
 
 type ModeKey = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
 
-export function QuestionModeSelector({
-  value,
+export const QuestionModeSelector = memo(function QuestionModeSelector({
+  control,
   onChange,
   error,
-  selectedThemes,
-  selectedSubthemes,
-  selectedGroups,
 }: QuestionModeSelectorProps) {
+  const value = useWatch({ control, name: 'questionMode' });
   const { isLoading, calculateQuestionCounts } = useFormContext();
 
   // Memoized counts calculation (global counts - don't change with selections)
@@ -87,4 +84,4 @@ export function QuestionModeSelector({
       {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
-}
+});
