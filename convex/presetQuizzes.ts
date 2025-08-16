@@ -42,6 +42,31 @@ export const list = query({
   },
 });
 
+// Optimized query that returns trilhas filtered and sorted
+export const listTrilhasSorted = query({
+  handler: async ctx => {
+    const quizzes = await ctx.db.query('presetQuizzes').collect();
+
+    // Filter for trilhas and sort by displayOrder, then name
+    const trilhas = quizzes
+      .filter(quiz => quiz.category === 'trilha')
+      .sort((a, b) => {
+        if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+          return a.displayOrder - b.displayOrder;
+        }
+        if (a.displayOrder === undefined && b.displayOrder === undefined) {
+          return a.name.localeCompare(b.name);
+        }
+        // a.displayOrder is undefined, b.displayOrder is defined -> a goes after b
+        if (a.displayOrder === undefined) return 1;
+        // a.displayOrder is defined, b.displayOrder is undefined -> a goes before b
+        return -1;
+      });
+
+    return trilhas;
+  },
+});
+
 export const addQuestion = mutation({
   args: {
     quizId: v.id('presetQuizzes'),
