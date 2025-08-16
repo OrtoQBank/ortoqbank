@@ -11,6 +11,28 @@ export const list = query({
   },
 });
 
+// Optimized query that returns themes sorted by displayOrder, then name
+export const listSorted = query({
+  args: {},
+  handler: async context => {
+    const themes = await context.db.query('themes').collect();
+
+    // Sort themes: displayOrder first (undefined goes last), then alphabetically by name
+    return themes.sort((a, b) => {
+      if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+        return a.displayOrder - b.displayOrder;
+      }
+      if (a.displayOrder === undefined && b.displayOrder === undefined) {
+        return a.name.localeCompare(b.name);
+      }
+      // a.displayOrder is undefined, b.displayOrder is defined -> a goes after b
+      if (a.displayOrder === undefined) return 1;
+      // a.displayOrder is defined, b.displayOrder is undefined -> a goes before b
+      return -1;
+    });
+  },
+});
+
 export const getById = query({
   args: { id: v.id('themes') },
   handler: async (context, { id }) => {

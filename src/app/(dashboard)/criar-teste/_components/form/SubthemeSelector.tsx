@@ -2,7 +2,8 @@
 
 import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useCallback, useMemo, useState } from 'react';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { type Control, useWatch } from 'react-hook-form';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -10,19 +11,17 @@ import { Label } from '@/components/ui/label';
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useFormContext } from '../context/FormContext';
+import { TestFormData } from '../schema';
 
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };
 type Group = { _id: string; name: string; subthemeId: string };
 
 type SubthemeSelectorProps = {
+  control: Control<TestFormData>;
   themes: Theme[];
   subthemes: Subtheme[];
   groups: Group[];
-  selectedThemes: string[];
-  selectedSubthemes: string[];
-  selectedGroups: string[];
-  questionMode: string;
   onToggleSubtheme: (subthemeId: string) => void;
   onToggleGroup: (groupId: string) => void;
   onToggleMultipleGroups?: (groupIds: string[]) => void;
@@ -209,18 +208,21 @@ function UnansweredGroupCount({ groupId }: { groupId: string }) {
   );
 }
 
-export function SubthemeSelector({
+export const SubthemeSelector = memo(function SubthemeSelector({
+  control,
   themes,
   subthemes,
   groups,
-  selectedThemes,
-  selectedSubthemes,
-  selectedGroups,
-  questionMode,
   onToggleSubtheme,
   onToggleGroup,
   onToggleMultipleGroups,
 }: SubthemeSelectorProps) {
+  const selectedThemes = useWatch({ control, name: 'selectedThemes' });
+  const selectedSubthemes = useWatch({ control, name: 'selectedSubthemes' });
+  const selectedGroups = useWatch({ control, name: 'selectedGroups' });
+  const questionMode = useWatch({ control, name: 'questionMode' });
+
+  // All hooks must be called before any conditional returns
   const [expandedSubthemes, setExpandedSubthemes] = useState<string[]>([]);
 
   // Memoize theme to subthemes mapping
@@ -420,10 +422,15 @@ export function SubthemeSelector({
     });
   }, [selectedThemes, themes, themeSubthemes, SubthemeItem, questionMode]);
 
+  // Conditional rendering AFTER all hooks are called
+  if (!selectedThemes || selectedThemes.length === 0) {
+    return null;
+  }
+
   return (
     <div className="space-y-6">
       <h3 className="text-sm font-medium">Subtemas</h3>
       {themeComponents}
     </div>
   );
-}
+});

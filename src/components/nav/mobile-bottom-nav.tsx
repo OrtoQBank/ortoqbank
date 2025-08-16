@@ -11,11 +11,16 @@ import { cn } from '@/lib/utils';
 // Define the main navigation items (excluding Home/Menu trigger)
 const navItems = [
   // { href: '/', label: 'Início', icon: Home }, // Removed Home
-  { href: '/trilhas', label: 'Trilhas', icon: LayoutGrid },
-  { href: '/simulados', label: 'Simulados', icon: GraduationCap },
-  { href: '/perfil', label: 'Perfil', icon: User },
+  { href: '/trilhas', label: 'Trilhas', icon: LayoutGrid, prefetch: true },
+  {
+    href: '/simulados',
+    label: 'Simulados',
+    icon: GraduationCap,
+    prefetch: true,
+  },
+  { href: '/perfil', label: 'Perfil', icon: User, prefetch: true },
   // Add more items if necessary
-];
+] as const;
 
 export function MobileBottomNav() {
   const pathname = usePathname();
@@ -39,7 +44,12 @@ export function MobileBottomNav() {
         const isActive = pathname === item.href;
 
         return (
-          <Link key={item.href} href={item.href} passHref>
+          <Link
+            key={item.href}
+            href={item.href}
+            prefetch={item.prefetch}
+            passHref
+          >
             <Button
               variant="ghost"
               className={cn(

@@ -22,31 +22,37 @@ const navItems = [
     label: 'Usuários',
     icon: Users,
     exact: true,
+    prefetch: true, // Main admin dashboard - prefetch immediately
   },
   {
     href: '/admin/criar-questao',
     label: 'Criar Questão',
     icon: FilePlusIcon,
+    prefetch: null, // Use hover prefetch for content creation pages
   },
   {
     href: '/admin/gerenciar-questoes',
     label: 'Gerenciar Questões',
     icon: FolderCogIcon,
+    prefetch: true, // Management pages - prefetch immediately
   },
   {
     href: '/admin/gerenciar-temas',
     label: 'Gerenciar Temas',
     icon: FolderCogIcon,
+    prefetch: true, // Management pages - prefetch immediately
   },
   {
     href: '/admin/gerenciar-trilhas',
     label: 'Trilhas e Simulados',
     icon: SettingsIcon,
+    prefetch: true, // Management pages - prefetch immediately
   },
   {
     href: '/admin/coupons',
     label: 'Cupons',
     icon: CogIcon,
+    prefetch: null, // Use hover prefetch for less frequently used features
   },
 ];
 
@@ -71,6 +77,7 @@ export function AdminNav({ className }: AdminNavProps) {
           <li key={item.href}>
             <Link
               href={item.href}
+              prefetch={item.prefetch}
               className={cn(
                 'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
                 isActive(item)
