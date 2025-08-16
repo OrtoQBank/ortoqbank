@@ -1,9 +1,8 @@
 'use client';
 
 import { InfoIcon as InfoCircle } from 'lucide-react';
-import { useMemo, memo } from 'react';
-import { Control, useWatch } from 'react-hook-form';
-import { TestFormData } from '../schema';
+import { memo, useMemo } from 'react';
+import { type Control, useWatch } from 'react-hook-form';
 
 import { Label } from '@/components/ui/label';
 import {
@@ -14,6 +13,7 @@ import {
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 import { useFormContext } from '../context/FormContext';
+import { TestFormData } from '../schema';
 
 type QuestionModeSelectorProps = {
   control: Control<TestFormData>;
