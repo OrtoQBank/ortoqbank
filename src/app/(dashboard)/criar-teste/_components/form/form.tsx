@@ -2,7 +2,7 @@
 
 import { useMutation } from 'convex/react';
 import { useRouter } from 'next/navigation';
-import { useState, useCallback, useMemo } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useWatch } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
@@ -11,7 +11,6 @@ import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useTestFormState } from '../hooks/useTestFormState';
 import { type TestFormData } from '../schema';
-import { DebugPanel } from './DebugPanel';
 import { FeedbackModal } from './modals/FeedbackModal';
 import { NameModal } from './modals/NameModal';
 import { QuestionCountSelector } from './QuestionCountSelector';

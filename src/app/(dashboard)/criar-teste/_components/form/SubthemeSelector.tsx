@@ -2,9 +2,8 @@
 
 import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { ChevronDown, ChevronRight } from 'lucide-react';
-import { useCallback, useMemo, useState, memo } from 'react';
-import { Control, useWatch } from 'react-hook-form';
-import { TestFormData } from '../schema';
+import { memo, useCallback, useMemo, useState } from 'react';
+import { type Control, useWatch } from 'react-hook-form';
 
 import { Checkbox } from '@/components/ui/checkbox';
 import { Label } from '@/components/ui/label';
@@ -12,6 +11,7 @@ import { Label } from '@/components/ui/label';
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useFormContext } from '../context/FormContext';
+import { TestFormData } from '../schema';
 
 type Theme = { _id: string; name: string };
 type Subtheme = { _id: string; name: string; themeId: string };

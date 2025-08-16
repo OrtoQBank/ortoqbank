@@ -2,8 +2,7 @@
 
 import { InfoIcon as InfoCircle } from 'lucide-react';
 import { memo } from 'react';
-import { Control, useWatch } from 'react-hook-form';
-import { TestFormData } from '../schema';
+import { type Control, useWatch } from 'react-hook-form';
 
 import { Input } from '@/components/ui/input';
 import {
@@ -11,6 +10,8 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from '@/components/ui/popover';
+
+import { TestFormData } from '../schema';
 
 type QuestionCountSelectorProps = {
   control: Control<TestFormData>;

@@ -3,8 +3,7 @@
 import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { InfoIcon as InfoCircle } from 'lucide-react';
 import { memo } from 'react';
-import { Control, useWatch } from 'react-hook-form';
-import { TestFormData } from '../schema';
+import { type Control, useWatch } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -16,6 +15,7 @@ import {
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useFormContext } from '../context/FormContext';
+import { TestFormData } from '../schema';
 
 type Theme = { _id: string; name: string };
 
@@ -42,6 +42,7 @@ const ThemeQuestionCount = memo(
     return <StandardThemeCount themeId={themeId} />;
   },
 );
+ThemeQuestionCount.displayName = 'ThemeQuestionCount';
 
 const IncorrectThemeCount = memo(({ themeId }: { themeId: string }) => {
   const { userCountsForQuizCreation, isLoading } = useFormContext();
@@ -58,6 +59,7 @@ const IncorrectThemeCount = memo(({ themeId }: { themeId: string }) => {
     </span>
   );
 });
+IncorrectThemeCount.displayName = 'IncorrectThemeCount';
 
 const BookmarkedThemeCount = memo(({ themeId }: { themeId: string }) => {
   const { userCountsForQuizCreation, isLoading } = useFormContext();
@@ -74,6 +76,7 @@ const BookmarkedThemeCount = memo(({ themeId }: { themeId: string }) => {
     </span>
   );
 });
+BookmarkedThemeCount.displayName = 'BookmarkedThemeCount';
 
 const StandardThemeCount = memo(({ themeId }: { themeId: string }) => {
   const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
@@ -90,6 +93,7 @@ const StandardThemeCount = memo(({ themeId }: { themeId: string }) => {
     </span>
   );
 });
+StandardThemeCount.displayName = 'StandardThemeCount';
 
 const UnansweredThemeCount = memo(({ themeId }: { themeId: string }) => {
   const total = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
@@ -110,7 +114,7 @@ const UnansweredThemeCount = memo(({ themeId }: { themeId: string }) => {
     </span>
   );
 });
-
+UnansweredThemeCount.displayName = 'UnansweredThemeCount';
 export const ThemeSelector = memo(function ThemeSelector({
   control,
   themes,
