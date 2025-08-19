@@ -2,6 +2,8 @@
 
 import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { InfoIcon as InfoCircle } from 'lucide-react';
+import { memo } from 'react';
+import { type Control, useWatch } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
 import {
@@ -13,39 +15,36 @@ import {
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { useFormContext } from '../context/FormContext';
+import { TestFormData } from '../schema';
 
 type Theme = { _id: string; name: string };
 
 type ThemeSelectorProps = {
+  control: Control<TestFormData>;
   themes: Theme[];
-  selectedThemes: string[];
   onToggleTheme: (themeId: string) => void;
-  questionMode: string;
   error?: string;
 };
 
-function ThemeQuestionCount({
-  themeId,
-  questionMode,
-}: {
-  themeId: string;
-  questionMode: string;
-}) {
-  if (questionMode === 'unanswered') {
-    return <UnansweredThemeCount themeId={themeId} />;
-  }
-  if (questionMode === 'incorrect') {
-    return <IncorrectThemeCount themeId={themeId} />;
-  }
+const ThemeQuestionCount = memo(
+  ({ themeId, questionMode }: { themeId: string; questionMode: string }) => {
+    if (questionMode === 'unanswered') {
+      return <UnansweredThemeCount themeId={themeId} />;
+    }
+    if (questionMode === 'incorrect') {
+      return <IncorrectThemeCount themeId={themeId} />;
+    }
 
-  if (questionMode === 'bookmarked') {
-    return <BookmarkedThemeCount themeId={themeId} />;
-  }
+    if (questionMode === 'bookmarked') {
+      return <BookmarkedThemeCount themeId={themeId} />;
+    }
 
-  return <StandardThemeCount themeId={themeId} />;
-}
+    return <StandardThemeCount themeId={themeId} />;
+  },
+);
+ThemeQuestionCount.displayName = 'ThemeQuestionCount';
 
-function IncorrectThemeCount({ themeId }: { themeId: string }) {
+const IncorrectThemeCount = memo(({ themeId }: { themeId: string }) => {
   const { userCountsForQuizCreation, isLoading } = useFormContext();
 
   if (isLoading || !userCountsForQuizCreation) {
@@ -59,9 +58,10 @@ function IncorrectThemeCount({ themeId }: { themeId: string }) {
       {count}
     </span>
   );
-}
+});
+IncorrectThemeCount.displayName = 'IncorrectThemeCount';
 
-function BookmarkedThemeCount({ themeId }: { themeId: string }) {
+const BookmarkedThemeCount = memo(({ themeId }: { themeId: string }) => {
   const { userCountsForQuizCreation, isLoading } = useFormContext();
 
   if (isLoading || !userCountsForQuizCreation) {
@@ -75,9 +75,10 @@ function BookmarkedThemeCount({ themeId }: { themeId: string }) {
       {count}
     </span>
   );
-}
+});
+BookmarkedThemeCount.displayName = 'BookmarkedThemeCount';
 
-function StandardThemeCount({ themeId }: { themeId: string }) {
+const StandardThemeCount = memo(({ themeId }: { themeId: string }) => {
   const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
     themeId: themeId as Id<'themes'>,
   });
@@ -91,9 +92,10 @@ function StandardThemeCount({ themeId }: { themeId: string }) {
       {count}
     </span>
   );
-}
+});
+StandardThemeCount.displayName = 'StandardThemeCount';
 
-function UnansweredThemeCount({ themeId }: { themeId: string }) {
+const UnansweredThemeCount = memo(({ themeId }: { themeId: string }) => {
   const total = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
     themeId: themeId as Id<'themes'>,
   });
@@ -111,15 +113,16 @@ function UnansweredThemeCount({ themeId }: { themeId: string }) {
       {unanswered}
     </span>
   );
-}
-
-export function ThemeSelector({
+});
+UnansweredThemeCount.displayName = 'UnansweredThemeCount';
+export const ThemeSelector = memo(function ThemeSelector({
+  control,
   themes,
-  selectedThemes,
   onToggleTheme,
-  questionMode,
   error,
 }: ThemeSelectorProps) {
+  const selectedThemes = useWatch({ control, name: 'selectedThemes' });
+  const questionMode = useWatch({ control, name: 'questionMode' });
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -160,4 +163,4 @@ export function ThemeSelector({
       {error && <p className="text-destructive text-sm">{error}</p>}
     </div>
   );
-}
+});

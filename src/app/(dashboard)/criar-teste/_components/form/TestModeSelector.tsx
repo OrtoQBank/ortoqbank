@@ -1,6 +1,8 @@
 'use client';
 
 import { InfoIcon as InfoCircle } from 'lucide-react';
+import { memo } from 'react';
+import { type Control, useWatch } from 'react-hook-form';
 
 import {
   Popover,
@@ -9,12 +11,18 @@ import {
 } from '@/components/ui/popover';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
+import { TestFormData } from '../schema';
+
 type TestModeSelectorProps = {
-  value: string;
+  control: Control<TestFormData>;
   onChange: (value: 'study' | 'exam') => void;
 };
 
-export function TestModeSelector({ value, onChange }: TestModeSelectorProps) {
+export const TestModeSelector = memo(function TestModeSelector({
+  control,
+  onChange,
+}: TestModeSelectorProps) {
+  const value = useWatch({ control, name: 'testMode' });
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-center gap-2">
@@ -51,4 +59,4 @@ export function TestModeSelector({ value, onChange }: TestModeSelectorProps) {
       </div>
     </div>
   );
-}
+});

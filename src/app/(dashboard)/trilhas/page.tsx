@@ -7,6 +7,7 @@ import { BookOpen, Clock, FileText } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
+import { useCallback, useEffect, useMemo } from 'react';
 
 import {
   Accordion,
@@ -16,6 +17,7 @@ import {
 } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
 
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
@@ -63,8 +65,8 @@ export default function TrilhasPage() {
   const router = useRouter();
   const startSession = useMutation(api.quizSessions.startQuizSession);
 
-  const themesQuery = useQuery(api.themes.list);
-  const presetQuizzesQuery = useQuery(api.presetQuizzes.list);
+  const themesQuery = useQuery(api.themes.listSorted);
+  const trilhasQuery = useQuery(api.presetQuizzes.listTrilhasSorted);
   const incompleteSessionsQuery = useQuery(
     api.quizSessions.listIncompleteSessions,
   );
@@ -72,150 +74,167 @@ export default function TrilhasPage() {
     api.quizSessions.getAllCompletedSessions,
   );
 
-  const themes = themesQuery || [];
-  const presetQuizzes = presetQuizzesQuery || [];
-  const incompleteSessions = incompleteSessionsQuery || [];
-  const completedSessions = completedSessionsQuery || [];
-
   const isLoading =
     !user ||
     [
       themesQuery,
-      presetQuizzesQuery,
+      trilhasQuery,
       incompleteSessionsQuery,
       completedSessionsQuery,
     ].includes(undefined);
 
-  // Sort and filter data
-  const sortedThemes = [...themes].sort((a, b) =>
-    a.displayOrder !== undefined && b.displayOrder !== undefined
-      ? a.displayOrder - b.displayOrder
-      : a.displayOrder === undefined
-        ? b.displayOrder === undefined
-          ? a.name.localeCompare(b.name)
-          : 1
-        : -1,
+  // Memoize data arrays to prevent unnecessary re-renders
+  const themes = useMemo(() => themesQuery || [], [themesQuery]);
+  const trilhas = useMemo(() => trilhasQuery || [], [trilhasQuery]);
+  const incompleteSessions = useMemo(
+    () => incompleteSessionsQuery || [],
+    [incompleteSessionsQuery],
+  );
+  const completedSessions = useMemo(
+    () => completedSessionsQuery || [],
+    [completedSessionsQuery],
   );
 
-  const trilhas = presetQuizzes
-    .filter(quiz => quiz.category === 'trilha')
-    .sort((a, b) =>
-      a.displayOrder !== undefined && b.displayOrder !== undefined
-        ? a.displayOrder - b.displayOrder
-        : a.displayOrder === undefined
-          ? b.displayOrder === undefined
-            ? a.name.localeCompare(b.name)
-            : 1
-          : -1,
+  // Memoize expensive session map calculations
+  const incompleteSessionMap = useMemo(() => {
+    return incompleteSessions.reduce(
+      (map, session) => {
+        map[session.quizId] = session._id;
+        return map;
+      },
+      {} as Record<string, Id<'quizSessions'>>,
     );
+  }, [incompleteSessions]);
 
-  // Create session maps
-  const incompleteSessionMap = incompleteSessions.reduce(
-    (map, session) => {
-      map[session.quizId] = session._id;
-      return map;
-    },
-    {} as Record<string, Id<'quizSessions'>>,
-  );
+  const completedSessionMap = useMemo(() => {
+    return completedSessions.reduce(
+      (map, session) => {
+        map[session.quizId] = true;
+        return map;
+      },
+      {} as Record<string, boolean>,
+    );
+  }, [completedSessions]);
 
-  const completedSessionMap = completedSessions.reduce(
-    (map, session) => {
-      map[session.quizId] = true;
-      return map;
-    },
-    {} as Record<string, boolean>,
-  );
+  // Memoize expensive trilhas grouping calculations
+  const trilhasByTheme = useMemo(() => {
+    return themes.reduce(
+      (acc, theme) => {
+        const themeTrilhas = trilhas.filter(quiz => quiz.themeId === theme._id);
+        if (themeTrilhas.length > 0) {
+          acc[theme._id] = { theme, trilhas: themeTrilhas };
+        }
+        return acc;
+      },
+      {} as Record<string, { theme: any; trilhas: any[] }>,
+    );
+  }, [themes, trilhas]);
 
-  // Group trilhas by theme
-  const validThemeIds = new Set(themes.map(theme => theme._id));
-  const trilhasByTheme = sortedThemes.reduce(
-    (acc, theme) => {
-      const themeTrilhas = trilhas.filter(quiz => quiz.themeId === theme._id);
-      if (themeTrilhas.length > 0) {
-        acc[theme._id] = { theme, trilhas: themeTrilhas };
-      }
-      return acc;
-    },
-    {} as Record<string, { theme: any; trilhas: any[] }>,
-  );
+  const orphanedTrilhas = useMemo(() => {
+    const validThemeIds = new Set(themes.map(theme => theme._id));
+    return trilhas.filter(
+      quiz => quiz.themeId && !validThemeIds.has(quiz.themeId),
+    );
+  }, [themes, trilhas]);
 
-  const orphanedTrilhas = trilhas.filter(
-    quiz => quiz.themeId && !validThemeIds.has(quiz.themeId),
-  );
+  // Manual prefetching for routes users are likely to visit from trilhas page
+  useEffect(() => {
+    // Prefetch common routes that users navigate to from trilhas
+    router.prefetch('/perfil'); // Users often check their progress
+    router.prefetch('/simulados'); // Users might switch between trilhas and simulados
 
-  const handleExamClick = async (quizId: Id<'presetQuizzes'>) => {
-    if (incompleteSessionMap[quizId]) {
-      router.push(`/trilhas/${quizId}`);
-    } else {
-      await startSession({ quizId, mode: 'study' });
-      router.push(`/trilhas/${quizId}`);
+    // Prefetch the first few trilha routes if they exist
+    if (trilhas.length > 0) {
+      // Prefetch up to 3 most likely trilhas (first ones shown)
+      trilhas.slice(0, 3).forEach(trilha => {
+        router.prefetch(`/trilhas/${trilha._id}`);
+      });
     }
-  };
+  }, [router, trilhas]);
 
-  const renderQuizCard = (quiz: any) => {
-    const hasIncompleteSession = !!incompleteSessionMap[quiz._id];
-    const hasCompletedSession = !!completedSessionMap[quiz._id];
+  const handleExamClick = useCallback(
+    async (quizId: Id<'presetQuizzes'>) => {
+      if (incompleteSessionMap[quizId]) {
+        router.push(`/trilhas/${quizId}`);
+      } else {
+        await startSession({ quizId, mode: 'study' });
+        router.push(`/trilhas/${quizId}`);
+      }
+    },
+    [incompleteSessionMap, router, startSession],
+  );
 
-    return (
-      <div key={quiz._id} className="flex flex-col space-y-3 px-4 py-4">
-        <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <h3 className="font-medium">{quiz.name}</h3>
-              <Badge
-                className={
-                  hasIncompleteSession
-                    ? 'bg-amber-100 text-amber-800'
+  const renderQuizCard = useCallback(
+    (quiz: any) => {
+      const hasIncompleteSession = !!incompleteSessionMap[quiz._id];
+      const hasCompletedSession = !!completedSessionMap[quiz._id];
+
+      return (
+        <div key={quiz._id} className="flex flex-col space-y-3 px-4 py-4">
+          <div className="flex flex-col justify-between gap-4 md:flex-row md:items-start">
+            <div className="flex flex-col gap-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <h3 className="font-medium">{quiz.name}</h3>
+                <Badge
+                  className={
+                    hasIncompleteSession
+                      ? 'bg-amber-100 text-amber-800'
+                      : hasCompletedSession
+                        ? 'bg-green-100 text-green-800'
+                        : 'bg-blue-100 text-blue-800'
+                  }
+                >
+                  {hasIncompleteSession && <Clock className="mr-1 h-3 w-3" />}
+                  {hasCompletedSession && <BookOpen className="mr-1 h-3 w-3" />}
+                  {!hasIncompleteSession && !hasCompletedSession && (
+                    <BookOpen className="mr-1 h-3 w-3" />
+                  )}
+                  {hasIncompleteSession
+                    ? 'Em andamento'
                     : hasCompletedSession
-                      ? 'bg-green-100 text-green-800'
-                      : 'bg-blue-100 text-blue-800'
-                }
+                      ? 'Concluído'
+                      : 'Não iniciado'}
+                </Badge>
+              </div>
+              <div className="mt-1 flex items-center gap-2">
+                <FileText className="text-muted-foreground h-3 w-3" />
+                <span className="text-muted-foreground text-md">
+                  {quiz.questions.length} questões
+                </span>
+              </div>
+            </div>
+            <div className="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto">
+              <Button
+                onClick={() => handleExamClick(quiz._id)}
+                className="flex-1 cursor-pointer md:flex-none"
               >
-                {hasIncompleteSession && <Clock className="mr-1 h-3 w-3" />}
-                {hasCompletedSession && <BookOpen className="mr-1 h-3 w-3" />}
-                {!hasIncompleteSession && !hasCompletedSession && (
-                  <BookOpen className="mr-1 h-3 w-3" />
-                )}
                 {hasIncompleteSession
-                  ? 'Em andamento'
+                  ? 'Retomar Teste'
                   : hasCompletedSession
-                    ? 'Concluído'
-                    : 'Não iniciado'}
-              </Badge>
-            </div>
-            <div className="mt-1 flex items-center gap-2">
-              <FileText className="text-muted-foreground h-3 w-3" />
-              <span className="text-muted-foreground text-md">
-                {quiz.questions.length} questões
-              </span>
-            </div>
-          </div>
-          <div className="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto">
-            <Button
-              onClick={() => handleExamClick(quiz._id)}
-              className="flex-1 md:flex-none"
-            >
-              {hasIncompleteSession
-                ? 'Retomar Teste'
-                : hasCompletedSession
-                  ? 'Refazer Teste'
-                  : 'Iniciar Teste'}
-            </Button>
-            {hasCompletedSession && (
-              <Link
-                href={`/quiz-results/${quiz._id}`}
-                className="flex-1 md:flex-none"
-              >
-                <Button variant="outline" className="w-full">
-                  Ver Resultados
+                    ? 'Refazer Teste'
+                    : 'Iniciar Teste'}
+              </Button>
+              {hasCompletedSession && (
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full cursor-pointer"
+                >
+                  <HoverPrefetchLink
+                    href={`/quiz-results/${quiz._id}`}
+                    className="flex-1 md:flex-none"
+                  >
+                    Ver Resultados
+                  </HoverPrefetchLink>
                 </Button>
-              </Link>
-            )}
+              )}
+            </div>
           </div>
         </div>
-      </div>
-    );
-  };
+      );
+    },
+    [incompleteSessionMap, completedSessionMap, handleExamClick],
+  );
 
   if (isLoading) {
     return (
