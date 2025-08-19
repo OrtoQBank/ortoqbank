@@ -1,8 +1,8 @@
 'use client';
 
 import Link from 'next/link';
-import { useState } from 'react';
 import type { ComponentProps } from 'react';
+import { useState } from 'react';
 
 // Exclude prefetch from props to prevent external overrides
 type LinkProps = Omit<ComponentProps<typeof Link>, 'prefetch' | 'href'>;

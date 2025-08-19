@@ -14,8 +14,8 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { cn } from '@/lib/utils';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
+import { cn } from '@/lib/utils';
 
 const navItems = [
   {

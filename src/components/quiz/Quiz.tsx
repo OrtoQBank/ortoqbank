@@ -239,30 +239,32 @@ function QuizStepper({
       }
 
       switch (event.key) {
-        case 'ArrowLeft':
+        case 'ArrowLeft': {
           // Go to previous question (only in study mode)
           if (mode === 'study' && !stepper.isFirst) {
             event.preventDefault();
             handlePrevious();
           }
           break;
+        }
 
-        case 'ArrowRight':
+        case 'ArrowRight': {
           // Go to next question or submit (based on context)
           if (feedback?.answered) {
             event.preventDefault();
             handleNext();
           }
           break;
-
+        }
         // Space is already handled by QuizAlternatives for submit/next
         // We only handle it here for next question when already answered
-        case ' ':
+        case ' ': {
           if (feedback?.answered && mode === 'study') {
             event.preventDefault();
             handleNext();
           }
           break;
+        }
       }
     };
 
