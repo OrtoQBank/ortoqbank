@@ -216,6 +216,19 @@ function QuizStepper({
   // Add keyboard navigation for quiz navigation (left/right arrows and space)
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle if another component already handled this event
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      // Don't handle if user is typing in contentEditable elements
+      if (
+        event.target instanceof HTMLElement &&
+        event.target.isContentEditable
+      ) {
+        return;
+      }
+
       // Don't handle if user is typing in an input or textarea
       if (
         event.target instanceof HTMLInputElement ||

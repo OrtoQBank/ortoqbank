@@ -31,6 +31,32 @@ export default function QuizAlternatives({
   // Add keyboard navigation for selecting alternatives
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle if another component already handled this event
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      // Don't handle if user is typing in editable elements
+      if (event.target instanceof HTMLElement) {
+        const target = event.target;
+
+        // Check for input/textarea
+        if (
+          target instanceof HTMLInputElement ||
+          target instanceof HTMLTextAreaElement
+        ) {
+          return;
+        }
+
+        // Check for contentEditable (treat as editable unless explicitly false/inherit)
+        if (
+          target.contentEditable !== 'inherit' &&
+          target.contentEditable !== 'false'
+        ) {
+          return;
+        }
+      }
+
       // Only handle keyboard input if the component is not disabled
       if (disabled) return;
 
@@ -57,12 +83,9 @@ export default function QuizAlternatives({
 
         case ' ':
         case 'Enter': {
-          event.preventDefault();
-          if (hasAnswered && onNext) {
-            // If already answered, space/enter goes to next question
-            onNext();
-          } else if (onSubmit && selectedAlternative !== undefined) {
-            // If not answered yet and has selection, space/enter submits the answer
+          // Only handle submission, leave "next" to parent to avoid double-triggering
+          if (!hasAnswered && onSubmit && selectedAlternative !== undefined) {
+            event.preventDefault();
             onSubmit();
           }
           break;
