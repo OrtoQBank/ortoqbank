@@ -152,15 +152,9 @@ export async function POST(req: NextRequest) {
           testeId,
           userEmail,
           couponCode: couponCode?.toUpperCase() || undefined,
-          // Duplicate keys in snake_case to simplify webhook validation
-          coupon_code: couponCode?.toUpperCase() || undefined,
           originalPrice: REGULAR_PRICE,
           discountAmount: regularPricing.discountAmount,
           finalPrice: regularPricing.finalPrice,
-          original_price: REGULAR_PRICE,
-          discount_amount: regularPricing.discountAmount,
-          final_price: regularPricing.finalPrice,
-          currency: 'BRL',
         },
         ...(userEmail && {
           payer: {
