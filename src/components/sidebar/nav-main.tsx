@@ -18,7 +18,7 @@ interface MenuItem {
   title: string;
   url: string;
   icon: LucideIcon;
-  prefetch?: boolean | null; // Add prefetch control
+  prefetch?: boolean; // Add prefetch control
 }
 
 const items: MenuItem[] = [
@@ -40,7 +40,9 @@ export default function NavMain() {
                 href={item.url}
                 className="flex items-center gap-3 py-5"
                 onClick={() => setOpenMobile(false)}
-                prefetch={item.prefetch}
+                {...(item.prefetch !== undefined && {
+                  prefetch: item.prefetch,
+                })}
               >
                 <item.icon className="size-5" />
                 <span className="text-base">{item.title}</span>

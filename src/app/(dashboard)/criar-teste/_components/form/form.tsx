@@ -222,7 +222,7 @@ export default function TestForm() {
   // Memoized sorted data to prevent re-sorting on every render
   const sortedThemes = useMemo(
     () =>
-      (hierarchicalData?.themes || []).sort((a: any, b: any) =>
+      ([...(hierarchicalData?.themes || [])] as any[]).sort((a: any, b: any) =>
         (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.themes],
@@ -230,15 +230,15 @@ export default function TestForm() {
 
   const sortedSubthemes = useMemo(
     () =>
-      (hierarchicalData?.subthemes || []).sort((a: any, b: any) =>
-        (a.name || '').localeCompare(b.name || ''),
+      ([...(hierarchicalData?.subthemes || [])] as any[]).sort(
+        (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.subthemes],
   );
 
   const sortedGroups = useMemo(
     () =>
-      (hierarchicalData?.groups || []).sort((a: any, b: any) =>
+      ([...(hierarchicalData?.groups || [])] as any[]).sort((a: any, b: any) =>
         (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.groups],
@@ -349,7 +349,7 @@ export default function TestForm() {
 
         <Button
           type="submit"
-          className="w-full bg-blue-500 hover:bg-blue-600"
+          className="w-full cursor-pointer bg-blue-500 hover:bg-blue-600"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Gerando seu teste...' : 'Gerar Teste'}

@@ -15,6 +15,7 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
 import { cn } from '@/lib/utils';
+import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
 
 const navItems = [
   {
@@ -23,36 +24,42 @@ const navItems = [
     icon: Users,
     exact: true,
     prefetch: true, // Main admin dashboard - prefetch immediately
+    useHoverPrefetch: false,
   },
   {
     href: '/admin/criar-questao',
     label: 'Criar Questão',
     icon: FilePlusIcon,
-    prefetch: null, // Use hover prefetch for content creation pages
+    prefetch: false, // Use hover prefetch for content creation pages
+    useHoverPrefetch: true,
   },
   {
     href: '/admin/gerenciar-questoes',
     label: 'Gerenciar Questões',
     icon: FolderCogIcon,
     prefetch: true, // Management pages - prefetch immediately
+    useHoverPrefetch: false,
   },
   {
     href: '/admin/gerenciar-temas',
     label: 'Gerenciar Temas',
     icon: FolderCogIcon,
     prefetch: true, // Management pages - prefetch immediately
+    useHoverPrefetch: false,
   },
   {
     href: '/admin/gerenciar-trilhas',
     label: 'Trilhas e Simulados',
     icon: SettingsIcon,
     prefetch: true, // Management pages - prefetch immediately
+    useHoverPrefetch: false,
   },
   {
     href: '/admin/coupons',
     label: 'Cupons',
     icon: CogIcon,
-    prefetch: null, // Use hover prefetch for less frequently used features
+    prefetch: false, // Use hover prefetch for less frequently used features
+    useHoverPrefetch: true,
   },
 ];
 
@@ -73,23 +80,39 @@ export function AdminNav({ className }: AdminNavProps) {
   return (
     <nav className={cn('bg-card rounded-lg border p-1', className)}>
       <ul className="flex flex-wrap items-center gap-1">
-        {navItems.map(item => (
-          <li key={item.href}>
-            <Link
-              href={item.href}
-              prefetch={item.prefetch}
-              className={cn(
-                'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
-                isActive(item)
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
-              )}
-            >
+        {navItems.map(item => {
+          const linkClasses = cn(
+            'inline-flex items-center gap-2 rounded-md px-4 py-2 text-sm font-medium transition-colors',
+            isActive(item)
+              ? 'bg-primary text-primary-foreground'
+              : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+          );
+
+          const linkContent = (
+            <>
               <item.icon size={16} />
               {item.label}
-            </Link>
-          </li>
-        ))}
+            </>
+          );
+
+          return (
+            <li key={item.href}>
+              {item.useHoverPrefetch ? (
+                <HoverPrefetchLink href={item.href} className={linkClasses}>
+                  {linkContent}
+                </HoverPrefetchLink>
+              ) : (
+                <Link
+                  href={item.href}
+                  prefetch={item.prefetch}
+                  className={linkClasses}
+                >
+                  {linkContent}
+                </Link>
+              )}
+            </li>
+          );
+        })}
       </ul>
     </nav>
   );

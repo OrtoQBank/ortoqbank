@@ -2,27 +2,53 @@
 
 import Link from 'next/link';
 import { useState } from 'react';
+import type { ComponentProps } from 'react';
+
+// Exclude prefetch from props to prevent external overrides
+type LinkProps = Omit<ComponentProps<typeof Link>, 'prefetch' | 'href'>;
+
+interface HoverPrefetchLinkProps extends LinkProps {
+  href: string;
+  children: React.ReactNode;
+}
 
 export function HoverPrefetchLink({
   href,
   children,
-  className,
+  onMouseEnter,
+  onFocus,
+  onPointerEnter,
   ...props
-}: {
-  href: string;
-  children: React.ReactNode;
-  className?: string;
-  [key: string]: any;
-}) {
+}: HoverPrefetchLinkProps) {
   const [active, setActive] = useState(false);
+
+  const handleActivation = () => {
+    setActive(true);
+  };
+
+  const handleMouseEnter = (event: React.MouseEvent<HTMLAnchorElement>) => {
+    handleActivation();
+    onMouseEnter?.(event);
+  };
+
+  const handleFocus = (event: React.FocusEvent<HTMLAnchorElement>) => {
+    handleActivation();
+    onFocus?.(event);
+  };
+
+  const handlePointerEnter = (event: React.PointerEvent<HTMLAnchorElement>) => {
+    handleActivation();
+    onPointerEnter?.(event);
+  };
 
   return (
     <Link
       href={href}
-      prefetch={active ? null : false}
-      onMouseEnter={() => setActive(true)}
-      className={className}
+      prefetch={active}
       {...props}
+      onMouseEnter={handleMouseEnter}
+      onFocus={handleFocus}
+      onPointerEnter={handlePointerEnter}
     >
       {children}
     </Link>

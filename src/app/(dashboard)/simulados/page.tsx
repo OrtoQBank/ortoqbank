@@ -303,7 +303,7 @@ export default function SimuladoPage() {
 
                           <div className="mt-3 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto">
                             <Button
-                              className="flex-1 md:flex-none"
+                              className="flex-1 cursor-pointer md:flex-none"
                               onClick={() => handleExamClick(simulado._id)}
                             >
                               {hasIncompleteSession
@@ -314,14 +314,15 @@ export default function SimuladoPage() {
                             </Button>
 
                             {hasCompletedSessionMap[simulado._id] && (
-                              <Link href={`/quiz-results/${simulado._id}`}>
-                                <Button
-                                  variant="outline"
-                                  className="flex-1 md:flex-none"
-                                >
+                              <Button
+                                asChild
+                                variant="outline"
+                                className="flex-1 cursor-pointer md:flex-none"
+                              >
+                                <Link href={`/quiz-results/${simulado._id}`}>
                                   Ver Resultados
-                                </Button>
-                              </Link>
+                                </Link>
+                              </Button>
                             )}
                           </div>
                         </div>

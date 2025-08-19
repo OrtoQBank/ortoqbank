@@ -206,7 +206,7 @@ export default function TrilhasPage() {
             <div className="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto">
               <Button
                 onClick={() => handleExamClick(quiz._id)}
-                className="flex-1 md:flex-none"
+                className="flex-1 cursor-pointer md:flex-none"
               >
                 {hasIncompleteSession
                   ? 'Retomar Teste'
@@ -215,14 +215,18 @@ export default function TrilhasPage() {
                     : 'Iniciar Teste'}
               </Button>
               {hasCompletedSession && (
-                <HoverPrefetchLink
-                  href={`/quiz-results/${quiz._id}`}
-                  className="flex-1 md:flex-none"
+                <Button
+                  asChild
+                  variant="outline"
+                  className="w-full cursor-pointer"
                 >
-                  <Button variant="outline" className="w-full">
+                  <HoverPrefetchLink
+                    href={`/quiz-results/${quiz._id}`}
+                    className="flex-1 md:flex-none"
+                  >
                     Ver Resultados
-                  </Button>
-                </HoverPrefetchLink>
+                  </HoverPrefetchLink>
+                </Button>
               )}
             </div>
           </div>
