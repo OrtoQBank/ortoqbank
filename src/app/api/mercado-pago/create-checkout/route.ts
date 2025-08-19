@@ -134,8 +134,7 @@ export async function POST(req: NextRequest) {
     const pixPricing = calculateDiscountedPrice(PIX_PRICE, dynamicCoupon);
 
     const preference = new Preference(mpClient);
-    const origin =
-      process.env.NEXT_PUBLIC_SITE_URL || 'https://ortoqbank.com.br';
+    const origin = req.headers.get('origin') || 'https://ortoqbank.com.br';
 
     // Create item title with coupon info if applicable
     let itemTitle = 'Ortoqbank 2025';
