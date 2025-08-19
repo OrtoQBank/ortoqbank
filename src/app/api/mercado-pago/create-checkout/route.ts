@@ -151,6 +151,8 @@ export async function POST(req: NextRequest) {
         metadata: {
           testeId,
           userEmail,
+          // Add snake_case version for webhook compatibility
+          user_email: userEmail,
           couponCode: couponCode?.toUpperCase() || undefined,
           // Duplicate keys in snake_case to simplify webhook validation
           coupon_code: couponCode?.toUpperCase() || undefined,
