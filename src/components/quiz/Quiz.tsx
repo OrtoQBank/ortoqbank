@@ -213,6 +213,62 @@ function QuizStepper({
 
   const currentQuestion = quizData.questions[currentStepIndex];
 
+  // Add keyboard navigation for quiz navigation (left/right arrows and space)
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      // Don't handle if user is typing in an input or textarea
+      if (
+        event.target instanceof HTMLInputElement ||
+        event.target instanceof HTMLTextAreaElement ||
+        isLoading
+      ) {
+        return;
+      }
+
+      switch (event.key) {
+        case 'ArrowLeft':
+          // Go to previous question (only in study mode)
+          if (mode === 'study' && !stepper.isFirst) {
+            event.preventDefault();
+            handlePrevious();
+          }
+          break;
+
+        case 'ArrowRight':
+          // Go to next question or submit (based on context)
+          if (feedback?.answered) {
+            event.preventDefault();
+            handleNext();
+          }
+          break;
+
+        // Space is already handled by QuizAlternatives for submit/next
+        // We only handle it here for next question when already answered
+        case ' ':
+          if (feedback?.answered && mode === 'study') {
+            event.preventDefault();
+            handleNext();
+          }
+          break;
+      }
+    };
+
+    // Add event listener
+    document.addEventListener('keydown', handleKeyDown);
+
+    // Cleanup event listener on unmount
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [
+    mode,
+    stepper.isFirst,
+    feedback?.answered,
+    isLoading,
+    handlePrevious,
+    handleNext,
+  ]);
+
   const handleComplete = async () => {
     try {
       // Only call completeQuiz if the session exists, is not already complete,
@@ -291,6 +347,9 @@ function QuizStepper({
                     alternatives={step.alternatives || []}
                     selectedAlternative={selectedAlternative}
                     onSelect={i => setSelectedAlternative(i)}
+                    onSubmit={handleAnswerSubmit}
+                    onNext={handleNext}
+                    hasAnswered={!!feedback?.answered}
                     disabled={!!feedback?.answered}
                     showFeedback={!!feedback?.answered && mode === 'study'}
                     correctAlternative={feedback?.correctAlternative}
