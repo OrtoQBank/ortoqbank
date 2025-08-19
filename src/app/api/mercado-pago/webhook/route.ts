@@ -9,9 +9,6 @@ import mpClient, { verifyMercadoPagoSignature } from '@/lib/mercado-pago';
 
 export async function POST(request: Request) {
   try {
-    console.log('Webhook received:', request.url);
-    console.log('Headers:', Object.fromEntries(request.headers.entries()));
-
     // Log webhook receipt to Sentry
     Sentry.addBreadcrumb({
       message: 'Mercado Pago webhook received',
@@ -20,8 +17,28 @@ export async function POST(request: Request) {
       data: { url: request.url },
     });
 
-    // Skip signature verification entirely for now to match working code
-    // TODO: Add back signature verification after confirming webhook works
+    // Verify webhook signature
+    const signatureError = verifyMercadoPagoSignature(request);
+    if (signatureError) {
+      Sentry.captureMessage('Mercado Pago webhook signature invalid', {
+        level: 'warning',
+        tags: {
+          operation: 'webhook-signature-invalid',
+          source: 'mercado-pago',
+        },
+        extra: {
+          headers: Object.fromEntries(request.headers.entries()),
+        },
+      });
+      return signatureError; // Returns the error response from verification function
+    }
+
+    // Log successful signature verification
+    Sentry.addBreadcrumb({
+      message: 'Webhook signature verified successfully',
+      category: 'webhook',
+      level: 'info',
+    });
 
     const body = await request.json();
     const { type, data } = body;
@@ -61,7 +78,7 @@ export async function POST(request: Request) {
 
           if (
             paymentData.status === 'approved' || // Pagamento por cartão OU
-            paymentData.date_approved !== null // Pagamento por Pix
+            paymentData.date_approved != null // Pagamento por Pix
           ) {
             console.log('Payment approved, processing...');
             await handleMercadoPagoPayment(paymentData);
@@ -136,6 +153,7 @@ export async function POST(request: Request) {
       extra: {
         url: request.url,
         headers: Object.fromEntries(request.headers.entries()),
+        requestId: request.headers.get('x-request-id') ?? undefined,
       },
     });
 
