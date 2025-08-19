@@ -15,6 +15,8 @@ import type * as aggregates from "../aggregates.js";
 import type * as bookmark from "../bookmark.js";
 import type * as customQuizzes from "../customQuizzes.js";
 import type * as customQuizzesCreation from "../customQuizzesCreation.js";
+import type * as eventAdmin from "../eventAdmin.js";
+import type * as eventQuiz from "../eventQuiz.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
@@ -56,6 +58,8 @@ declare const fullApi: ApiFromModules<{
   bookmark: typeof bookmark;
   customQuizzes: typeof customQuizzes;
   customQuizzesCreation: typeof customQuizzesCreation;
+  eventAdmin: typeof eventAdmin;
+  eventQuiz: typeof eventQuiz;
   groups: typeof groups;
   http: typeof http;
   init: typeof init;
