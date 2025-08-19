@@ -186,7 +186,7 @@ export default function UniversalQuizResultsPage() {
                   isCorrect,
                 )}`}
               >
-                <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full border">
+                <div className="mr-3 flex h-6 w-6 items-center justify-center rounded-full bg-gray-200 text-xs font-medium text-gray-700">
                   {String.fromCodePoint(65 + i)}
                 </div>
                 <div>{alternative}</div>
