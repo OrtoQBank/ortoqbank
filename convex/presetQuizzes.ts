@@ -44,26 +44,93 @@ export const list = query({
 
 // Optimized query that returns trilhas filtered and sorted
 export const listTrilhasSorted = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id('presetQuizzes'),
+      _creationTime: v.number(),
+      name: v.string(),
+      description: v.string(),
+      category: v.union(v.literal('trilha'), v.literal('simulado')),
+      questions: v.array(v.id('questions')),
+      subcategory: v.optional(v.string()),
+      themeId: v.optional(v.id('themes')),
+      subthemeId: v.optional(v.id('subthemes')),
+      groupId: v.optional(v.id('groups')),
+      isPublic: v.boolean(),
+      displayOrder: v.optional(v.number()),
+      TaxThemeId: v.optional(v.string()),
+      TaxSubthemeId: v.optional(v.string()),
+      TaxGroupId: v.optional(v.string()),
+      taxonomyPathIds: v.optional(v.array(v.string())),
+    }),
+  ),
   handler: async ctx => {
-    const quizzes = await ctx.db.query('presetQuizzes').collect();
+    // Use index to filter for trilhas server-side
+    const trilhas = await ctx.db
+      .query('presetQuizzes')
+      .withIndex('by_category', q => q.eq('category', 'trilha'))
+      .collect();
 
-    // Filter for trilhas and sort by displayOrder, then name
-    const trilhas = quizzes
-      .filter(quiz => quiz.category === 'trilha')
-      .sort((a, b) => {
-        if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
-          return a.displayOrder - b.displayOrder;
-        }
-        if (a.displayOrder === undefined && b.displayOrder === undefined) {
-          return a.name.localeCompare(b.name);
-        }
-        // a.displayOrder is undefined, b.displayOrder is defined -> a goes after b
-        if (a.displayOrder === undefined) return 1;
-        // a.displayOrder is defined, b.displayOrder is undefined -> a goes before b
-        return -1;
-      });
+    // Sort by displayOrder, then name
+    return trilhas.sort((a, b) => {
+      if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+        return a.displayOrder - b.displayOrder;
+      }
+      if (a.displayOrder === undefined && b.displayOrder === undefined) {
+        return a.name.localeCompare(b.name);
+      }
+      // a.displayOrder is undefined, b.displayOrder is defined -> a goes after b
+      if (a.displayOrder === undefined) return 1;
+      // a.displayOrder is defined, b.displayOrder is undefined -> a goes before b
+      return -1;
+    });
+  },
+});
 
-    return trilhas;
+// Optimized query that returns simulados filtered and sorted
+export const listSimuladosSorted = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id('presetQuizzes'),
+      _creationTime: v.number(),
+      name: v.string(),
+      description: v.string(),
+      category: v.union(v.literal('trilha'), v.literal('simulado')),
+      questions: v.array(v.id('questions')),
+      subcategory: v.optional(v.string()),
+      themeId: v.optional(v.id('themes')),
+      subthemeId: v.optional(v.id('subthemes')),
+      groupId: v.optional(v.id('groups')),
+      isPublic: v.boolean(),
+      displayOrder: v.optional(v.number()),
+      TaxThemeId: v.optional(v.string()),
+      TaxSubthemeId: v.optional(v.string()),
+      TaxGroupId: v.optional(v.string()),
+      taxonomyPathIds: v.optional(v.array(v.string())),
+    }),
+  ),
+  handler: async ctx => {
+    // Use index to filter for simulados server-side
+    const simulados = await ctx.db
+      .query('presetQuizzes')
+      .withIndex('by_category', q => q.eq('category', 'simulado'))
+      .collect();
+
+    // Sort by displayOrder, then name
+    return simulados.sort((a, b) => {
+      if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
+        return a.displayOrder - b.displayOrder;
+      }
+      if (a.displayOrder === undefined && b.displayOrder === undefined) {
+        return a.name.localeCompare(b.name);
+      }
+      // a.displayOrder is undefined, b.displayOrder is defined -> a goes after b
+      if (a.displayOrder === undefined) return 1;
+      // a.displayOrder is defined, b.displayOrder is undefined -> a goes before b
+      return -1;
+    });
   },
 });
 

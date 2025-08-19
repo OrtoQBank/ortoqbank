@@ -92,6 +92,7 @@ export default defineSchema({
     .index('by_theme', ['themeId'])
     .index('by_subtheme', ['subthemeId'])
     .index('by_group', ['groupId'])
+    .index('by_category', ['category'])
     .searchIndex('search_by_name', { searchField: 'name' }),
 
   customQuizzes: defineTable({

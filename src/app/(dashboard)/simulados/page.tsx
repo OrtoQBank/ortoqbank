@@ -95,9 +95,9 @@ export default function SimuladoPage() {
   const { user } = useUser();
   const router = useRouter();
 
-  // Fetch all presetQuizzes
-  const presetQuizzesQuery = useQuery(api.presetQuizzes.list);
-  const presetQuizzes = presetQuizzesQuery || [];
+  // Fetch simulados using optimized query
+  const simuladosQuery = useQuery(api.presetQuizzes.listSimuladosSorted);
+  const simulados = simuladosQuery || [];
 
   // Query to get incomplete sessions for the current user
   const incompleteSessionsQuery = useQuery(
@@ -116,13 +116,10 @@ export default function SimuladoPage() {
 
   // Check if all data is loaded (queries return undefined while loading)
   const isLoading =
-    presetQuizzesQuery === undefined ||
+    simuladosQuery === undefined ||
     incompleteSessionsQuery === undefined ||
     completedSessionsQuery === undefined ||
     !user;
-
-  // Filter to only show simulados (category = "simulado")
-  const simulados = presetQuizzes.filter(quiz => quiz.category === 'simulado');
 
   // Group simulados by subcategory
   const simuladosBySubcategory: Record<string, typeof simulados> = {};
@@ -240,12 +237,12 @@ export default function SimuladoPage() {
       <h1 className="mb-8 text-2xl font-semibold tracking-tight text-gray-900 dark:text-gray-100">
         Simulados
       </h1>
-        <Accordion
-          type="single"
-          collapsible
-          className="space-y-4"
-          defaultValue={subcategoryOrder[0]}
-        >
+      <Accordion
+        type="single"
+        collapsible
+        className="space-y-4"
+        defaultValue={subcategoryOrder[0]}
+      >
         {subcategoryOrder.map(subcategory => {
           const simulados = simuladosBySubcategory[subcategory] || [];
           if (simulados.length === 0) return;
@@ -336,7 +333,7 @@ export default function SimuladoPage() {
             </AccordionItem>
           );
         })}
-        </Accordion>
+      </Accordion>
     </div>
   );
 }
