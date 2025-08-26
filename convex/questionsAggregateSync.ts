@@ -5,6 +5,11 @@ import {
   questionCountByGroup,
   questionCountBySubtheme,
   questionCountByTheme,
+  // Add Section 2 aggregates for random question selection
+  randomQuestions,
+  randomQuestionsByGroup,
+  randomQuestionsBySubtheme,
+  randomQuestionsByTheme,
   totalQuestionCount,
 } from './aggregates';
 // Question stats are now handled by aggregates and triggers
@@ -84,7 +89,106 @@ export async function _internalInsertQuestion(
     aggregateErrors.push(`total count aggregate: ${error.message}`);
   }
 
+  // ============================================================================
+  // SECTION 2: RANDOM QUESTION SELECTION AGGREGATES
+  // ============================================================================
+
+  try {
+    console.log(
+      `Starting Section 2 aggregate updates for question ${questionId}...`,
+    );
+
+    // 5. Global random questions aggregate
+    try {
+      console.log(`Attempting to insert into global random aggregate...`);
+      await randomQuestions.insert(ctx, questionDoc);
+      console.log(
+        `Successfully inserted question ${questionId} into global random aggregate`,
+      );
+    } catch (error: any) {
+      console.error(
+        `Error inserting question ${questionId} into global random aggregate:`,
+        error,
+      );
+      aggregateErrors.push(`global random aggregate: ${error.message}`);
+    }
+
+    // 6. Theme random questions aggregate
+    try {
+      console.log(`Attempting to insert into theme random aggregate...`);
+      await randomQuestionsByTheme.insert(ctx, questionDoc);
+      console.log(
+        `Successfully inserted question ${questionId} into theme random aggregate`,
+      );
+    } catch (error: any) {
+      console.error(
+        `Error inserting question ${questionId} into theme random aggregate:`,
+        error,
+      );
+      aggregateErrors.push(`theme random aggregate: ${error.message}`);
+    }
+
+    // 7. Subtheme random questions aggregate (only if question has subthemeId)
+    if (questionDoc.subthemeId) {
+      try {
+        console.log(`Attempting to insert into subtheme random aggregate...`);
+        await randomQuestionsBySubtheme.insert(ctx, questionDoc);
+        console.log(
+          `Successfully inserted question ${questionId} into subtheme random aggregate`,
+        );
+      } catch (error: any) {
+        console.error(
+          `Error inserting question ${questionId} into subtheme random aggregate:`,
+          error,
+        );
+        aggregateErrors.push(`subtheme random aggregate: ${error.message}`);
+      }
+    } else {
+      console.log(
+        `Question ${questionId} has no subthemeId, skipping subtheme random aggregate`,
+      );
+    }
+
+    // 8. Group random questions aggregate (only if question has groupId)
+    if (questionDoc.groupId) {
+      try {
+        console.log(`Attempting to insert into group random aggregate...`);
+        await randomQuestionsByGroup.insert(ctx, questionDoc);
+        console.log(
+          `Successfully inserted question ${questionId} into group random aggregate`,
+        );
+      } catch (error: any) {
+        console.error(
+          `Error inserting question ${questionId} into group random aggregate:`,
+          error,
+        );
+        aggregateErrors.push(`group random aggregate: ${error.message}`);
+      }
+    } else {
+      console.log(
+        `Question ${questionId} has no groupId, skipping group random aggregate`,
+      );
+    }
+  } catch (error: any) {
+    console.error(
+      `FATAL ERROR in Section 2 aggregates for question ${questionId}:`,
+      error,
+    );
+    aggregateErrors.push(`Section 2 FATAL ERROR: ${error.message}`);
+  }
+
   // Question stats are now handled automatically by aggregate triggers
+
+  // Log summary of aggregate operations
+  const totalAggregates = 8; // 4 Section 1 + 4 Section 2
+  const successfulAggregates = totalAggregates - aggregateErrors.length;
+
+  console.log(`Aggregate update summary for question ${questionId}:`);
+  console.log(`- Section 1 (Count aggregates): 4 total`);
+  console.log(`- Section 2 (Random selection): 4 total`);
+  console.log(
+    `- Successfully updated: ${successfulAggregates}/${totalAggregates}`,
+  );
 
   if (aggregateErrors.length > 0) {
     console.warn(
@@ -202,6 +306,99 @@ export async function _internalUpdateQuestion(
     // totalQuestionCount doesn't change when moving between themes, so no update needed
   }
 
+  // ============================================================================
+  // SECTION 2: RANDOM QUESTION SELECTION AGGREGATES UPDATE
+  // ============================================================================
+
+  // Update Section 2 aggregates if taxonomy changed
+  if (taxonomyChanged) {
+    console.log(
+      `Question ${id} taxonomy changed, updating Section 2 aggregates...`,
+    );
+
+    // Update theme random aggregate if themeId changed
+    if (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) {
+      try {
+        await randomQuestionsByTheme.replace(
+          ctx,
+          oldQuestionDoc,
+          newQuestionDoc,
+        );
+      } catch (error: any) {
+        if (error.code === 'DELETE_MISSING_KEY') {
+          console.warn(
+            `Question ${id} not found in theme random aggregate, inserting instead`,
+          );
+          await randomQuestionsByTheme.insert(ctx, newQuestionDoc);
+        } else {
+          throw error;
+        }
+      }
+    }
+
+    // Update subtheme random aggregate if subthemeId changed
+    if (
+      updates.subthemeId !== undefined &&
+      updates.subthemeId !== oldQuestionDoc.subthemeId
+    ) {
+      // Remove from old subtheme random aggregate if it had one
+      if (oldQuestionDoc.subthemeId) {
+        try {
+          await randomQuestionsBySubtheme.delete(ctx, oldQuestionDoc);
+        } catch (error: any) {
+          console.warn(
+            `Error removing question ${id} from old subtheme random aggregate:`,
+            error,
+          );
+        }
+      }
+
+      // Add to new subtheme random aggregate if it has one
+      if (newQuestionDoc.subthemeId) {
+        try {
+          await randomQuestionsBySubtheme.insert(ctx, newQuestionDoc);
+        } catch (error: any) {
+          console.warn(
+            `Error inserting question ${id} into new subtheme random aggregate:`,
+            error,
+          );
+        }
+      }
+    }
+
+    // Update group random aggregate if groupId changed
+    if (
+      updates.groupId !== undefined &&
+      updates.groupId !== oldQuestionDoc.groupId
+    ) {
+      // Remove from old group random aggregate if it had one
+      if (oldQuestionDoc.groupId) {
+        try {
+          await randomQuestionsByGroup.delete(ctx, oldQuestionDoc);
+        } catch (error: any) {
+          console.warn(
+            `Error removing question ${id} from old group random aggregate:`,
+            error,
+          );
+        }
+      }
+
+      // Add to new group random aggregate if it has one
+      if (newQuestionDoc.groupId) {
+        try {
+          await randomQuestionsByGroup.insert(ctx, newQuestionDoc);
+        } catch (error: any) {
+          console.warn(
+            `Error inserting question ${id} into new group random aggregate:`,
+            error,
+          );
+        }
+      }
+    }
+
+    // Global random aggregate doesn't change when moving between themes, so no update needed
+  }
+
   // Note: Add update logic for _updateQuestionStats if needed here as well
 }
 
@@ -284,6 +481,82 @@ export async function _internalDeleteQuestion(
       console.error(`Unexpected error type:`, error);
     }
     // Continue regardless of error type for now
+  }
+
+  // ============================================================================
+  // SECTION 2: RANDOM QUESTION SELECTION AGGREGATES DELETE
+  // ============================================================================
+
+  // 5. Global random questions aggregate
+  try {
+    await randomQuestions.delete(ctx, questionDoc);
+    console.log(
+      `Successfully deleted question ${id} from global random aggregate`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error deleting question ${id} from global random aggregate:`,
+      error,
+    );
+    if (error.code !== 'DELETE_MISSING_KEY') {
+      console.error(`Unexpected error type:`, error);
+    }
+    // Continue regardless of error type for now
+  }
+
+  // 6. Theme random questions aggregate
+  try {
+    await randomQuestionsByTheme.delete(ctx, questionDoc);
+    console.log(
+      `Successfully deleted question ${id} from theme random aggregate`,
+    );
+  } catch (error: any) {
+    console.warn(
+      `Error deleting question ${id} from theme random aggregate:`,
+      error,
+    );
+    if (error.code !== 'DELETE_MISSING_KEY') {
+      console.error(`Unexpected error type:`, error);
+    }
+    // Continue regardless of error type for now
+  }
+
+  // 7. Subtheme random questions aggregate (only if question had subthemeId)
+  if (questionDoc.subthemeId) {
+    try {
+      await randomQuestionsBySubtheme.delete(ctx, questionDoc);
+      console.log(
+        `Successfully deleted question ${id} from subtheme random aggregate`,
+      );
+    } catch (error: any) {
+      console.warn(
+        `Error deleting question ${id} from subtheme random aggregate:`,
+        error,
+      );
+      if (error.code !== 'DELETE_MISSING_KEY') {
+        console.error(`Unexpected error type:`, error);
+      }
+      // Continue regardless of error type for now
+    }
+  }
+
+  // 8. Group random questions aggregate (only if question had groupId)
+  if (questionDoc.groupId) {
+    try {
+      await randomQuestionsByGroup.delete(ctx, questionDoc);
+      console.log(
+        `Successfully deleted question ${id} from group random aggregate`,
+      );
+    } catch (error: any) {
+      console.warn(
+        `Error deleting question ${id} from group random aggregate:`,
+        error,
+      );
+      if (error.code !== 'DELETE_MISSING_KEY') {
+        console.error(`Unexpected error type:`, error);
+      }
+      // Continue regardless of error type for now
+    }
   }
 
   // Question stats are now handled automatically by aggregate triggers
