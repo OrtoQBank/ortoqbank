@@ -15,11 +15,14 @@ and supports custom and preset quizzes with study/exam modes.
 - **Backend**: Convex (real-time database and functions)
 - **Authentication**: Clerk
 - **Payments**: MercadoPago
-- **Analytics**: PostHog
+- **Analytics**: PostHog, Vercel Analytics
 - **Error Tracking**: Sentry
 - **UI Components**: Radix UI with shadcn/ui
-- **Rich Text**: TipTap editor
+- **Rich Text**: TipTap editor with custom image resize extension
+- **CDN**: ImageKit for image uploads and optimization
 - **Testing**: Vitest (unit), Playwright (e2e)
+- **Email**: React Email with Resend
+- **State Management**: Zustand
 
 ## Development Commands
 
@@ -47,6 +50,9 @@ npm run test:e2e:ui           # Run Playwright with UI
 npm run test:once             # Run tests once (no watch)
 npm run test:debug            # Debug tests
 npm run coverage              # Run tests with coverage
+npm run test:coverage         # Run tests with coverage (text reporter)
+npm run sentry:sourcemaps     # Upload sourcemaps to Sentry
+npm run migrate:content       # Migrate TipTap content to string format
 ```
 
 ## Project Architecture
@@ -257,3 +263,9 @@ The application presents users with 4 question selection modes:
   batching operations.
 - **Unbounded operations**: Always implement limits and safety checks to prevent
   timeouts.
+
+# important-instruction-reminders
+Do what has been asked; nothing more, nothing less.
+NEVER create files unless they're absolutely necessary for achieving your goal.
+ALWAYS prefer editing an existing file to creating a new one.
+NEVER proactively create documentation files (*.md) or README files. Only create documentation files if explicitly requested by the User.

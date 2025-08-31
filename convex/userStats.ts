@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
+import { internal } from './_generated/api';
 import { internalMutation, mutation, query } from './_generated/server';
 import { getTotalQuestionCount } from './aggregateQueries.js';
 // Removed user-specific aggregate imports - replaced by userStatsCounts table
@@ -25,14 +26,6 @@ type UserStats = {
   totalQuestions: number;
 };
 
-type UserStatsSummary = {
-  totalAnswered: number;
-  totalCorrect: number;
-  totalIncorrect: number;
-  totalBookmarked: number;
-  correctPercentage: number;
-  totalQuestions: number;
-};
 
 // OLD getUserStatsFromTable function removed - replaced by getUserStatsFast
 
@@ -101,7 +94,6 @@ export const _updateQuestionStats = internalMutation({
       .first();
 
     const wasIncorrectBefore = existingStat?.isIncorrect || false;
-    let statRecord;
 
     if (existingStat) {
       // Update existing record with taxonomy fields
@@ -114,7 +106,6 @@ export const _updateQuestionStats = internalMutation({
       };
 
       await ctx.db.patch(existingStat._id, updateData);
-      statRecord = { ...existingStat, ...updateData };
     } else {
       // Skip creating stats only if question lacks themeId (minimum requirement)
       if (!question.themeId) {
@@ -137,28 +128,57 @@ export const _updateQuestionStats = internalMutation({
         groupId: question.groupId,
       };
 
-      const statId = await ctx.db.insert('userQuestionStats', newStatData);
-      statRecord = { ...newStatData, _id: statId, _creationTime: now };
+      await ctx.db.insert('userQuestionStats', newStatData);
     }
 
-    // REAL-TIME AGGREGATE UPDATES - REMOVED
-    // All user-specific aggregate logic has been replaced by the userStatsCounts table
-    // which is updated in the updateUserStatsCounts helper function below
-
-    // UPDATE userStatsCounts table for performance
-    await updateUserStatsCounts(ctx, {
+    // ASYNC STATS UPDATES - Schedule userStatsCounts updates to run separately
+    // This prevents blocking the main quiz submission flow and avoids timeouts
+    ctx.scheduler.runAfter(100, internal.userStats._updateUserStatsCounts, {
       userId,
       questionId: args.questionId,
       isCorrect: args.isCorrect,
       wasIncorrectBefore,
       isNewAnswer: !existingStat,
-      question,
+      themeId: question.themeId,
+      subthemeId: question.subthemeId || null,
+      groupId: question.groupId || null,
     });
 
     return {
       success: true,
       action: existingStat ? 'updated' : 'created',
     };
+  },
+});
+
+/**
+ * Internal mutation to update userStatsCounts asynchronously
+ * This is scheduled from _updateQuestionStats to avoid blocking the main quiz flow
+ */
+export const _updateUserStatsCounts = internalMutation({
+  args: {
+    userId: v.id('users'),
+    questionId: v.id('questions'),
+    isCorrect: v.boolean(),
+    wasIncorrectBefore: v.boolean(),
+    isNewAnswer: v.boolean(),
+    themeId: v.id('themes'),
+    subthemeId: v.union(v.id('subthemes'), v.null()),
+    groupId: v.union(v.id('groups'), v.null()),
+  },
+  handler: async (ctx, params) => {
+    await updateUserStatsCounts(ctx, {
+      userId: params.userId,
+      questionId: params.questionId,
+      isCorrect: params.isCorrect,
+      wasIncorrectBefore: params.wasIncorrectBefore,
+      isNewAnswer: params.isNewAnswer,
+      question: {
+        themeId: params.themeId,
+        subthemeId: params.subthemeId,
+        groupId: params.groupId,
+      },
+    });
   },
 });
 
