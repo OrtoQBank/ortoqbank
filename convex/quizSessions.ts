@@ -132,19 +132,14 @@ export const submitAnswerAndProgress = mutation({
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
-    // Batch fetch current and next question to reduce database calls
+    // Only fetch the current question - remove unnecessary next question fetch
     const currentQuestionId = quiz.questions[session.currentQuestionIndex];
-    const nextQuestionId = quiz.questions[session.currentQuestionIndex + 1];
-
-    const [currentQuestion, nextQuestion] = await Promise.all([
-      ctx.db.get(currentQuestionId),
-      nextQuestionId ? ctx.db.get(nextQuestionId) : Promise.resolve(null),
-    ]);
-
+    if (currentQuestionId == null) {
+      throw new Error('Session out of sync: question index out of bounds');
+    }
+    const currentQuestion = await ctx.db.get(currentQuestionId);
+    
     if (!currentQuestion) throw new Error('Question not found');
-
-    // Optional: Cache next question data in session for even faster subsequent access
-    // This is a trade-off between memory usage and performance
 
     // 3. Pre-compute values for efficient session update
     const isAnswerCorrect =
@@ -174,7 +169,7 @@ export const submitAnswerAndProgress = mutation({
     });
 
     // 5. Schedule user stats update asynchronously (non-blocking)
-    await ctx.scheduler.runAfter(0, internal.userStats._updateQuestionStats, {
+    ctx.scheduler.runAfter(0, internal.userStats._updateQuestionStats, {
       userId: userId._id,
       questionId: currentQuestion._id,
       isCorrect: isAnswerCorrect,
