@@ -134,6 +134,9 @@ export const submitAnswerAndProgress = mutation({
 
     // Only fetch the current question - remove unnecessary next question fetch
     const currentQuestionId = quiz.questions[session.currentQuestionIndex];
+    if (currentQuestionId == null) {
+      throw new Error('Session out of sync: question index out of bounds');
+    }
     const currentQuestion = await ctx.db.get(currentQuestionId);
     
     if (!currentQuestion) throw new Error('Question not found');
