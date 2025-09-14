@@ -4,6 +4,7 @@ import {
   BarChart3,
   BookOpen,
   CogIcon,
+  DollarSign,
   FilePlusIcon,
   FileQuestion,
   FolderCogIcon,
@@ -58,6 +59,13 @@ const navItems = [
     href: '/admin/coupons',
     label: 'Cupons',
     icon: CogIcon,
+    prefetch: false, // Use hover prefetch for less frequently used features
+    useHoverPrefetch: true,
+  },
+  {
+    href: '/admin/pricingPlans',
+    label: 'Planos de Preços',
+    icon: DollarSign,
     prefetch: false, // Use hover prefetch for less frequently used features
     useHoverPrefetch: true,
   },

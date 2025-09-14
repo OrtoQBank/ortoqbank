@@ -1,68 +1,21 @@
 'use client';
 
+import { useQuery } from 'convex/react';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 
 import CheckoutEmailModal from '@/components/checkout-email-modal';
 import { Button } from '@/components/ui/button';
 
+import { api } from '../../../convex/_generated/api';
+
 export default function Pricing() {
   const [showEmailModal, setShowEmailModal] = useState(false);
-  const plans = [
-    {
-      id: "r3",
-      name: "R3",
-      badge: "R3",
-      price: "R$1.999",
-      installments: "em 3x sem juros",
-      installmentDetails: "parcelado em até 12x",
-      description: "Ideal para quem está começando a preparação para o TEOT 2026",
-      features: ["Acesso até TEOT 2026", "Trilhas de estudo básicas", "Simulados essenciais", "Suporte por email"],
-      buttonText: "GARANTIR VAGA",
-      popular: false,
-    },
-    {
-      id: "r2",
-      name: "R2",
-      badge: "R2",
-      price: "R$2.899",
-      originalPrice: "R$3.998",
-      installments: "em 3x sem juros",
-      installmentDetails: "parcelado em até 12x",
-      description: "A escolha ideal para uma preparação completa e estendida",
-      features: [
-        "Acesso até TEOT 2027",
-        "Todas as trilhas de estudo",
-        "Simulados ilimitados",
-        "Testes personalizados",
-        "Suporte prioritário",
-      ],
-      buttonText: "GARANTIR VAGA",
-      popular: false,
-    },
-    {
-      id: "r1",
-      name: "R1",
-      badge: "R1",
-      price: "R$3.999",
-      originalPrice: "R$5.997",
-      installments: "em 3x sem juros",
-      installmentDetails: "parcelado em até 12x",
-      description: "Máxima preparação com acesso estendido até 2028",
-      features: [
-        "Acesso até TEOT 2028",
-        "Conteúdo premium exclusivo",
-        "Mentoria personalizada",
-        "Análise de desempenho",
-        "Suporte VIP 24/7",
-      ],
-      buttonText: "GARANTIR VAGA",
-      popular: false,
-    },
-  ]
+  const plans = useQuery(api.pricingPlans.getPricingPlans);
+  
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-blue-50 py-8">
+    <div className=" bg-gradient-to-br from-slate-50 to-blue-50 py-8">
       <div className="container mx-auto px-4 text-center mb-16">
         <h1 className="text-4xl font-bold mb-3" style={{ color: "#4A9EFF" }}>
           Orto<span style={{ color: "#4A9EFF" }}>Q</span>Bank
@@ -73,24 +26,23 @@ export default function Pricing() {
       </div>
       <div className="container mx-auto px-4 mt-8">
         <div className="flex flex-col lg:flex-row items-center justify-center gap-6 max-w-6xl mx-auto">
-          {plans.map((plan, index) => (
+          {plans?.map((plan, index) => (
             <div
-              key={plan.id}
-              className="relative bg-white rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-105 w-full lg:w-72 group h-[550px] flex flex-col"
+              key={plan._id}
+              className="relative bg-white rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-105 w-full lg:w-72 group min-h-[500px] flex flex-col"
             >
               <div className="text-center py-4">
-                <div className="inline-block px-4 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-600 group-hover:bg-blue-800 group-hover:text-white transition-all duration-300">
+                <div className="inline-block px-4 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-600 group-hover:bg-white group-hover:text-blue-600 transition-all duration-300">
                   {plan.badge}
                 </div>
               </div>
 
               <div className="text-center px-6 pb-6">
                 <div className="h-20 flex flex-col justify-center">
-                  {plan.originalPrice && (
-                    <div className="text-lg line-through mb-2 text-red-500 group-hover:text-white/70 transition-all duration-300">
-                      {plan.originalPrice}
+               
+                    <div className="text-lg line-through mb-2 text-red-500 group-hover:text-white/70 transition-all duration-300 min-h-[1.5em]">
+                      {plan.originalPrice && <span>{plan.originalPrice}</span>}
                     </div>
-                  )}
                   <div className="text-4xl font-bold mb-2 text-gray-900 group-hover:text-white transition-all duration-300">
                     {plan.price}
                   </div>
@@ -106,7 +58,7 @@ export default function Pricing() {
                 </p>
               </div>
 
-              <div className="px-6 pb-6 flex-grow">
+              <div className="px-6 flex-grow">
                 <ul className="space-y-3">
                   {plan.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-center gap-3">
@@ -122,14 +74,24 @@ export default function Pricing() {
               </div>
 
               <div className="p-6 flex-shrink-0">
-                <Button onClick={() => setShowEmailModal(true)}
-                  className="w-full py-3 px-6 rounded-xl font-semibold text-sm transition-all duration-300 bg-blue-500 text-white hover:bg-white hover:text-blue-600 shadow-lg hover:shadow-xl">
+                <Button 
+                  onClick={() => setShowEmailModal(true)}
+                  className={`w-full py-3 px-6 rounded-xl font-semibold text-sm transition-all duration-300 ${plan.popular ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-500 text-white group-hover:bg-white group-hover:text-blue-600 shadow-lg hover:shadow-xl'}`}
+                  disabled={plan.popular}
+                  >
                   {plan.buttonText}
-
+                  <CheckoutEmailModal
+                    open={showEmailModal}
+                    onOpenChange={setShowEmailModal}
+                  />
+                
                 </Button>
               </div>
 
-              <div className="absolute inset-0 bg-blue-500 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-2xl"></div>
+              <div
+                className={`absolute inset-0 bg-blue-500 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-2xl ${plan.popular ? 'opacity-100' : ''}`}
+              >
+              </div>
             </div>
           ))}
         </div>
@@ -139,20 +101,3 @@ export default function Pricing() {
 }
 
 
-<Button
-  className="hover:bg-opacity-90 w-full bg-[#2196F3] text-lg font-semibold text-white"
-  onClick={() => setShowEmailModal(true)}
->
-  GARANTIR MINHA VAGA AGORA!
-</Button>
-          </div >
-        </div >
-      </div >
-
-  <CheckoutEmailModal
-    open={showEmailModal}
-    onOpenChange={setShowEmailModal}
-  />
-    </section >
-  );
-}
