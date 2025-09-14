@@ -92,7 +92,7 @@ export default function ProfilePage() {
         {
           name: 'Não Respondidas',
           value: totalQuestions - totalAnswered,
-          color: '#f7f9fd', // gray
+          color: 'rgba(35, 33, 34, 0.25)', // gray
         },
       ]
     : [];
