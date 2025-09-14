@@ -87,12 +87,12 @@ export default function ProfilePage() {
         {
           name: 'Respondidas',
           value: totalAnswered,
-          color: '#22c55e', // green
+          color: '#2388e2', // blue
         },
         {
           name: 'Não Respondidas',
           value: totalQuestions - totalAnswered,
-          color: '#ef4444', // red
+          color: '#f7f9fd', // gray
         },
       ]
     : [];

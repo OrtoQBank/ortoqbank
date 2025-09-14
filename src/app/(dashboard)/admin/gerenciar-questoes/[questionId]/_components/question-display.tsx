@@ -34,9 +34,7 @@ export function QuestionDisplay({
           </div>
 
           <div>
-            <h2 className="my-4 mb-4 border-t pt-2 font-semibold">
-              Alternativas:
-            </h2>
+            
             <div className="mt-4 space-y-2">
               {question.alternatives?.map(
                 (alternative: string, index: number) => (

@@ -126,7 +126,6 @@ export default function QuizAlternatives({
 
   return (
     <div>
-      <h2 className="my-2 border-t pt-4 font-semibold">Alternativas:</h2>
       <div className="mt-4 space-y-2">
         {alternatives.map((alternative, i) => {
           // Determine the appropriate styling for each alternative
