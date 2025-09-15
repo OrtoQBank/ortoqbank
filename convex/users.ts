@@ -4,6 +4,7 @@ import {
   internalMutation,
   internalQuery,
   mutation,
+  type MutationCtx,
   query,
   type QueryCtx as QueryContext,
 } from './_generated/server';
@@ -120,6 +121,24 @@ async function userByClerkUserId(context: QueryContext, clerkUserId: string) {
     .query('users')
     .withIndex('by_clerkUserId', q => q.eq('clerkUserId', clerkUserId))
     .unique();
+}
+
+// Função para verificar se o usuário atual é admin
+// Segue o mesmo padrão usado no frontend (src/utils/roles.ts e middleware)
+export async function requireAdmin(context: QueryContext | MutationCtx): Promise<void> {
+  const identity = await context.auth.getUserIdentity();
+  if (!identity) {
+    throw new Error('Unauthorized: Authentication required');
+  }
+  
+  // Verifica se o token JWT contém o papel de admin
+  // Isso segue o mesmo padrão usado no middleware e utils do frontend
+  const hasAdminRole = identity.tokenIdentifier?.includes('"role":"admin"') || 
+                       identity.tokenIdentifier?.includes("'role':'admin'");
+  
+  if (!hasAdminRole) {
+    throw new Error('Unauthorized: Admin access required');
+  }
 }
 
 // Add this function to check if a user has paid access

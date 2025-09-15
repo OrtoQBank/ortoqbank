@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-
+import { requireAdmin } from './users';
 
 export const getPricingPlans = query({
   args: {},
@@ -25,8 +25,11 @@ export const savePricingPlan = mutation({
       buttonText: v.string(),
       popular: v.boolean(),
     },
-    returns: v.id('pricingPlans'),
+     
     handler: async (ctx, args) => {
+      // Verificação de admin usando a função existente do users.ts
+      await requireAdmin(ctx);
+      
       const { id, ...planData } = args;
       
       if (id) {
@@ -45,6 +48,9 @@ export const removePricingPlan = mutation({
   args: { id: v.id('pricingPlans') },
   
   handler: async (ctx, args) => {
+    // Verificação de admin usando a função existente do users.ts
+    await requireAdmin(ctx);
+    
     await ctx.db.delete(args.id);
     return null;
   },
