@@ -4,9 +4,6 @@ import { useQuery } from 'convex/react';
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 
-import CheckoutEmailModal from '@/components/checkout-email-modal';
-import { Button } from '@/components/ui/button';
-
 import { api } from '../../../convex/_generated/api';
 
 export default function Pricing() {
@@ -71,26 +68,6 @@ export default function Pricing() {
                     </li>
                   ))}
                 </ul>
-              </div>
-
-              <div className="p-6 flex-shrink-0">
-                <Button 
-                  onClick={() => setShowEmailModal(true)}
-                  className={`w-full py-3 px-6 rounded-xl font-semibold text-sm transition-all duration-300 ${plan.popular ? 'bg-gray-300 text-gray-500 cursor-not-allowed' : 'bg-blue-500 text-white group-hover:bg-white group-hover:text-blue-600 shadow-lg hover:shadow-xl'}`}
-                  disabled={plan.popular}
-                  >
-                  {plan.buttonText}
-                  <CheckoutEmailModal
-                    open={showEmailModal}
-                    onOpenChange={setShowEmailModal}
-                  />
-                
-                </Button>
-              </div>
-
-              <div
-                className={`absolute inset-0 bg-blue-500 opacity-0 group-hover:opacity-100 transition-all duration-300 -z-10 rounded-2xl ${plan.popular ? 'opacity-100' : ''}`}
-              >
               </div>
             </div>
           ))}
