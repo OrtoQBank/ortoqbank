@@ -13,6 +13,19 @@ import { Textarea } from '@/components/ui/textarea';
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
 
+type PricingPlan = {
+  _id: Id<'pricingPlans'>;
+  name: string;
+  badge: string;
+  originalPrice: string;
+  price: string;
+  installments: string;
+  installmentDetails: string;
+  description: string;
+  features: string[];
+  buttonText: string;
+};
+
 export default function PricingPlansAdminPage() {
   const plans = useQuery(api.pricingPlans.getPricingPlans) || [];
   const createPlan = useMutation(api.pricingPlans.savePricingPlan);
@@ -45,7 +58,7 @@ export default function PricingPlansAdminPage() {
     buttonText: '',
   });
 
-  function startEdit(plan: any) {
+  function startEdit(plan: PricingPlan) {
     setEditingId(plan._id);
     setEditForm({
       name: plan.name,
