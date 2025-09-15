@@ -23,7 +23,6 @@ export const savePricingPlan = mutation({
       description: v.string(),
       features: v.array(v.string()),
       buttonText: v.string(),
-      popular: v.boolean(),
     },
      
     handler: async (ctx, args) => {

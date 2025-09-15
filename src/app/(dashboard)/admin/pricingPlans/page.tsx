@@ -42,7 +42,6 @@ export default function PricingPlansAdminPage() {
     description: '',
     features: '',
     buttonText: '',
-    popular: false,
   });
 
   function startEdit(plan: any) {
@@ -57,7 +56,6 @@ export default function PricingPlansAdminPage() {
       description: plan.description,
       features: plan.features.join('\n'),
       buttonText: plan.buttonText,
-      popular: plan.popular,
     });
   }
 
@@ -85,7 +83,6 @@ export default function PricingPlansAdminPage() {
       description: editForm.description?.trim() || '',
       features,
       buttonText: editForm.buttonText?.trim() || '',
-      popular: editForm.popular || false,
     });
 
     cancelEdit();
@@ -109,7 +106,6 @@ export default function PricingPlansAdminPage() {
       description: createForm.description.trim(),
       features,
       buttonText: createForm.buttonText.trim(),
-      popular: createForm.popular,
     });
 
     setCreateForm({
@@ -122,7 +118,6 @@ export default function PricingPlansAdminPage() {
       description: '',
       features: '',
       buttonText: '',
-      popular: false,
     });
     setIsCreating(false);
   }
@@ -231,13 +226,7 @@ export default function PricingPlansAdminPage() {
                   />
                 </div>
 
-                <div className="flex items-center gap-2">
-                  <Switch
-                    checked={createForm.popular}
-                    onCheckedChange={v => setCreateForm(f => ({ ...f, popular: !!v }))}
-                  />
-                  <Label className="text-xs">Popular</Label>
-                </div>
+
 
                 <div className="flex gap-2 pt-2">
                   <Button onClick={handleCreate} size="sm" className="flex-1">
@@ -411,7 +400,7 @@ export default function PricingPlansAdminPage() {
                   </div>
 
                   <div className="p-6 flex-shrink-0">
-                    <div className={`w-full py-3 px-6 rounded-xl font-semibold text-sm text-center ${plan.popular ? 'bg-blue-500 text-white shadow-lg' : 'bg-blue-500 text-white shadow-lg'}`}>
+                    <div className={`w-full py-3 px-6 rounded-xl font-semibold text-sm text-center bg-blue-500 text-white shadow-lg`}>
                       {plan.buttonText}
                     </div>
                   </div>

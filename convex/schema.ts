@@ -220,6 +220,5 @@ export default defineSchema({
     description: v.string(),
     features: v.array(v.string()),
     buttonText: v.string(),
-    popular: v.boolean(),
   })
 });
