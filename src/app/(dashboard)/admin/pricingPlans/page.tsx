@@ -11,6 +11,7 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import { api } from '../../../../../convex/_generated/api';
+import { Id } from '../../../../../convex/_generated/dataModel';
 
 export default function PricingPlansAdminPage() {
   const plans = useQuery(api.pricingPlans.getPricingPlans) || [];
@@ -73,7 +74,7 @@ export default function PricingPlansAdminPage() {
       .filter((f: string) => f.length > 0) || [];
 
     await updatePlan({
-      id: editingId as any,
+      id: editingId as Id<'pricingPlans'>,
       name: editForm.name.trim(),
       badge: editForm.badge?.trim() || '',
       originalPrice: editForm.originalPrice?.trim() || '',
@@ -124,7 +125,7 @@ export default function PricingPlansAdminPage() {
 
   async function handleDelete(id: string) {
     if (!confirm('Excluir plano de preços?')) return;
-    await removePlan({ id: id as any });
+    await removePlan({ id: id as Id<'pricingPlans'> });
   }
 
   return (
