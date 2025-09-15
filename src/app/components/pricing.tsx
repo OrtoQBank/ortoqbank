@@ -7,15 +7,15 @@ import { useState } from 'react';
 import { api } from '../../../convex/_generated/api';
 
 export default function Pricing() {
-  const [showEmailModal, setShowEmailModal] = useState(false);
+
   const plans = useQuery(api.pricingPlans.getPricingPlans);
   
 
   return (
     <div className=" bg-gradient-to-br from-slate-50 to-blue-50 py-8">
       <div className="container mx-auto px-4 text-center mb-16">
-        <h1 className="text-4xl font-bold mb-3" style={{ color: "#4A9EFF" }}>
-          Orto<span style={{ color: "#4A9EFF" }}>Q</span>Bank
+        <h1 className="text-4xl font-bold mb-3 text-blue-500">
+          Orto<span className="text-blue-500">Q</span>Bank
         </h1>
         <p className="text-lg text-gray-600 max-w-2xl mx-auto">
           Escolha o plano ideal para sua preparação e garante sua aprovação no TEOT
