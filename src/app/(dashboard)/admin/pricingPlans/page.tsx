@@ -11,25 +11,13 @@ import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import { api } from '../../../../../convex/_generated/api';
-import { Id } from '../../../../../convex/_generated/dataModel';
+import { Doc, Id } from '../../../../../convex/_generated/dataModel';
 
-type PricingPlan = {
-  _id: Id<'pricingPlans'>;
-  name: string;
-  badge: string;
-  originalPrice: string;
-  price: string;
-  installments: string;
-  installmentDetails: string;
-  description: string;
-  features: string[];
-  buttonText: string;
-};
+type PricingPlan = Doc<'pricingPlans'>;
 
 export default function PricingPlansAdminPage() {
   const plans = useQuery(api.pricingPlans.getPricingPlans) || [];
-  const createPlan = useMutation(api.pricingPlans.savePricingPlan);
-  const updatePlan = useMutation(api.pricingPlans.savePricingPlan);
+  const savePlan = useMutation(api.pricingPlans.savePricingPlan);
   const removePlan = useMutation(api.pricingPlans.removePricingPlan);
 
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -77,25 +65,30 @@ export default function PricingPlansAdminPage() {
     setEditForm({});
   }
 
+  function processFormData(formData: typeof createForm | typeof editForm) {
+    return {
+      name: formData.name?.trim() || '',
+      badge: formData.badge?.trim() || '',
+      originalPrice: formData.originalPrice?.trim() || '',
+      price: formData.price?.trim() || '',
+      installments: formData.installments?.trim() || '',
+      installmentDetails: formData.installmentDetails?.trim() || '',
+      description: formData.description?.trim() || '',
+      features: (formData.features || '')
+        .split('\n')
+        .map(f => f.trim())
+        .filter(f => f.length > 0),
+      buttonText: formData.buttonText?.trim() || '',
+    };
+  }
+
   async function saveEdit() {
     if (!editingId || !editForm.name?.trim() || !editForm.price?.trim()) return;
 
-    const features = editForm.features
-      ?.split('\n')
-      .map((f: string) => f.trim())
-      .filter((f: string) => f.length > 0) || [];
-
-    await updatePlan({
+    const planData = processFormData(editForm);
+    await savePlan({
       id: editingId as Id<'pricingPlans'>,
-      name: editForm.name.trim(),
-      badge: editForm.badge?.trim() || '',
-      originalPrice: editForm.originalPrice?.trim() || '',
-      price: editForm.price.trim(),
-      installments: editForm.installments?.trim() || '',
-      installmentDetails: editForm.installmentDetails?.trim() || '',
-      description: editForm.description?.trim() || '',
-      features,
-      buttonText: editForm.buttonText?.trim() || '',
+      ...planData,
     });
 
     cancelEdit();
@@ -104,22 +97,8 @@ export default function PricingPlansAdminPage() {
   async function handleCreate() {
     if (!createForm.name.trim() || !createForm.price.trim()) return;
 
-    const features = createForm.features
-      .split('\n')
-      .map(f => f.trim())
-      .filter(f => f.length > 0);
-
-    await createPlan({
-      name: createForm.name.trim(),
-      badge: createForm.badge.trim(),
-      originalPrice: createForm.originalPrice.trim(),
-      price: createForm.price.trim(),
-      installments: createForm.installments.trim(),
-      installmentDetails: createForm.installmentDetails.trim(),
-      description: createForm.description.trim(),
-      features,
-      buttonText: createForm.buttonText.trim(),
-    });
+    const planData = processFormData(createForm);
+    await savePlan(planData);
 
     setCreateForm({
       name: '',
