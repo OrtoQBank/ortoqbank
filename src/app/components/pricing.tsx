@@ -26,7 +26,7 @@ export default function Pricing() {
           {plans?.map((plan, index) => (
             <div
               key={plan._id}
-              className="relative bg-white rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-105 w-full lg:w-72 group min-h-[500px] flex flex-col"
+              className="relative bg-white rounded-2xl shadow-xl overflow-hidden transition-all duration-300 hover:shadow-2xl hover:scale-105 hover:bg-blue-500 w-full lg:w-72 group min-h-[500px] flex flex-col"
             >
               <div className="text-center py-4">
                 <div className="inline-block px-4 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-600 group-hover:bg-white group-hover:text-blue-600 transition-all duration-300">

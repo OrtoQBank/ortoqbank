@@ -43,7 +43,6 @@ export default function PricingPlansAdminPage() {
     description?: string;
     features?: string;
     buttonText?: string;
-    popular?: boolean;
   }>({});
   const [isCreating, setIsCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -159,15 +158,7 @@ export default function PricingPlansAdminPage() {
           {isCreating && (
             <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden w-full min-h-[500px] flex flex-col border-2 border-dashed border-blue-300">
               <div className="p-4 space-y-3">
-                <div className="space-y-1">
-                  <Label className="text-xs">Badge</Label>
-                  <Input
-                    value={createForm.badge}
-                    onChange={e => setCreateForm(f => ({ ...f, badge: e.target.value }))}
-                    placeholder="Ex: Mais Popular"
-                    className="text-xs"
-                  />
-                </div>
+                
 
                 <div className="space-y-1">
                   <Label className="text-xs">Nome</Label>
