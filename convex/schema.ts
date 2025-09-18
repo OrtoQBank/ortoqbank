@@ -16,6 +16,7 @@ export default defineSchema({
     paymentDate: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     termsAccepted: v.optional(v.boolean()),
+    role: v.optional(v.string()),
   })
     .index('by_clerkUserId', ['clerkUserId'])
     .index('by_paid', ['paid']),

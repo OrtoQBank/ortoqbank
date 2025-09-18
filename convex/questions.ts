@@ -16,6 +16,7 @@ import {
   _internalInsertQuestion,
   _internalUpdateQuestion,
 } from './questionsAggregateSync';
+import { requireAdmin } from './users';
 import { validateNoBlobs } from './utils';
 // Question stats are now handled by aggregates and triggers
 
@@ -41,6 +42,9 @@ export const create = mutation({
     groupId: v.optional(v.id('groups')),
   },
   handler: async (ctx, args) => {
+    // Verify admin access
+    await requireAdmin(ctx);
+    
     // Validate JSON structure of string content
     try {
       const questionTextObj = JSON.parse(args.questionTextString);
@@ -143,6 +147,9 @@ export const update = mutation({
     isPublic: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
+    // Verify admin access
+    await requireAdmin(ctx);
+    
     // Validate JSON structure of string content
     try {
       const questionTextObj = JSON.parse(args.questionTextString);
@@ -160,9 +167,6 @@ export const update = mutation({
         'Invalid content format: ' + (error.message || 'Unknown error'),
       );
     }
-
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
 
     // Don't need to check if question exists here, helper does it
 
@@ -273,8 +277,8 @@ export const getQuestionCountForTheme = query({
 export const deleteQuestion = mutation({
   args: { id: v.id('questions') },
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) throw new Error('Not authenticated');
+    // Verify admin access
+    await requireAdmin(ctx);
 
     // First, remove the question from all preset quizzes that contain it
     const allPresetQuizzes = await ctx.db.query('presetQuizzes').collect();

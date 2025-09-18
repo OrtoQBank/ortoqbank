@@ -203,7 +203,7 @@ export default function TrilhasPage() {
                 </span>
               </div>
             </div>
-            <div className="mt-2 flex w-full flex-wrap gap-2 md:mt-0 md:w-auto">
+            <div className="mt-3 flex w-full flex-col gap-2 md:mt-0 md:w-auto md:flex-row">
               <Button
                 onClick={() => handleExamClick(quiz._id)}
                 className="flex-1 cursor-pointer md:flex-none"
@@ -218,11 +218,10 @@ export default function TrilhasPage() {
                 <Button
                   asChild
                   variant="outline"
-                  className="w-full cursor-pointer"
+                  className="flex-1 cursor-pointer md:flex-none"
                 >
                   <HoverPrefetchLink
                     href={`/quiz-results/${quiz._id}`}
-                    className="flex-1 md:flex-none"
                   >
                     Ver Resultados
                   </HoverPrefetchLink>

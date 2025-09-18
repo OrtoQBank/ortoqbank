@@ -30,8 +30,32 @@ const sifonn = localFont({
 });
 
 export const metadata: Metadata = {
-  title: 'OrtoQBank',
-  description: 'Banco de questões de ortopedia para estudantes',
+  title: 'OrtoQBank - Preparação para TEOT | Banco de Questões de Ortopedia',
+  description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Trilhas de estudo, simulados completos e testes personalizados. Planos a partir de R$ 97.',
+  keywords: 'TEOT, ortopedia, questões, simulados, preparação, residência médica, ortopedista',
+  authors: [{ name: 'OrtoQBank' }],
+  openGraph: {
+    title: 'OrtoQBank - Preparação para TEOT',
+    description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+    type: 'website',
+    locale: 'pt_BR',
+  },
+  twitter: {
+    card: 'summary_large_image',
+    title: 'OrtoQBank - Preparação para TEOT',
+    description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-video-preview': -1,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+    },
+  },
 };
 
 export default function RootLayout({
