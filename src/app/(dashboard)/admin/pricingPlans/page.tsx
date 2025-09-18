@@ -82,36 +82,36 @@ export default function PricingPlansAdminPage() {
     };
   }
 
-  async function saveEdit() {
-    if (!editingId || !editForm.name?.trim() || !editForm.price?.trim()) return;
-
-    const planData = processFormData(editForm);
-    await savePlan({
-      id: editingId as Id<'pricingPlans'>,
-      ...planData,
-    });
-
-    cancelEdit();
-  }
-
-  async function handleCreate() {
-    if (!createForm.name.trim() || !createForm.price.trim()) return;
-
-    const planData = processFormData(createForm);
-    await savePlan(planData);
-
-    setCreateForm({
-      name: '',
-      badge: '',
-      originalPrice: '',
-      price: '',
-      installments: '',
-      installmentDetails: '',
-      description: '',
-      features: '',
-      buttonText: '',
-    });
-    setIsCreating(false);
+  async function handleSavePlan(isEdit: boolean = false) {
+    if (isEdit) {
+      if (!editingId || !editForm.name?.trim() || !editForm.price?.trim()) return;
+      
+      const planData = processFormData(editForm);
+      await savePlan({
+        id: editingId as Id<'pricingPlans'>,
+        ...planData,
+      });
+      
+      cancelEdit();
+    } else {
+      if (!createForm.name.trim() || !createForm.price.trim()) return;
+      
+      const planData = processFormData(createForm);
+      await savePlan(planData);
+      
+      setCreateForm({
+        name: '',
+        badge: '',
+        originalPrice: '',
+        price: '',
+        installments: '',
+        installmentDetails: '',
+        description: '',
+        features: '',
+        buttonText: '',
+      });
+      setIsCreating(false);
+    }
   }
 
   async function handleDelete(id: string) {
@@ -213,7 +213,7 @@ export default function PricingPlansAdminPage() {
 
 
                 <div className="flex gap-2 pt-2">
-                  <Button onClick={handleCreate} size="sm" className="flex-1">
+                  <Button onClick={() => handleSavePlan(false)} size="sm" className="flex-1">
                     <Save className="w-3 h-3 mr-1" />
                     Criar
                   </Button>
@@ -312,7 +312,7 @@ export default function PricingPlansAdminPage() {
              
 
                   <div className="flex gap-2 pt-2">
-                    <Button onClick={saveEdit} size="sm" className="flex-1">
+                    <Button onClick={() => handleSavePlan(true)} size="sm" className="flex-1">
                       <Save className="w-3 h-3 mr-1" />
                       Salvar
                     </Button>
