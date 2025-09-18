@@ -2,13 +2,13 @@
 
 import { useQuery } from 'convex/react';
 import { Check } from 'lucide-react';
-import { useState } from 'react';
 
 import { api } from '../../../convex/_generated/api';
+import { Doc } from '../../../convex/_generated/dataModel';
 
 export default function Pricing() {
-
-  const plans = useQuery(api.pricingPlans.getPricingPlans);
+  const plans: Doc<"pricingPlans">[] | undefined = useQuery(api.pricingPlans.getPricingPlans);
+  
   
 
   return (
