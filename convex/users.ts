@@ -4,6 +4,7 @@ import {
   internalMutation,
   internalQuery,
   mutation,
+  type MutationCtx,
   query,
   type QueryCtx as QueryContext,
 } from './_generated/server';
@@ -122,6 +123,57 @@ async function userByClerkUserId(context: QueryContext, clerkUserId: string) {
     .unique();
 }
 
+// Função para verificar se o usuário atual é admin
+// Agora usa dados do banco de dados ao invés do JWT token
+export async function requireAdmin(context: QueryContext | MutationCtx): Promise<void> {
+  const user = await getCurrentUser(context);
+  if (!user) {
+    throw new Error('Unauthorized: Authentication required');
+  }
+  
+  if (user.role !== 'admin') {
+    throw new Error('Unauthorized: Admin access required');
+  }
+}
+
+// Função para obter o papel do usuário atual
+export const getCurrentUserRole = query({
+  args: {},
+  returns: v.union(v.string(), v.null()),
+  handler: async (ctx) => {
+    const user = await getCurrentUser(ctx);
+    return user?.role || null;
+  },
+});
+
+// Função para verificar se o usuário atual tem um papel específico
+export const hasRole = query({
+  args: { role: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const user = await getCurrentUser(ctx);
+    return user?.role === args.role;
+  },
+});
+
+// Função para definir o papel de um usuário (apenas admins podem usar)
+export const setUserRole = mutation({
+  args: { 
+    userId: v.id('users'),
+    role: v.optional(v.string())
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Verifica se o usuário atual é admin
+    await requireAdmin(ctx);
+    
+    // Atualiza o papel do usuário
+    await ctx.db.patch(args.userId, { role: args.role });
+    return null;
+  },
+});
+
+
 // Add this function to check if a user has paid access
 export const checkUserPaid = query({
   args: {},
@@ -194,3 +246,81 @@ export const setTermsAccepted = mutation({
     return;
   },
 });
+
+// Query for admin to get all users with their roles (for admin interface)
+export const getAllUsersForAdmin = query({
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(v.object({
+    _id: v.id('users'),
+    _creationTime: v.number(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.string(),
+    imageUrl: v.optional(v.string()),
+    clerkUserId: v.string(),
+    role: v.optional(v.string()),
+    paid: v.optional(v.boolean()),
+    termsAccepted: v.optional(v.boolean()),
+  })),
+  handler: async (ctx, args) => {
+    // Verify admin access
+    await requireAdmin(ctx);
+    
+    const limit = args.limit || 50; // Default limit
+    
+    return await ctx.db
+      .query('users')
+      .order('desc')
+      .take(limit);
+  },
+});
+
+// Query for admin to search users by email/name with their roles
+export const searchUsersForAdmin = query({
+  args: { 
+    searchQuery: v.string(),
+    limit: v.optional(v.number()) 
+  },
+  returns: v.array(v.object({
+    _id: v.id('users'),
+    _creationTime: v.number(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.string(),
+    imageUrl: v.optional(v.string()),
+    clerkUserId: v.string(),
+    role: v.optional(v.string()),
+    paid: v.optional(v.boolean()),
+    termsAccepted: v.optional(v.boolean()),
+  })),
+  handler: async (ctx, args) => {
+    // Verify admin access
+    await requireAdmin(ctx);
+    
+    const limit = args.limit || 50; // Default limit
+    const query = args.searchQuery.toLowerCase();
+    
+    // Get all users and filter by email/name in memory
+    // For better performance, consider adding search indexes in the future
+    const allUsers = await ctx.db
+      .query('users')
+      .order('desc')
+      .collect();
+    
+    const filteredUsers = allUsers.filter(user => {
+      const email = user.email?.toLowerCase() || '';
+      const firstName = user.firstName?.toLowerCase() || '';
+      const lastName = user.lastName?.toLowerCase() || '';
+      const fullName = `${firstName} ${lastName}`.trim();
+      
+      return email.includes(query) || 
+             firstName.includes(query) || 
+             lastName.includes(query) ||
+             fullName.includes(query);
+    });
+    
+    return filteredUsers.slice(0, limit);
+  },
+});
+
+

@@ -16,6 +16,7 @@ export default defineSchema({
     paymentDate: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     termsAccepted: v.optional(v.boolean()),
+    role: v.optional(v.string()),
   })
     .index('by_clerkUserId', ['clerkUserId'])
     .index('by_paid', ['paid']),
@@ -208,4 +209,17 @@ export default defineSchema({
     validFrom: v.optional(v.number()), // epoch ms
     validUntil: v.optional(v.number()), // epoch ms
   }).index('by_code', ['code']),
+
+  //pricing plans
+  pricingPlans: defineTable({
+    name: v.string(),
+    badge: v.string(),
+    originalPrice: v.string(),
+    price: v.string(),
+    installments: v.string(),
+    installmentDetails: v.string(),
+    description: v.string(),
+    features: v.array(v.string()),
+    buttonText: v.string(),
+  })
 });

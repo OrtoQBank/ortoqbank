@@ -1,5 +1,5 @@
 'use client';
-import { useAction } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { ReactNode, useEffect, useState } from 'react';
 
 import { TermsOfServiceModal } from '@/components/common/TermsOfServiceModal';
@@ -12,8 +12,8 @@ interface TermsProviderProps {
 }
 
 export function TermsProvider({ children }: TermsProviderProps) {
-  const { termsAccepted, updateTermsAccepted } = useSession();
-  const acceptTermsAction = useAction(api.termsActions.acceptTermsInClerk);
+  const { termsAccepted, isLoading } = useSession();
+  const setTermsAccepted = useMutation(api.users.setTermsAccepted);
 
   // Use a state to prevent flickering when data is loading
   const [showModal, setShowModal] = useState(false);
@@ -21,19 +21,21 @@ export function TermsProvider({ children }: TermsProviderProps) {
 
   // Update modal visibility based on terms acceptance from session
   useEffect(() => {
-    if (termsAccepted === false) {
+    // Only show modal when we explicitly know terms are false (not during loading)
+    if (!isLoading && termsAccepted === false) {
       setShowModal(true);
+    } else {
+      setShowModal(false);
     }
-  }, [termsAccepted]);
+  }, [termsAccepted, isLoading]);
 
   const handleAccept = async () => {
     try {
       setIsAccepting(true);
-      await acceptTermsAction({});
+      // Use the backend mutation to set terms acceptance
+      await setTermsAccepted({ accepted: true });
       
-      // Update session state immediately for better UX
-      updateTermsAccepted(true);
-      setShowModal(false);
+      // Modal will close automatically when backend updates termsAccepted
     } catch (error) {
       console.error('Error accepting terms:', error);
       // You might want to show an error message to the user here

@@ -1,9 +1,9 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
 import { HeadsetIcon, type LucideIcon, UserCircleIcon } from 'lucide-react';
 import Link from 'next/link';
 
+import { useSession } from '../providers/SessionProvider';
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -41,11 +41,22 @@ const items: MenuItem[] = [
 ];
 
 export default function NavThird() {
-  const { user } = useUser();
   const { setOpenMobile } = useSidebar();
+  const { userRole, isLoading } = useSession();
 
-  // Get user's role from metadata
-  const userRole = user?.publicMetadata?.role as UserRole | undefined;
+  // Don't render menu items while loading
+  if (isLoading) {
+    return (
+      <SidebarGroup>
+        <SidebarGroupLabel>Usuário</SidebarGroupLabel>
+        <SidebarMenu>
+          <div className="px-2 py-4 text-sm text-muted-foreground">
+            Carregando...
+          </div>
+        </SidebarMenu>
+      </SidebarGroup>
+    );
+  }
 
   // Function to check if user has access to a menu item
   const hasAccess = (item: MenuItem) => {
@@ -60,7 +71,7 @@ export default function NavThird() {
     }
 
     // Check if user's role is in the list of required roles
-    return item.requiredRoles.includes(userRole);
+    return item.requiredRoles.includes(userRole as UserRole);
   };
 
   return (

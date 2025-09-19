@@ -14,6 +14,15 @@ import {
 } from 'recharts';
 
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
 import { api } from '../../../../convex/_generated/api';
@@ -328,25 +337,57 @@ export default function ProfilePage() {
 
 function ResetStatsButton() {
   const [isPending, setIsPending] = useState(false);
+  const [isDialogOpen, setIsDialogOpen] = useState(false);
   const reset = useMutation(api.userStats.resetMyStatsCounts);
 
+  const handleReset = async () => {
+    try {
+      setIsPending(true);
+      await reset({});
+      setIsDialogOpen(false);
+      if (typeof globalThis !== 'undefined' && globalThis.location) {
+        globalThis.location.reload();
+      }
+    } finally {
+      setIsPending(false);
+    }
+  };
+
   return (
-    <Button
-      variant="destructive"
-      disabled={isPending}
-      onClick={async () => {
-        try {
-          setIsPending(true);
-          await reset({});
-          if (typeof globalThis !== 'undefined' && globalThis.location) {
-            globalThis.location.reload();
-          }
-        } finally {
-          setIsPending(false);
-        }
-      }}
-    >
-      {isPending ? 'Limpando…' : 'Zerar estatísticas'}
-    </Button>
+    <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+      <DialogTrigger asChild>
+        <Button variant="destructive" disabled={isPending}>
+          Zerar estatísticas
+        </Button>
+      </DialogTrigger>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>Confirmar reset de estatísticas</DialogTitle>
+          <DialogDescription>
+            Tem certeza de que deseja zerar todas as suas estatísticas de respostas?
+            Esta ação não pode ser desfeita.
+            <br />
+            <br />
+            <strong>Nota:</strong> Suas questões salvas não serão afetadas.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            variant="outline"
+            onClick={() => setIsDialogOpen(false)}
+            disabled={isPending}
+          >
+            Cancelar
+          </Button>
+          <Button
+            variant="destructive"
+            onClick={handleReset}
+            disabled={isPending}
+          >
+            {isPending ? 'Limpando…' : 'Confirmar reset'}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }

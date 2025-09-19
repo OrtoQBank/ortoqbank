@@ -1,38 +1,46 @@
 'use client';
-import { createContext, ReactNode, useContext, useState } from 'react';
 
-interface SessionData {
+import { useQuery } from 'convex/react';
+import { createContext, ReactNode, useContext } from 'react';
+
+import { api } from '../../../convex/_generated/api';
+
+interface SessionContextType {
   isAdmin: boolean;
   termsAccepted: boolean;
-}
-
-interface SessionContextType extends SessionData {
-  updateTermsAccepted: (accepted: boolean) => void;
+  userRole: string | null;
+  isLoading: boolean;
 }
 
 interface SessionProviderProps {
   children: ReactNode;
-  initialData: SessionData;
 }
 
 const SessionContext = createContext<SessionContextType>({
   isAdmin: false,
-  termsAccepted: false,
-  updateTermsAccepted: () => {},
+  termsAccepted: true, // Default to true to prevent modal flash
+  userRole: null,
+  isLoading: true,
 });
 
-export function SessionProvider({
-  children,
-  initialData,
-}: SessionProviderProps) {
-  const [sessionData, setSessionData] = useState<SessionData>(initialData);
+export function SessionProvider({ children }: SessionProviderProps) {
+  // Get real-time data from Convex backend
+  const userRole = useQuery(api.users.getCurrentUserRole);
+  const termsAccepted = useQuery(api.users.getTermsAccepted);
+  
+  // Calculate derived values
+  const isAdmin = userRole === 'admin';
+  const isLoading = userRole === undefined || termsAccepted === undefined;
 
-  const updateTermsAccepted = (accepted: boolean) => {
-    setSessionData(prev => ({ ...prev, termsAccepted: accepted }));
+  const sessionValue: SessionContextType = {
+    isAdmin,
+    termsAccepted: termsAccepted ?? true, // Default to true to prevent modal flash
+    userRole: userRole ?? null,
+    isLoading,
   };
 
   return (
-    <SessionContext.Provider value={{ ...sessionData, updateTermsAccepted }}>
+    <SessionContext.Provider value={sessionValue}>
       {children}
     </SessionContext.Provider>
   );
