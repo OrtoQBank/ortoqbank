@@ -1,7 +1,10 @@
 'use client';
 
 import { Check } from 'lucide-react';
+import { useState } from 'react';
 
+import CheckoutEmailModal from '@/components/checkout-email-modal';
+import { Button } from '@/components/ui/button';
 import { Doc } from '../../../convex/_generated/dataModel';
 
 interface PricingClientProps {
@@ -9,6 +12,8 @@ interface PricingClientProps {
 }
 
 export function PricingClient({ plans }: PricingClientProps) {
+  const [showEmailModal, setShowEmailModal] = useState(false);
+
   return (
     <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
       <div className="container mx-auto mb-16 px-4 text-center">
@@ -67,10 +72,24 @@ export function PricingClient({ plans }: PricingClientProps) {
                   ))}
                 </ul>
               </div>
+
+              <div className="px-6 pb-6">
+                <Button
+                  className="cursor-pointer hover:bg-opacity-90 w-full bg-[#2196F3] text-lg font-semibold text-white"
+                  onClick={() => setShowEmailModal(true)}
+                >
+                  {plan.buttonText}
+                </Button>
+              </div>
             </div>
           ))}
         </div>
       </div>
+
+      <CheckoutEmailModal
+        open={showEmailModal}
+        onOpenChange={setShowEmailModal}
+      />
     </div>
   );
 }
