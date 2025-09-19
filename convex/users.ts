@@ -323,20 +323,4 @@ export const searchUsersForAdmin = query({
   },
 });
 
-// Migration function to set the first admin in the database
-// This should only be called once during the initial setup
-export const setInitialAdmin = mutation({
-  args: { clerkUserId: v.string() },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    // Find the user by Clerk ID
-    const user = await userByClerkUserId(ctx, args.clerkUserId);
-    if (!user) {
-      throw new Error('User not found');
-    }
-    
-    // Set this user as admin
-    await ctx.db.patch(user._id, { role: 'admin' });
-    return null;
-  },
-});
+

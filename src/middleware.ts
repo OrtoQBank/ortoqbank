@@ -1,5 +1,5 @@
 /* eslint-disable unicorn/prefer-string-raw */
-/* eslint-disable unicorn/no-await-expression-member */
+ 
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
