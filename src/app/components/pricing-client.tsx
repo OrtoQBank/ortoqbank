@@ -5,6 +5,7 @@ import { useState } from 'react';
 
 import CheckoutEmailModal from '@/components/checkout-email-modal';
 import { Button } from '@/components/ui/button';
+
 import { Doc } from '../../../convex/_generated/dataModel';
 
 interface PricingClientProps {
