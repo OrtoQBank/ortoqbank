@@ -242,7 +242,23 @@ export const setTermsAccepted = mutation({
 
 // Query for admin to get all users with their roles (for admin interface)
 export const getAllUsersForAdmin = query({
-  args: { limit: v.optional(v.number()) },  
+  args: { limit: v.optional(v.number()) },
+  returns: v.array(v.object({
+    _id: v.id('users'),
+    _creationTime: v.number(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.string(),
+    imageUrl: v.optional(v.string()),
+    clerkUserId: v.string(),
+    paid: v.optional(v.boolean()),
+    paymentId: v.optional(v.union(v.string(), v.number())),
+    testeId: v.optional(v.string()),
+    paymentDate: v.optional(v.string()),
+    paymentStatus: v.optional(v.string()),
+    termsAccepted: v.optional(v.boolean()),
+    role: v.optional(v.string()),
+  })),
   handler: async (ctx, args) => {
     // Verify admin access
     await requireAdmin(ctx);
@@ -262,7 +278,22 @@ export const searchUsersForAdmin = query({
     searchQuery: v.string(),
     limit: v.optional(v.number()) 
   },
-  
+  returns: v.array(v.object({
+    _id: v.id('users'),
+    _creationTime: v.number(),
+    firstName: v.optional(v.string()),
+    lastName: v.optional(v.string()),
+    email: v.string(),
+    imageUrl: v.optional(v.string()),
+    clerkUserId: v.string(),
+    paid: v.optional(v.boolean()),
+    paymentId: v.optional(v.union(v.string(), v.number())),
+    testeId: v.optional(v.string()),
+    paymentDate: v.optional(v.string()),
+    paymentStatus: v.optional(v.string()),
+    termsAccepted: v.optional(v.boolean()),
+    role: v.optional(v.string()),
+  })),
   handler: async (ctx, args) => {
     // Verify admin access
     await requireAdmin(ctx);
