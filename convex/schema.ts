@@ -9,17 +9,26 @@ export default defineSchema({
     email: v.string(),
     imageUrl: v.optional(v.string()),
     clerkUserId: v.string(),
-    // Payment fields from Mercado Pago
+    // Legacy payment fields (for backward compatibility with MercadoPago)
     paid: v.optional(v.boolean()),
     paymentId: v.optional(v.union(v.string(), v.number())),
     testeId: v.optional(v.string()),
     paymentDate: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
+    // User management
     termsAccepted: v.optional(v.boolean()),
     role: v.optional(v.string()),
+    status: v.optional(v.union(
+      v.literal("invited"),
+      v.literal("active"), 
+      v.literal("suspended"),
+      v.literal("expired")
+    )),
   })
     .index('by_clerkUserId', ['clerkUserId'])
-    .index('by_paid', ['paid']),
+    .index('by_paid', ['paid'])
+    .index('by_email', ['email'])
+    .index('by_status', ['status']),
 
   themes: defineTable({
     name: v.string(),
@@ -214,12 +223,138 @@ export default defineSchema({
   pricingPlans: defineTable({
     name: v.string(),
     badge: v.string(),
-    originalPrice: v.string(),
+    originalPrice: v.optional(v.string()), // Marketing strikethrough price
     price: v.string(),
     installments: v.string(),
     installmentDetails: v.string(),
     description: v.string(),
     features: v.array(v.string()),
     buttonText: v.string(),
+    // Extended fields for product identification and access control
+    productId: v.string(), // e.g., "ortoqbank_2025", "ortoqbank_2026", "premium_pack" - REQUIRED
+    category: v.optional(v.union(v.literal("year_access"), v.literal("premium_pack"), v.literal("addon"))),
+    year: v.optional(v.number()), // 2025, 2026, 2027, etc.
+    // Pricing (converted to numbers for calculations)
+    regularPriceNum: v.optional(v.number()),
+    pixPriceNum: v.optional(v.number()),
+    // Access control
+    accessDurationDays: v.optional(v.number()), // How long access lasts
+    isActive: v.optional(v.boolean()),
+    displayOrder: v.optional(v.number()),
   })
+    .index("by_product_id", ["productId"])
+    .index("by_category", ["category"])
+    .index("by_year", ["year"])
+    .index("by_active", ["isActive"]),
+
+  // User Products - Junction table for user-product relationships  
+  userProducts: defineTable({
+    userId: v.id("users"),
+    pricingPlanId: v.id("pricingPlans"), // Reference to pricingPlans table
+    productId: v.string(), // Reference to pricingPlans.productId for easy lookup
+    // Purchase info
+    purchaseDate: v.number(),
+    paymentGateway: v.union(v.literal("mercadopago"), v.literal("asaas")),
+    paymentId: v.string(),
+    purchasePrice: v.number(),
+    couponUsed: v.optional(v.string()),
+    discountAmount: v.optional(v.number()),
+    // Access control
+    hasAccess: v.boolean(),
+    accessGrantedAt: v.number(),
+    accessExpiresAt: v.optional(v.number()),
+    // Status
+    status: v.union(
+      v.literal("active"),
+      v.literal("expired"), 
+      v.literal("suspended"),
+      v.literal("refunded")
+    ),
+    // Metadata
+    checkoutId: v.optional(v.string()), // Link to pendingOrders
+    notes: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_product", ["userId", "productId"])
+    .index("by_user_pricing_plan", ["userId", "pricingPlanId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_product", ["productId"])
+    .index("by_pricing_plan", ["pricingPlanId"])
+    .index("by_payment_id", ["paymentId"])
+    .index("by_status", ["status"])
+    .index("by_expiration", ["accessExpiresAt"]),
+
+  // Pending orders - tracks checkout sessions before payment completion
+  pendingOrders: defineTable({
+    checkoutId: v.string(), // AsaaS charge ID
+    email: v.string(),
+    productId: v.string(), // Product identifier (e.g., "ortoqbank_2025")
+    status: v.union(
+      v.literal("creating"), // Creating checkout in AsaaS
+      v.literal("ready"), // Checkout URL ready for user
+      v.literal("pending"), // User accessed checkout but hasn't paid
+      v.literal("paid"),
+      v.literal("provisionable"),
+      v.literal("completed"),
+      v.literal("failed")
+    ),
+    // Pricing info
+    originalPrice: v.number(),
+    finalPrice: v.number(),
+    pixPrice: v.optional(v.number()),
+    couponCode: v.optional(v.string()),
+    discountAmount: v.optional(v.number()),
+    // Customer data (optional for lowest friction checkout)
+    customerData: v.optional(v.object({
+      firstName: v.string(),
+      lastName: v.string(),
+      cpf: v.string(),
+      phone: v.optional(v.string()),
+      address: v.optional(v.object({
+        street: v.string(),
+        number: v.string(),
+        zipcode: v.string(),
+        city: v.string(),
+        state: v.string(),
+      })),
+    })),
+    // AsaaS data
+    asaasCustomerId: v.optional(v.string()),
+    asaasChargeId: v.string(),
+    asaasPixChargeId: v.optional(v.string()),
+    // Clerk integration
+    clerkUserId: v.optional(v.string()),
+    inviteSentAt: v.optional(v.number()),
+    inviteId: v.optional(v.string()),
+    // Timestamps
+    createdAt: v.optional(v.number()), // When this order was created
+    expiresAt: v.number(), // When this pending order expires
+    // Status tracking fields
+    checkoutUrl: v.optional(v.string()), // AsaaS checkout URL
+    errorMessage: v.optional(v.string()), // Error message if creation failed
+  })
+    .index("by_checkout_id", ["checkoutId"])
+    .index("by_email", ["email"])
+    .index("by_status", ["status"])
+    .index("by_asaas_charge", ["asaasChargeId"]),
+
+  // Payments - idempotent record of all payment events from AsaaS
+  payments: defineTable({
+    asaasPaymentId: v.string(), // AsaaS payment ID
+    asaasEventId: v.string(), // AsaaS webhook event ID for idempotency
+    checkoutId: v.string(), // Links to pendingOrders
+    status: v.string(), // AsaaS payment status
+    paymentMethod: v.optional(v.string()), // PIX, CREDIT_CARD, BOLETO
+    value: v.number(),
+    netValue: v.optional(v.number()),
+    paymentDate: v.optional(v.string()),
+    confirmedDate: v.optional(v.string()),
+    // Raw webhook data for debugging
+    rawWebhookData: v.optional(v.any()),
+    processedAt: v.number(),
+  })
+    .index("by_asaas_payment_id", ["asaasPaymentId"])
+    .index("by_asaas_event_id", ["asaasEventId"])
+    .index("by_checkout_id", ["checkoutId"]),
+
 });

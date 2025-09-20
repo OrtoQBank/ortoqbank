@@ -55,6 +55,68 @@ http.route({
   }),
 });
 
+// AsaaS webhook handler
+http.route({
+  path: '/webhooks/asaas',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      // Verify AsaaS webhook signature
+      const rawBody = await request.text();
+      const asaasSignature = request.headers.get('asaas-access-token');
+      
+      if (!asaasSignature) {
+        console.error('Missing AsaaS signature header');
+        return new Response('Missing signature', { status: 400 });
+      }
+
+      const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
+      if (!webhookSecret) {
+        console.error('Missing ASAAS_WEBHOOK_SECRET environment variable');
+        return new Response('Server configuration error', { status: 500 });
+      }
+
+      // AsaaS sends the webhook secret as a header for verification
+      if (asaasSignature !== webhookSecret) {
+        console.error('Invalid AsaaS webhook signature');
+        return new Response('Invalid signature', { status: 401 });
+      }
+
+      const body = JSON.parse(rawBody);
+      const { event, payment } = body;
+
+      console.log(`AsaaS webhook received: ${event} for payment ${payment?.id}`);
+
+      // Only process payment events that grant access
+      const RELEVANT_EVENTS = [
+        'PAYMENT_RECEIVED',
+        'PAYMENT_CONFIRMED',
+        'PAYMENT_OVERDUE',
+        'PAYMENT_DELETED', 
+        'PAYMENT_REFUNDED',
+      ];
+
+      if (!RELEVANT_EVENTS.includes(event)) {
+        console.log(`Ignoring AsaaS webhook event: ${event}`);
+        return new Response('Event ignored', { status: 200 });
+      }
+
+      // Process the payment webhook
+      await ctx.runAction(internal.payments.processAsaasWebhook, {
+        event,
+        payment,
+        rawWebhookData: body,
+      });
+
+      return new Response('OK', { status: 200 });
+
+    } catch (error) {
+      console.error('Error processing AsaaS webhook:', error);
+      return new Response('Webhook processing failed', { status: 500 });
+    }
+  }),
+});
+
 async function validateRequest(
   req: Request,
 ): Promise<WebhookEvent | undefined> {
