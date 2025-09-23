@@ -1,19 +1,59 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { useMutation, useQuery } from 'convex/react';
+import { Check, Loader2 } from 'lucide-react';
 import { useState } from 'react';
 
-import { CheckoutAsaasDirect } from '@/components/checkout-asaas-direct';
 import { Button } from '@/components/ui/button';
+import { api } from '../../../convex/_generated/api';
 
-import { Doc } from '../../../convex/_generated/dataModel';
+import { Doc, Id } from '../../../convex/_generated/dataModel';
 
 interface PricingClientProps {
   plans: Doc<'pricingPlans'>[];
 }
 
 export function PricingClient({ plans }: PricingClientProps) {
-  const [selectedPlan, setSelectedPlan] = useState<Doc<'pricingPlans'> | null>(null);
+  const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
+  const [checkoutRequestId, setCheckoutRequestId] = useState<Id<"pendingOrders"> | null>(null);
+  
+  const initiateCheckout = useMutation(api.asaas.initiateCheckout);
+  
+  // Subscribe to checkout status
+  const checkoutStatus = useQuery(
+    api.asaas.getCheckoutStatus,
+    checkoutRequestId ? { checkoutRequestId } : "skip"
+  );
+
+  // Auto-open checkout in new tab when URL is ready
+  if (checkoutStatus?.checkoutUrl) {
+    window.open(checkoutStatus.checkoutUrl, '_blank');
+    // Reset loading state after opening
+    setLoadingPlanId(null);
+    setCheckoutRequestId(null);
+  }
+
+  const handleCheckout = async (plan: Doc<'pricingPlans'>) => {
+    setLoadingPlanId(plan._id);
+    try {
+      const result = await initiateCheckout({
+        productId: plan.productId || '1',
+      });
+
+      if (result.success) {
+        console.log('Checkout iniciado:', result);
+        setCheckoutRequestId(result.checkoutRequestId);
+        // Will auto-redirect when URL is ready
+      } else {
+        alert('Erro ao processar checkout. Tente novamente.');
+        setLoadingPlanId(null);
+      }
+    } catch (error) {
+      console.error('Erro ao iniciar checkout:', error);
+      alert('Erro ao processar. Tente novamente.');
+      setLoadingPlanId(null);
+    }
+  };
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
@@ -77,38 +117,23 @@ export function PricingClient({ plans }: PricingClientProps) {
               <div className="px-6 pb-6">
                 <Button
                   className="cursor-pointer hover:bg-opacity-90 w-full bg-[#2196F3] text-lg font-semibold text-white"
-                  onClick={() => setSelectedPlan(plan)}
+                  onClick={() => handleCheckout(plan)}
+                  disabled={loadingPlanId === plan._id}
                 >
-                  {plan.buttonText}
+                  {loadingPlanId === plan._id ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    plan.buttonText
+                  )}
                 </Button>
               </div>
             </div>
           ))}
         </div>
       </div>
-
-      {/* Direct Checkout Modal */}
-      {selectedPlan && (
-        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-lg max-w-md w-full relative">
-            <button
-              onClick={() => setSelectedPlan(null)}
-              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
-            >
-              ✕
-            </button>
-            <div className="p-6">
-              <CheckoutAsaasDirect
-                productId={selectedPlan.productId || '1'}
-                productName={selectedPlan.name}
-                regularPrice={selectedPlan.regularPriceNum || 1999}
-                pixPrice={selectedPlan.pixPriceNum || 1799}
-                description={selectedPlan.description}
-              />
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
