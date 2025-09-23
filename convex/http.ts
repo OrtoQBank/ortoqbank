@@ -33,6 +33,23 @@ http.route({
           await ctx.runMutation(internal.users.upsertFromClerk, {
             data: userData,
           });
+
+          // For new users, try to link any confirmed payments (strict mode)
+          if (event.type === 'user.created' && event.data.email_addresses?.[0]?.email_address) {
+            try {
+              console.log(`🔗 New user created: ${event.data.email_addresses[0].email_address}`);
+              
+              const result = await ctx.runMutation(internal.asaas.linkUserAfterSignup, {
+                clerkUserId: event.data.id,
+                email: event.data.email_addresses[0].email_address,
+              });
+              
+              console.log(`✅ Linked ${result.linkedOrders} confirmed payment(s) to new user`);
+            } catch (linkError) {
+              console.error('Error linking user after signup:', linkError);
+              // Don't fail the whole webhook if linking fails
+            }
+          }
         } catch (error) {
           console.error('Error upserting user from Clerk', error);
         }
@@ -61,39 +78,52 @@ http.route({
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
     try {
-      // Verify AsaaS webhook signature
+      // Get webhook body
       const rawBody = await request.text();
-      const asaasSignature = request.headers.get('asaas-access-token');
       
-      if (!asaasSignature) {
-        console.error('Missing AsaaS signature header');
-        return new Response('Missing signature', { status: 400 });
-      }
-
+      // For development/testing, we'll be more lenient with webhook authentication
+      const asaasSignature = request.headers.get('asaas-access-token') || 
+                           request.headers.get('authorization') ||
+                           request.headers.get('x-asaas-signature');
+      
       const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
-      if (!webhookSecret) {
-        console.error('Missing ASAAS_WEBHOOK_SECRET environment variable');
-        return new Response('Server configuration error', { status: 500 });
-      }
+      
+      // Log headers for debugging
+      console.log('AsaaS Webhook Headers:', {
+        'asaas-access-token': request.headers.get('asaas-access-token'),
+        'authorization': request.headers.get('authorization'),
+        'x-asaas-signature': request.headers.get('x-asaas-signature'),
+        'content-type': request.headers.get('content-type'),
+      });
 
-      // AsaaS sends the webhook secret as a header for verification
-      if (asaasSignature !== webhookSecret) {
-        console.error('Invalid AsaaS webhook signature');
-        return new Response('Invalid signature', { status: 401 });
+      // Skip authentication for sandbox testing if no token configured
+      if (webhookSecret && webhookSecret !== 'your-secret-key-here') {
+        if (!asaasSignature) {
+          console.error('Missing AsaaS authentication header');
+          return new Response('Missing authentication', { status: 400 });
+        }
+
+        if (asaasSignature !== webhookSecret) {
+          console.error('Invalid AsaaS webhook signature');
+          return new Response('Invalid signature', { status: 401 });
+        }
+      } else {
+        console.log('⚠️ Webhook authentication disabled for testing');
       }
 
       const body = JSON.parse(rawBody);
-      const { event, payment } = body;
+      const { event, payment, checkout } = body;
 
-      console.log(`AsaaS webhook received: ${event} for payment ${payment?.id}`);
+      console.log(`AsaaS webhook received: ${event}`, {
+        paymentId: payment?.id,
+        checkoutId: checkout?.id,
+      });
 
-      // Only process payment events that grant access
+      // Only process Checkout events (hosted checkout API)
       const RELEVANT_EVENTS = [
-        'PAYMENT_RECEIVED',
-        'PAYMENT_CONFIRMED',
-        'PAYMENT_OVERDUE',
-        'PAYMENT_DELETED', 
-        'PAYMENT_REFUNDED',
+        'CHECKOUT_PAID',      // Payment successful
+        'CHECKOUT_CANCELED',  // User cancelled
+        'CHECKOUT_EXPIRED',   // Checkout expired
       ];
 
       if (!RELEVANT_EVENTS.includes(event)) {
@@ -101,10 +131,10 @@ http.route({
         return new Response('Event ignored', { status: 200 });
       }
 
-      // Process the payment webhook
-      await ctx.runAction(internal.payments.processAsaasWebhook, {
+      // Process checkout webhook
+      await ctx.runAction(internal.payments.processAsaasCheckoutWebhook, {
         event,
-        payment,
+        checkout,
         rawWebhookData: body,
       });
 

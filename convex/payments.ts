@@ -41,8 +41,8 @@ export const processAsaasWebhook = internalAction({
       case 'PAYMENT_RECEIVED':
       case 'PAYMENT_CONFIRMED':
         if (payment.status === 'RECEIVED' || payment.status === 'CONFIRMED') {
-          // Payment successful - provision access
-          await ctx.runAction(internal.payments.provisionAccess, {
+          // Payment successful - mark order as paid and allow sign-up
+          await ctx.runAction(internal.payments.confirmPaymentAndAllowSignup, {
             checkoutId: payment.externalReference.replace('-pix', ''), // Remove PIX suffix if present
             paymentId: payment.id,
           });
@@ -140,7 +140,53 @@ export const upsertPayment = internalMutation({
 });
 
 /**
- * Provision access after successful payment
+ * Confirm payment and enable sign-up (strict payment-first flow)
+ */
+export const confirmPaymentAndAllowSignup = internalAction({
+  args: {
+    checkoutId: v.string(),
+    paymentId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    console.log(`✅ Payment confirmed for checkout ${args.checkoutId} - enabling sign-up`);
+
+    // Get the pending order - try by checkoutId first, then by AsaaS checkout ID
+    let pendingOrder = await ctx.runQuery(internal.payments.getPendingOrderInternal, {
+      checkoutId: args.checkoutId,
+    });
+    
+    // If not found and looks like AsaaS ID, try finding by asaasChargeId
+    if (!pendingOrder && args.checkoutId.includes('-')) {
+      console.log('Order not found by checkoutId, trying by asaasChargeId:', args.checkoutId);
+      pendingOrder = await ctx.runQuery(internal.payments.getPendingOrderByAsaasId, {
+        asaasChargeId: args.checkoutId,
+      });
+    }
+
+    if (!pendingOrder) {
+      console.error(`No pending order found for checkout ${args.checkoutId}`);
+      return null;
+    }
+
+    if (pendingOrder.status === 'completed') {
+      console.log(`Order ${args.checkoutId} already completed, skipping`);
+      return null;
+    }
+
+    // Mark order as paid and ready for sign-up
+    await ctx.runMutation(internal.payments.updateOrderStatus, {
+      checkoutId: args.checkoutId,
+      status: 'paid',
+    });
+
+    console.log(`🔐 Payment confirmed - user can now sign up for order ${args.checkoutId}`);
+    return null;
+  },
+});
+
+/**
+ * Provision access after successful payment (legacy - still used for existing Clerk users)
  */
 export const provisionAccess = internalAction({
   args: {
@@ -349,6 +395,16 @@ export const getPendingOrderInternal = internalQuery({
   },
 });
 
+export const getPendingOrderByAsaasId = internalQuery({
+  args: { asaasChargeId: v.string() },
+  handler: async (ctx, args) => {
+    return await ctx.db
+      .query("pendingOrders")
+      .withIndex("by_asaas_charge", (q) => q.eq("asaasChargeId", args.asaasChargeId))
+      .unique();
+  },
+});
+
 export const updateOrderStatus = internalMutation({
   args: {
     checkoutId: v.string(),
@@ -499,5 +555,56 @@ export const updateUserStatus = internalMutation({
   },
 });
 
+/**
+ * Process AsaaS Checkout webhook events
+ */
+export const processAsaasCheckoutWebhook = internalAction({
+  args: {
+    event: v.string(),
+    checkout: v.any(),
+    rawWebhookData: v.any(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const { event, checkout } = args;
+    
+    console.log(`Processing AsaaS checkout webhook: ${event}`, {
+      checkoutId: checkout.id,
+      status: checkout.status,
+      externalReference: checkout.externalReference,
+    });
 
+    // Handle different checkout events
+    switch (event) {
+      case 'CHECKOUT_PAID':
+        // Try to find the order by multiple methods (backward compatibility)
+        let checkoutId = checkout.externalReference || checkout.id;
+        
+        // If externalReference has old format (checkout_X_timestamp), try to find by AsaaS checkout ID
+        if (checkoutId?.startsWith('checkout_')) {
+          console.log('Old format externalReference detected, using AsaaS checkout ID:', checkout.id);
+          checkoutId = checkout.id;
+        }
+        
+        await ctx.runAction(internal.payments.confirmPaymentAndAllowSignup, {
+          checkoutId: checkoutId,
+          paymentId: checkout.paymentId || checkout.id,
+        });
+        break;
 
+      case 'CHECKOUT_CANCELED':
+      case 'CHECKOUT_EXPIRED':
+        // Mark order as failed
+        await ctx.runMutation(internal.payments.markOrderFailed, {
+          checkoutId: checkout.externalReference || checkout.id,
+          reason: event === 'CHECKOUT_CANCELED' ? 'Checkout cancelled' : 'Checkout expired',
+        });
+        break;
+
+      default:
+        console.log(`Unhandled checkout event: ${event}`);
+    }
+
+    return null;
+  },
+});

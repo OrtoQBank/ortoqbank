@@ -120,6 +120,180 @@ class AsaasClient {
   }
 }
 
+/**
+ * Internal mutation para conectar usuário automaticamente após sign-up via webhook
+ */
+export const linkUserAfterSignup = internalMutation({
+  args: { 
+    clerkUserId: v.string(),
+    email: v.string(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+    linkedOrders: v.optional(v.number()),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      console.log(`🔗 Linking user ${args.email} (${args.clerkUserId}) to pending orders`);
+
+      // 1. Find only CONFIRMED payments (strict mode)
+      const confirmedOrders = await ctx.db
+        .query("pendingOrders")
+        .withIndex("by_email", (q) => q.eq("email", args.email))
+        .filter((q) => q.eq(q.field("status"), "paid")) // Only confirmed payments
+        .collect();
+
+      if (confirmedOrders.length === 0) {
+        console.log(`No confirmed payments found for ${args.email}`);
+        return { 
+          success: true, 
+          message: 'Conta criada com sucesso! Nenhum pagamento confirmado encontrado.',
+          linkedOrders: 0
+        };
+      }
+
+      console.log(`Found ${confirmedOrders.length} confirmed payment(s) for ${args.email}`);
+
+      let linkedCount = 0;
+
+      // 2. Process each confirmed order
+      for (const order of confirmedOrders) {
+        try {
+          // Get pricing plan for this product
+          const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
+            productId: order.productId,
+          });
+
+          if (!pricingPlan) {
+            console.error(`Product not found: ${order.productId}`);
+            continue;
+          }
+
+          // Create/update user record
+          await ctx.runMutation(internal.payments.upsertUser, {
+            email: args.email,
+            clerkUserId: args.clerkUserId,
+            firstName: order.customerData?.firstName || 'Cliente',
+            lastName: order.customerData?.lastName || 'OrtoQBank',
+            paymentId: '', // Will be set by payment webhook
+            paymentGateway: 'asaas',
+            paymentDate: new Date().toISOString(),
+            paymentStatus: 'RECEIVED', // All orders here are confirmed
+            paid: true, // All orders here are paid
+            status: 'active', // Immediate access for confirmed payments
+          });
+
+          // Update order with user info
+          await ctx.db.patch(order._id, {
+            status: 'provisionable',
+            customerData: {
+              firstName: 'Cliente',
+              lastName: 'OrtoQBank',
+              cpf: '', // Required field
+            }
+          });
+
+          linkedCount++;
+          console.log(`✅ Linked order ${order._id} to user ${args.clerkUserId}`);
+
+        } catch (error) {
+          console.error(`Error processing order ${order._id}:`, error);
+        }
+      }
+
+      return { 
+        success: true, 
+        message: `Conta criada! ${linkedCount} compra(s) vinculada(s). Acesso será liberado após confirmação do pagamento.`,
+        linkedOrders: linkedCount
+      };
+
+    } catch (error) {
+      console.error('Error in linkUserAfterSignup:', error);
+      return { 
+        success: false, 
+        message: 'Erro interno. Entre em contato com o suporte.',
+        linkedOrders: 0
+      };
+    }
+  },
+});
+
+/**
+ * Mutation para conectar usuário Clerk a uma compra após sign-up (fallback manual)
+ */
+export const linkUserToPayment = mutation({
+  args: { 
+    orderId: v.id("pendingOrders"),
+    clerkUserId: v.string(),
+    email: v.string(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    try {
+      // 1. Buscar a ordem pendente
+      const pendingOrder = await ctx.db.get(args.orderId);
+      if (!pendingOrder) {
+        return { success: false, message: 'Ordem não encontrada' };
+      }
+
+      // 2. Verificar se já foi processada
+      if (pendingOrder.status === 'completed') {
+        return { success: false, message: 'Ordem já foi processada' };
+      }
+
+      // 3. Buscar detalhes do produto
+      const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
+        productId: pendingOrder.productId,
+      });
+
+      if (!pricingPlan) {
+        return { success: false, message: 'Produto não encontrado' };
+      }
+
+      // 4. Criar/atualizar usuário
+      await ctx.runMutation(internal.payments.upsertUser, {
+        email: args.email,
+        clerkUserId: args.clerkUserId,
+        firstName: 'Cliente',
+        lastName: 'OrtoQBank',
+        paymentId: '', // Will be set by webhook
+        paymentGateway: 'asaas',
+        paymentDate: new Date().toISOString(),
+        paymentStatus: 'PENDING', // Will be updated by webhook
+        paid: false, // Will be updated by webhook
+        status: 'invited', // Use valid status
+      });
+
+      // 5. Atualizar ordem com dados do usuário
+      await ctx.db.patch(args.orderId, {
+        email: args.email,
+        status: 'provisionable',
+        customerData: {
+          firstName: 'Cliente',
+          lastName: 'OrtoQBank',
+          cpf: '', // Required field
+        }
+      });
+
+      return { 
+        success: true, 
+        message: 'Conta vinculada! O acesso será liberado após confirmação do pagamento.' 
+      };
+
+    } catch (error) {
+      console.error('Erro ao vincular usuário ao pagamento:', error);
+      return { 
+        success: false, 
+        message: 'Erro interno. Entre em contato com o suporte.' 
+      };
+    }
+  },
+});
+
 // Constants
 const REGULAR_PRICE = 39.9;
 const PIX_PRICE = 34.9;
@@ -395,13 +569,13 @@ export const processCheckoutCreation = internalAction({
             imageBase64: "", // Required by AsaaS API - empty string for no image
           }
         ],
-        callback: {
-          successUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ortoqbank.com'}/payment/success`,
-          expiredUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ortoqbank.com'}/payment/expired`,
-          cancelUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'https://ortoqbank.com'}/payment/cancel`,
-        },
+          callback: {
+            successUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/payment/processing?order=${args.checkoutRequestId}`,
+            expiredUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/payment/expired`,
+            cancelUrl: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/payment/cancel`,
+          },
         minutesToExpire: 1440, // 24 hours in minutes
-        externalReference: `checkout_${args.productId}_${Date.now()}`,
+        externalReference: args.checkoutRequestId, // Use the actual order ID
       };
 
       const checkout: any = await asaas.createCheckout(checkoutData);

@@ -3,7 +3,7 @@
 import { Check } from 'lucide-react';
 import { useState } from 'react';
 
-import CheckoutEmailModal from '@/components/checkout-email-modal';
+import { CheckoutAsaasDirect } from '@/components/checkout-asaas-direct';
 import { Button } from '@/components/ui/button';
 
 import { Doc } from '../../../convex/_generated/dataModel';
@@ -13,7 +13,7 @@ interface PricingClientProps {
 }
 
 export function PricingClient({ plans }: PricingClientProps) {
-  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [selectedPlan, setSelectedPlan] = useState<Doc<'pricingPlans'> | null>(null);
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
@@ -77,7 +77,7 @@ export function PricingClient({ plans }: PricingClientProps) {
               <div className="px-6 pb-6">
                 <Button
                   className="cursor-pointer hover:bg-opacity-90 w-full bg-[#2196F3] text-lg font-semibold text-white"
-                  onClick={() => setShowEmailModal(true)}
+                  onClick={() => setSelectedPlan(plan)}
                 >
                   {plan.buttonText}
                 </Button>
@@ -87,10 +87,28 @@ export function PricingClient({ plans }: PricingClientProps) {
         </div>
       </div>
 
-      <CheckoutEmailModal
-        open={showEmailModal}
-        onOpenChange={setShowEmailModal}
-      />
+      {/* Direct Checkout Modal */}
+      {selectedPlan && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-lg max-w-md w-full relative">
+            <button
+              onClick={() => setSelectedPlan(null)}
+              className="absolute top-4 right-4 text-gray-500 hover:text-gray-700"
+            >
+              ✕
+            </button>
+            <div className="p-6">
+              <CheckoutAsaasDirect
+                productId={selectedPlan.productId || '1'}
+                productName={selectedPlan.name}
+                regularPrice={selectedPlan.regularPriceNum || 1999}
+                pixPrice={selectedPlan.pixPriceNum || 1799}
+                description={selectedPlan.description}
+              />
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
