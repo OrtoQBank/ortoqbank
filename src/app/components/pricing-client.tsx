@@ -1,13 +1,12 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
 import { Check, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
-import { api } from '../../../convex/_generated/api';
 
-import { Doc, Id } from '../../../convex/_generated/dataModel';
+import { Doc } from '../../../convex/_generated/dataModel';
 
 interface PricingClientProps {
   plans: Doc<'pricingPlans'>[];
@@ -15,45 +14,23 @@ interface PricingClientProps {
 
 export function PricingClient({ plans }: PricingClientProps) {
   const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
-  const [checkoutRequestId, setCheckoutRequestId] = useState<Id<"pendingOrders"> | null>(null);
-  
-  const initiateCheckout = useMutation(api.asaas.initiateCheckout);
-  
-  // Subscribe to checkout status
-  const checkoutStatus = useQuery(
-    api.asaas.getCheckoutStatus,
-    checkoutRequestId ? { checkoutRequestId } : "skip"
-  );
+  const router = useRouter();
 
-  // Auto-open checkout in new tab when URL is ready
-  if (checkoutStatus?.checkoutUrl) {
-    window.open(checkoutStatus.checkoutUrl, '_blank');
-    // Reset loading state after opening
-    setLoadingPlanId(null);
-    setCheckoutRequestId(null);
-  }
-
-  const handleCheckout = async (plan: Doc<'pricingPlans'>) => {
-    setLoadingPlanId(plan._id);
-    try {
-      const result = await initiateCheckout({
-        productId: plan.productId || '1',
-      });
-
-      if (result.success) {
-        console.log('Checkout iniciado:', result);
-        setCheckoutRequestId(result.checkoutRequestId);
-        // Will auto-redirect when URL is ready
-      } else {
-        alert('Erro ao processar checkout. Tente novamente.');
-        setLoadingPlanId(null);
-      }
-    } catch (error) {
-      console.error('Erro ao iniciar checkout:', error);
-      alert('Erro ao processar. Tente novamente.');
-      setLoadingPlanId(null);
-    }
-  };
+   const handleCheckout = async (plan: Doc<'pricingPlans'>) => {
+     setLoadingPlanId(plan._id);
+     
+     try {
+       // Redirect to transparent checkout with plan details
+       const searchParams = new URLSearchParams({
+         plan: plan.productId || plan._id,
+       });
+       
+       router.push(`/checkout?${searchParams.toString()}`);
+     } catch (error) {
+       console.error('Erro ao redirecionar para checkout:', error);
+       setLoadingPlanId(null);
+     }
+   };
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">

@@ -1,9 +1,104 @@
-import { v } from "convex/values";
-import { api, internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { v } from 'convex/values';
+import { api, internal } from './_generated/api';
+import { Id } from './_generated/dataModel';
+import {
+  internalAction,
+  internalMutation,
+  mutation,
+  query,
+} from './_generated/server';
 
 /**
- * Process AsaaS webhook - the main entry point for payment events
+ * Create a pending order (Step 1 of checkout flow)
+ * This creates the order BEFORE payment, generating a claim token
+ */
+export const createPendingOrder = mutation({
+  args: {
+    email: v.string(),
+    cpf: v.string(),
+    name: v.string(),
+    productId: v.string(),
+    paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
+  },
+  returns: v.object({
+    pendingOrderId: v.id('pendingOrders'),
+    claimToken: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    // Get pricing plan to determine correct price
+    const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
+      productId: args.productId,
+    });
+
+    if (!pricingPlan || !pricingPlan.isActive) {
+      throw new Error('Product not found or inactive');
+    }
+
+    // Determine price based on payment method
+    const pixPrice = pricingPlan.pixPriceNum || pricingPlan.regularPriceNum || 0;
+    const regularPrice = pricingPlan.regularPriceNum || 0;
+    const finalPrice = args.paymentMethod === 'PIX' ? pixPrice : regularPrice;
+
+    if (finalPrice <= 0) {
+      throw new Error('Invalid product price');
+    }
+
+    // Generate claim token (valid for 7 days)
+    const claimToken = crypto.randomUUID();
+    const now = Date.now();
+    const sevenDays = 7 * 24 * 60 * 60 * 1000;
+
+    // Create pending order
+    const pendingOrderId = await ctx.db.insert('pendingOrders', {
+      email: args.email,
+      cpf: args.cpf.replace(/\D/g, ''), // Clean CPF
+      name: args.name,
+      productId: args.productId,
+      claimToken,
+      claimTokenExpiresAt: now + sevenDays,
+      claimTokenUsed: false,
+      status: 'pending',
+      originalPrice: regularPrice,
+      finalPrice,
+      paymentMethod: args.paymentMethod,
+      createdAt: now,
+      expiresAt: now + sevenDays,
+    });
+
+    console.log(`📝 Created pending order ${pendingOrderId} with claim token ${claimToken}`);
+
+    return {
+      pendingOrderId,
+      claimToken,
+    };
+  },
+});
+
+/**
+ * Link payment to pending order (Step 2 of checkout flow)
+ * Called after Asaas payment is created
+ */
+export const linkPaymentToOrder = mutation({
+  args: {
+    pendingOrderId: v.id('pendingOrders'),
+    asaasCustomerId: v.string(),
+    asaasPaymentId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Update the pending order with payment info
+    await ctx.db.patch(args.pendingOrderId, {
+      asaasCustomerId: args.asaasCustomerId,
+      asaasPaymentId: args.asaasPaymentId,
+    });
+
+    console.log(`🔗 Linked payment ${args.asaasPaymentId} to order ${args.pendingOrderId}`);
+    return null;
+  },
+});
+
+/**
+ * Process AsaaS webhook for payment events
  */
 export const processAsaasWebhook = internalAction({
   args: {
@@ -17,63 +112,22 @@ export const processAsaasWebhook = internalAction({
 
     console.log(`Processing AsaaS webhook: ${event} for payment ${payment.id}`);
 
-    // First, record the payment event idempotently
-    const paymentRecord = await ctx.runMutation(internal.payments.upsertPayment, {
-      asaasPaymentId: payment.id,
-      asaasEventId: args.rawWebhookData.id || `${payment.id}_${event}_${Date.now()}`,
-      status: payment.status,
-      paymentMethod: payment.billingType,
-      value: payment.value,
-      netValue: payment.netValue,
-      paymentDate: payment.paymentDate,
-      confirmedDate: payment.confirmedDate,
-      externalReference: payment.externalReference,
-      rawWebhookData: args.rawWebhookData,
-    });
-
-    if (!paymentRecord.isNew) {
-      console.log(`Payment event ${payment.id} already processed, skipping`);
-      return null;
-    }
-
-    // Handle different payment events
-    switch (event) {
-      case 'PAYMENT_RECEIVED':
-      case 'PAYMENT_CONFIRMED':
-        if (payment.status === 'RECEIVED' || payment.status === 'CONFIRMED') {
-          // Payment successful - mark order as paid and allow sign-up
-          await ctx.runAction(internal.payments.confirmPaymentAndAllowSignup, {
-            checkoutId: payment.externalReference.replace('-pix', ''), // Remove PIX suffix if present
-            paymentId: payment.id,
-          });
+    // Handle payment confirmation
+    if (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') {
+      if (payment.status === 'RECEIVED' || payment.status === 'CONFIRMED') {
+        
+        // Use externalReference to find the pending order
+        const pendingOrderId = payment.externalReference;
+        if (!pendingOrderId) {
+          console.error(`No externalReference found in payment ${payment.id}`);
+          return null;
         }
-        break;
 
-      case 'PAYMENT_OVERDUE':
-        // Mark order as failed if payment is overdue
-        await ctx.runMutation(internal.payments.markOrderFailed, {
-          checkoutId: payment.externalReference,
-          reason: 'Payment overdue',
+        await ctx.runMutation(internal.payments.confirmPayment, {
+          pendingOrderId,
+          asaasPaymentId: payment.id,
         });
-        break;
-
-      case 'PAYMENT_DELETED':
-        // Mark order as failed if payment is deleted
-        await ctx.runMutation(internal.payments.markOrderFailed, {
-          checkoutId: payment.externalReference,
-          reason: 'Payment deleted',
-        });
-        break;
-
-      case 'PAYMENT_REFUNDED':
-        // Revoke access if payment is refunded
-        await ctx.runAction(internal.payments.revokeAccess, {
-          paymentId: payment.id,
-        });
-        break;
-
-      default:
-        console.log(`Unhandled payment event: ${event}`);
+      }
     }
 
     return null;
@@ -81,530 +135,212 @@ export const processAsaasWebhook = internalAction({
 });
 
 /**
- * Upsert payment record - idempotent
+ * Confirm payment for a pending order
  */
-export const upsertPayment = internalMutation({
+export const confirmPayment = internalMutation({
   args: {
+    pendingOrderId: v.string(),
     asaasPaymentId: v.string(),
-    asaasEventId: v.string(),
-    status: v.string(),
-    paymentMethod: v.optional(v.string()),
-    value: v.number(),
-    netValue: v.optional(v.number()),
-    paymentDate: v.optional(v.string()),
-    confirmedDate: v.optional(v.string()),
-    externalReference: v.string(),
-    rawWebhookData: v.any(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    // Find the pending order
+    const order = await ctx.db.get(args.pendingOrderId as Id<'pendingOrders'>);
+    
+    if (!order) {
+      console.error(`No pending order found: ${args.pendingOrderId}`);
+      return null;
+    }
+
+    if (order.status === 'paid' || order.status === 'completed') {
+      console.log(`Order ${args.pendingOrderId} already processed, skipping`);
+      return null;
+    }
+
+    // Update order status to paid
+    await ctx.db.patch(order._id, { status: 'paid' });
+
+    console.log(`✅ Payment confirmed for order ${args.pendingOrderId}`);
+
+    // If user already claimed this order, provision access immediately
+    if (order.clerkUserId) {
+      await ctx.db.patch(order._id, { status: 'provisionable' });
+      console.log(`🚀 Order ${args.pendingOrderId} ready for provisioning`);
+      
+      // TODO: Trigger access provisioning here
+    }
+
+    return null;
+  },
+});
+
+/**
+ * Claim a pending order after user signup
+ * This is called right after Clerk signup completes
+ */
+export const claimPendingOrder = mutation({
+  args: {
+    claimToken: v.string(),
+    clerkUserId: v.string(),
   },
   returns: v.object({
-    paymentId: v.id("payments"),
-    isNew: v.boolean(),
+    success: v.boolean(),
+    message: v.string(),
+    orderStatus: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    // Check if this event was already processed
-    const existingPayment = await ctx.db
-      .query("payments")
-      .withIndex("by_asaas_event_id", (q) => q.eq("asaasEventId", args.asaasEventId))
-      .unique();
+    try {
+      // Find the order by claim token
+      const order = await ctx.db
+        .query('pendingOrders')
+        .withIndex('by_claim_token', q => q.eq('claimToken', args.claimToken))
+        .unique();
 
-    if (existingPayment) {
+      if (!order) {
+        return {
+          success: false,
+          message: 'Token de acesso inválido ou expirado.',
+        };
+      }
+
+      // Check if token is expired or already used
+      if (order.claimTokenUsed || order.claimTokenExpiresAt < Date.now()) {
+        return {
+          success: false,
+          message: 'Token de acesso expirado ou já utilizado.',
+        };
+      }
+
+      // Mark token as used and link to user
+      await ctx.db.patch(order._id, {
+        clerkUserId: args.clerkUserId,
+        claimTokenUsed: true,
+      });
+
+      console.log(`🔗 Claimed order ${order._id} for user ${args.clerkUserId}`);
+
+      // If payment is already confirmed, provision access immediately
+      if (order.status === 'paid') {
+        await ctx.db.patch(order._id, { status: 'provisionable' });
+        console.log(`🚀 Order ${order._id} ready for provisioning`);
+        
+        // TODO: Trigger access provisioning here
+        
+        return {
+          success: true,
+          message: 'Conta criada e acesso liberado! Bem-vindo ao OrtoQBank.',
+          orderStatus: 'provisionable',
+        };
+      }
+
       return {
-        paymentId: existingPayment._id,
-        isNew: false,
+        success: true,
+        message: 'Conta criada! Aguardando confirmação do pagamento.',
+        orderStatus: order.status,
+      };
+
+    } catch (error) {
+      console.error('Error claiming pending order:', error);
+      return {
+        success: false,
+        message: 'Erro interno. Tente novamente.',
       };
     }
-
-    // Extract checkout ID (remove PIX suffix if present)
-    const checkoutId = args.externalReference.replace('-pix', '');
-
-    // Create new payment record
-    const paymentId = await ctx.db.insert("payments", {
-      asaasPaymentId: args.asaasPaymentId,
-      asaasEventId: args.asaasEventId,
-      checkoutId,
-      status: args.status,
-      paymentMethod: args.paymentMethod,
-      value: args.value,
-      netValue: args.netValue,
-      paymentDate: args.paymentDate,
-      confirmedDate: args.confirmedDate,
-      rawWebhookData: args.rawWebhookData,
-      processedAt: Date.now(),
-    });
-
-    return {
-      paymentId,
-      isNew: true,
-    };
   },
 });
 
 /**
- * Confirm payment and enable sign-up (strict payment-first flow)
+ * Check payment status for processing page
  */
-export const confirmPaymentAndAllowSignup = internalAction({
+export const checkPaymentStatus = query({
   args: {
-    checkoutId: v.string(),
-    paymentId: v.string(),
+    pendingOrderId: v.string(),
   },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    console.log(`✅ Payment confirmed for checkout ${args.checkoutId} - enabling sign-up`);
-
-    // Get the pending order - try by checkoutId first, then by AsaaS checkout ID
-    let pendingOrder = await ctx.runQuery(internal.payments.getPendingOrderInternal, {
-      checkoutId: args.checkoutId,
-    });
-    
-    // If not found and looks like AsaaS ID, try finding by asaasChargeId
-    if (!pendingOrder && args.checkoutId.includes('-')) {
-      console.log('Order not found by checkoutId, trying by asaasChargeId:', args.checkoutId);
-      pendingOrder = await ctx.runQuery(internal.payments.getPendingOrderByAsaasId, {
-        asaasChargeId: args.checkoutId,
-      });
-    }
-
-    if (!pendingOrder) {
-      console.error(`No pending order found for checkout ${args.checkoutId}`);
-      return null;
-    }
-
-    if (pendingOrder.status === 'completed') {
-      console.log(`Order ${args.checkoutId} already completed, skipping`);
-      return null;
-    }
-
-    // Mark order as paid and ready for sign-up
-    await ctx.runMutation(internal.payments.updateOrderStatus, {
-      checkoutId: args.checkoutId,
-      status: 'paid',
-    });
-
-    console.log(`🔐 Payment confirmed - user can now sign up for order ${args.checkoutId}`);
-    return null;
-  },
-});
-
-/**
- * Provision access after successful payment (legacy - still used for existing Clerk users)
- */
-export const provisionAccess = internalAction({
-  args: {
-    checkoutId: v.string(),
-    paymentId: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    console.log(`Provisioning access for checkout ${args.checkoutId}`);
-
-    // Get the pending order
-    const pendingOrder = await ctx.runQuery(internal.payments.getPendingOrderInternal, {
-      checkoutId: args.checkoutId,
-    });
-
-    if (!pendingOrder) {
-      console.error(`No pending order found for checkout ${args.checkoutId}`);
-      return null;
-    }
-
-    if (pendingOrder.status === 'completed') {
-      console.log(`Order ${args.checkoutId} already completed, skipping`);
-      return null;
-    }
-
-    // Mark order as paid
-    await ctx.runMutation(internal.payments.updateOrderStatus, {
-      checkoutId: args.checkoutId,
-      status: 'paid',
-    });
-
-    // Check if user already exists in Clerk
-    const clerkUser = await ctx.runAction(api.clerkActions.checkClerkUserExists, {
-      email: pendingOrder.email,
-    });
-
-    if (clerkUser) {
-      console.log(`Clerk user exists for ${pendingOrder.email}, updating metadata`);
-      
-      // Update Clerk user metadata
-      await ctx.runAction(api.clerkActions.updateClerkUserMetadata, {
-        userId: clerkUser.id,
-        metadata: {
-        paid: true,
-        paymentId: args.paymentId,
-        paymentGateway: 'asaas',
-        paymentDate: new Date().toISOString(),
-        productId: pendingOrder.productId,
-        },
-      });
-
-      // Update user record with payment info
-      await ctx.runMutation(internal.payments.upsertUser, {
-        email: pendingOrder.email,
-        clerkUserId: clerkUser.id,
-        firstName: pendingOrder.customerData?.firstName || 'Cliente',
-        lastName: pendingOrder.customerData?.lastName || 'AsaaS',
-        paymentId: args.paymentId,
-        paymentGateway: 'asaas',
-        paymentDate: new Date().toISOString(),
-        paymentStatus: 'RECEIVED',
-        paid: true,
-        status: 'active',
-      });
-
-      // Get pricing plan for this product
-      const pricingPlan = await ctx.runQuery(api.pricingPlans.getByProductId, {
-        productId: pendingOrder.productId,
-      });
-
-      if (pricingPlan) {
-        // Grant product access
-        await ctx.runMutation(internal.pricingPlans.grantProductAccess, {
-          userId: (await ctx.runQuery(internal.users.getUserByClerkId, { clerkUserId: clerkUser.id }))!._id,
-          pricingPlanId: pricingPlan._id,
-          productId: pendingOrder.productId,
-          paymentId: args.paymentId,
-          paymentGateway: 'asaas',
-          purchasePrice: pendingOrder.finalPrice,
-          couponUsed: pendingOrder.couponCode,
-          discountAmount: pendingOrder.discountAmount,
-          checkoutId: args.checkoutId,
-        });
-      }
-
-      // Mark order as completed
-      await ctx.runMutation(internal.payments.updateOrderStatus, {
-        checkoutId: args.checkoutId,
-        status: 'completed',
-        clerkUserId: clerkUser.id,
-      });
-
-    } else {
-      console.log(`Creating Clerk invitation for ${pendingOrder.email}`);
-      
-      // Create Clerk invitation
-      const invitation = await ctx.runAction(api.clerkActions.createClerkInvitation, {
-        emailAddress: pendingOrder.email,
-        publicMetadata: {
-          paid: true,
-          paymentId: args.paymentId,
-          paymentGateway: 'asaas',
-          paymentDate: new Date().toISOString(),
-          productId: pendingOrder.productId,
-          firstName: pendingOrder.customerData?.firstName || 'Cliente',
-          lastName: pendingOrder.customerData?.lastName || 'AsaaS',
-        },
-        redirectUrl: `${process.env.NEXT_PUBLIC_CONVEX_SITE_URL}/onboarding?order=${args.checkoutId}`,
-      });
-
-      // Create user record in invited state (will be updated when they sign up)
-      const userId = await ctx.runMutation(internal.payments.upsertUser, {
-        email: pendingOrder.email,
-        firstName: pendingOrder.customerData?.firstName || 'Cliente',
-        lastName: pendingOrder.customerData?.lastName || 'AsaaS',
-        paymentId: args.paymentId,
-        paymentGateway: 'asaas',
-        paymentDate: new Date().toISOString(),
-        paymentStatus: 'RECEIVED',
-        paid: true,
-        status: 'invited',
-      });
-
-      // Get pricing plan for this product
-      const pricingPlan = await ctx.runQuery(api.pricingPlans.getByProductId, {
-        productId: pendingOrder.productId,
-      });
-
-      if (pricingPlan) {
-        // Grant product access for invited user
-        await ctx.runMutation(internal.pricingPlans.grantProductAccess, {
-          userId,
-          pricingPlanId: pricingPlan._id,
-          productId: pendingOrder.productId,
-          paymentId: args.paymentId,
-          paymentGateway: 'asaas',
-          purchasePrice: pendingOrder.finalPrice,
-          couponUsed: pendingOrder.couponCode,
-          discountAmount: pendingOrder.discountAmount,
-          checkoutId: args.checkoutId,
-        });
-      }
-
-      // Update order with invitation info
-      await ctx.runMutation(internal.payments.updateOrderStatus, {
-        checkoutId: args.checkoutId,
-        status: 'provisionable',
-        inviteId: invitation.id,
-        inviteSentAt: Date.now(),
-      });
-    }
-
-    console.log(`Access provisioned for checkout ${args.checkoutId}`);
-    return null;
-  },
-});
-
-/**
- * Revoke access (for refunds/chargebacks)
- */
-export const revokeAccess = internalAction({
-  args: {
-    paymentId: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    console.log(`Revoking access for payment ${args.paymentId}`);
-
-    // Revoke product access for this payment
-    await ctx.runMutation(internal.pricingPlans.revokeProductAccess, {
-      paymentId: args.paymentId,
-      reason: 'Payment refunded',
-    });
-
-    // Find user by payment ID to update their status
-    const user = await ctx.runQuery(internal.payments.getUserByPaymentId, {
-      paymentId: args.paymentId,
-    });
-
-    if (user && user.clerkUserId) {
-      // Update Clerk user metadata
-      await ctx.runAction(api.clerkActions.updateClerkUserMetadata, {
-        userId: user.clerkUserId,
-        metadata: {
-          suspended: true,
-          suspendedAt: new Date().toISOString(),
-          suspendedReason: 'Payment refunded',
-        },
-      });
-    }
-
-    console.log(`Access revoked for payment ${args.paymentId}`);
-    return null;
-  },
-});
-
-// Helper mutations and queries
-
-export const getPendingOrderInternal = internalQuery({
-  args: { checkoutId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("pendingOrders")
-      .withIndex("by_checkout_id", (q) => q.eq("checkoutId", args.checkoutId))
-      .unique();
-  },
-});
-
-export const getPendingOrderByAsaasId = internalQuery({
-  args: { asaasChargeId: v.string() },
-  handler: async (ctx, args) => {
-    return await ctx.db
-      .query("pendingOrders")
-      .withIndex("by_asaas_charge", (q) => q.eq("asaasChargeId", args.asaasChargeId))
-      .unique();
-  },
-});
-
-export const updateOrderStatus = internalMutation({
-  args: {
-    checkoutId: v.string(),
-    status: v.string(),
-    clerkUserId: v.optional(v.string()),
-    inviteId: v.optional(v.string()),
-    inviteSentAt: v.optional(v.number()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const order = await ctx.db
-      .query("pendingOrders")
-      .withIndex("by_checkout_id", (q) => q.eq("checkoutId", args.checkoutId))
-      .unique();
-
-    if (!order) {
-      throw new Error(`Order not found: ${args.checkoutId}`);
-    }
-
-    const updates: any = { status: args.status };
-    if (args.clerkUserId) updates.clerkUserId = args.clerkUserId;
-    if (args.inviteId) updates.inviteId = args.inviteId;
-    if (args.inviteSentAt) updates.inviteSentAt = args.inviteSentAt;
-
-    await ctx.db.patch(order._id, updates);
-  },
-});
-
-export const markOrderFailed = internalMutation({
-  args: {
-    checkoutId: v.string(),
-    reason: v.string(),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const order = await ctx.db
-      .query("pendingOrders")
-      .withIndex("by_checkout_id", (q) => q.eq("checkoutId", args.checkoutId))
-      .unique();
-
-    if (order && order.status !== 'completed') {
-      await ctx.db.patch(order._id, { 
-        status: 'failed',
-      });
-      console.log(`Order ${args.checkoutId} marked as failed: ${args.reason}`);
-    }
-  },
-});
-
-export const upsertUser = internalMutation({
-  args: {
-    email: v.string(),
-    clerkUserId: v.optional(v.string()),
-    firstName: v.optional(v.string()),
-    lastName: v.optional(v.string()),
-    paymentId: v.optional(v.union(v.string(), v.number())),
-    paymentGateway: v.optional(v.union(v.literal("mercadopago"), v.literal("asaas"))),
-    paymentDate: v.optional(v.string()),
-    paymentStatus: v.optional(v.string()),
-    paid: v.optional(v.boolean()),
-    status: v.optional(v.union(v.literal("invited"), v.literal("active"), v.literal("suspended"), v.literal("expired"))),
-  },
-  returns: v.id("users"),
-  handler: async (ctx, args) => {
-    // Check if user already exists by email or clerkUserId
-    let existingUser;
-    
-    if (args.clerkUserId) {
-      existingUser = await ctx.db
-        .query("users")
-        .withIndex("by_clerkUserId", (q) => q.eq("clerkUserId", args.clerkUserId!))
-        .unique();
-    }
-    
-    if (!existingUser && args.email) {
-      existingUser = await ctx.db
-        .query("users")
-        .withIndex("by_email", (q) => q.eq("email", args.email))
-        .unique();
-    }
-
-    if (existingUser) {
-      // Update existing user
-      const updates: any = {};
-      if (args.clerkUserId) updates.clerkUserId = args.clerkUserId;
-      if (args.firstName) updates.firstName = args.firstName;
-      if (args.lastName) updates.lastName = args.lastName;
-      if (args.paymentId) updates.paymentId = args.paymentId;
-      if (args.paymentDate) updates.paymentDate = args.paymentDate;
-      if (args.paymentStatus) updates.paymentStatus = args.paymentStatus;
-      if (args.paid !== undefined) updates.paid = args.paid;
-      if (args.status) updates.status = args.status;
-      
-      await ctx.db.patch(existingUser._id, updates);
-      return existingUser._id;
-    } else {
-      // Create new user (this will mainly happen for invited users before they sign up)
-      return await ctx.db.insert("users", {
-        email: args.email,
-        clerkUserId: args.clerkUserId || "",
-        firstName: args.firstName,
-        lastName: args.lastName,
-        paymentId: args.paymentId,
-        paymentDate: args.paymentDate,
-        paymentStatus: args.paymentStatus,
-        paid: args.paid,
-        status: args.status as "invited" | "active" | "suspended" | "expired" | undefined,
-      });
-    }
-  },
-});
-
-export const getUserByPaymentId = internalQuery({
-  args: { paymentId: v.string() },
-  returns: v.union(
-    v.object({
-      _id: v.id("users"),
+  returns: v.object({
+    status: v.union(v.literal('pending'), v.literal('confirmed'), v.literal('failed')),
+    claimToken: v.optional(v.string()),
+    orderDetails: v.optional(v.object({
       email: v.string(),
-      clerkUserId: v.string(),
-      hasAccess: v.optional(v.boolean()),
-      status: v.optional(v.string()),
-    }),
-    v.null()
-  ),
+      productId: v.string(),
+      finalPrice: v.number(),
+    })),
+  }),
   handler: async (ctx, args) => {
-    return await ctx.db
-      .query("users")
-      .filter((q) => q.eq(q.field("paymentId"), args.paymentId))
-      .unique();
-  },
-});
+    try {
+      // Find the order by ID
+      const order = await ctx.db.get(args.pendingOrderId as Id<'pendingOrders'>);
 
-export const updateUserStatus = internalMutation({
-  args: {
-    userId: v.id("users"),
-    status: v.optional(v.union(v.literal("invited"), v.literal("active"), v.literal("suspended"), v.literal("expired"))),
-    hasAccess: v.optional(v.boolean()),
-    paid: v.optional(v.boolean()),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const updates: any = {};
-    if (args.status) updates.status = args.status;
-    if (args.hasAccess !== undefined) updates.hasAccess = args.hasAccess;
-    if (args.paid !== undefined) updates.paid = args.paid;
-    
-    await ctx.db.patch(args.userId, updates);
+      if (!order) {
+        return { status: 'failed' as const };
+      }
+
+      if (order.status === 'paid' || order.status === 'provisionable' || order.status === 'completed') {
+        return {
+          status: 'confirmed' as const,
+          claimToken: order.claimToken,
+          orderDetails: {
+            email: order.email,
+            productId: order.productId,
+            finalPrice: order.finalPrice,
+          },
+        };
+      }
+
+      return { status: 'pending' as const };
+    } catch (error) {
+      console.error('Error checking payment status:', error);
+      return { status: 'failed' as const };
+    }
   },
 });
 
 /**
- * Process AsaaS Checkout webhook events
+ * Validate a claim token (for signup page)
  */
-export const processAsaasCheckoutWebhook = internalAction({
+export const validateClaimToken = query({
   args: {
-    event: v.string(),
-    checkout: v.any(),
-    rawWebhookData: v.any(),
+    claimToken: v.string(),
   },
-  returns: v.null(),
+  returns: v.object({
+    isValid: v.boolean(),
+    orderDetails: v.optional(v.object({
+      email: v.string(),
+      name: v.string(),
+      productId: v.string(),
+      finalPrice: v.number(),
+      status: v.string(),
+    })),
+  }),
   handler: async (ctx, args) => {
-    const { event, checkout } = args;
-    
-    console.log(`Processing AsaaS checkout webhook: ${event}`, {
-      checkoutId: checkout.id,
-      status: checkout.status,
-      externalReference: checkout.externalReference,
-    });
+    try {
+      // Find the order by claim token
+      const order = await ctx.db
+        .query('pendingOrders')
+        .withIndex('by_claim_token', q => q.eq('claimToken', args.claimToken))
+        .unique();
 
-    // Handle different checkout events
-    switch (event) {
-      case 'CHECKOUT_PAID':
-        // Try to find the order by multiple methods (backward compatibility)
-        let checkoutId = checkout.externalReference || checkout.id;
-        
-        // If externalReference has old format (checkout_X_timestamp), try to find by AsaaS checkout ID
-        if (checkoutId?.startsWith('checkout_')) {
-          console.log('Old format externalReference detected, using AsaaS checkout ID:', checkout.id);
-          checkoutId = checkout.id;
-        }
-        
-        await ctx.runAction(internal.payments.confirmPaymentAndAllowSignup, {
-          checkoutId: checkoutId,
-          paymentId: checkout.paymentId || checkout.id,
-        });
-        break;
+      if (!order) {
+        return { isValid: false };
+      }
 
-      case 'CHECKOUT_CANCELED':
-      case 'CHECKOUT_EXPIRED':
-        // Mark order as failed
-        await ctx.runMutation(internal.payments.markOrderFailed, {
-          checkoutId: checkout.externalReference || checkout.id,
-          reason: event === 'CHECKOUT_CANCELED' ? 'Checkout cancelled' : 'Checkout expired',
-        });
-        break;
+      // Check if token is expired or used
+      if (order.claimTokenUsed || order.claimTokenExpiresAt < Date.now()) {
+        return { isValid: false };
+      }
 
-      default:
-        console.log(`Unhandled checkout event: ${event}`);
+      return {
+        isValid: true,
+        orderDetails: {
+          email: order.email,
+          name: order.name,
+          productId: order.productId,
+          finalPrice: order.finalPrice,
+          status: order.status,
+        },
+      };
+    } catch (error) {
+      console.error('Error validating claim token:', error);
+      return { isValid: false };
     }
-
-    return null;
   },
 });

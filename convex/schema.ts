@@ -286,57 +286,48 @@ export default defineSchema({
 
   // Pending orders - tracks checkout sessions before payment completion
   pendingOrders: defineTable({
-    checkoutId: v.string(), // AsaaS charge ID
+    // Core identifiers
     email: v.string(),
+    cpf: v.string(),
+    name: v.string(),
     productId: v.string(), // Product identifier (e.g., "ortoqbank_2025")
+    
+    // Claim system for robust user correlation
+    claimToken: v.string(), // One-time claim token (UUID)
+    claimTokenExpiresAt: v.number(), // Claim token expiration (7 days)
+    claimTokenUsed: v.boolean(), // Whether claim token has been used
+    
+    // Order status
     status: v.union(
-      v.literal("creating"), // Creating checkout in AsaaS
-      v.literal("ready"), // Checkout URL ready for user
-      v.literal("pending"), // User accessed checkout but hasn't paid
-      v.literal("paid"),
-      v.literal("provisionable"),
-      v.literal("completed"),
-      v.literal("failed")
+      v.literal("pending"), // Order created, waiting for payment
+      v.literal("paid"), // Payment confirmed
+      v.literal("provisionable"), // Ready to provision access
+      v.literal("completed"), // Access provisioned
+      v.literal("failed") // Payment failed or expired
     ),
+    
     // Pricing info
     originalPrice: v.number(),
     finalPrice: v.number(),
-    pixPrice: v.optional(v.number()),
-    couponCode: v.optional(v.string()),
-    discountAmount: v.optional(v.number()),
-    // Customer data (optional for lowest friction checkout)
-    customerData: v.optional(v.object({
-      firstName: v.string(),
-      lastName: v.string(),
-      cpf: v.string(),
-      phone: v.optional(v.string()),
-      address: v.optional(v.object({
-        street: v.string(),
-        number: v.string(),
-        zipcode: v.string(),
-        city: v.string(),
-        state: v.string(),
-      })),
-    })),
-    // AsaaS data
+    paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
+    
+    // AsaaS integration
     asaasCustomerId: v.optional(v.string()),
-    asaasChargeId: v.string(),
-    asaasPixChargeId: v.optional(v.string()),
+    asaasPaymentId: v.optional(v.string()), // Set when payment is created
+    
     // Clerk integration
-    clerkUserId: v.optional(v.string()),
-    inviteSentAt: v.optional(v.number()),
-    inviteId: v.optional(v.string()),
+    clerkUserId: v.optional(v.string()), // Set when user claims the order
+    
     // Timestamps
-    createdAt: v.optional(v.number()), // When this order was created
-    expiresAt: v.number(), // When this pending order expires
-    // Status tracking fields
-    checkoutUrl: v.optional(v.string()), // AsaaS checkout URL
-    errorMessage: v.optional(v.string()), // Error message if creation failed
+    createdAt: v.number(), // When this order was created
+    expiresAt: v.number(), // When this pending order expires (7 days)
   })
-    .index("by_checkout_id", ["checkoutId"])
     .index("by_email", ["email"])
+    .index("by_claim_token", ["claimToken"])
     .index("by_status", ["status"])
-    .index("by_asaas_charge", ["asaasChargeId"]),
+    .index("by_asaas_payment", ["asaasPaymentId"])
+    .index("by_clerk_user", ["clerkUserId"]),
+
 
   // Payments - idempotent record of all payment events from AsaaS
   payments: defineTable({

@@ -119,24 +119,31 @@ http.route({
         checkoutId: checkout?.id,
       });
 
-      // Only process Checkout events (hosted checkout API)
-      const RELEVANT_EVENTS = [
-        'CHECKOUT_PAID',      // Payment successful
-        'CHECKOUT_CANCELED',  // User cancelled
-        'CHECKOUT_EXPIRED',   // Checkout expired
-      ];
+      // Log the full webhook payload for debugging
+      console.log('Full AsaaS webhook payload:', JSON.stringify(body, null, 2));
 
-      if (!RELEVANT_EVENTS.includes(event)) {
-        console.log(`Ignoring AsaaS webhook event: ${event}`);
-        return new Response('Event ignored', { status: 200 });
+      // Process Asaas webhook events with switch case structure
+      switch (event) {
+        case 'PAYMENT_CONFIRMED': // intentional fallthrough
+        case 'PAYMENT_RECEIVED': {
+          try {
+            console.log(`Processing ${event} event - payment with customer data`);
+            await ctx.runAction(internal.payments.processAsaasWebhook, {
+              event,
+              payment,
+              rawWebhookData: body,
+            });
+          } catch (error) {
+            console.error(`Error processing ${event}:`, error);
+          }
+          break;
+        }
+
+        default: {
+          console.log(`Ignoring AsaaS webhook event: ${event}`);
+          return new Response('Event ignored', { status: 200 });
+        }
       }
-
-      // Process checkout webhook
-      await ctx.runAction(internal.payments.processAsaasCheckoutWebhook, {
-        event,
-        checkout,
-        rawWebhookData: body,
-      });
 
       return new Response('OK', { status: 200 });
 

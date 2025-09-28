@@ -2,6 +2,7 @@ import About from './components/about';
 import FAQ from './components/faq';
 import Header from './components/header';
 import Hero from './components/hero';
+import PaymentErrorAlert from './components/payment-error-alert';
 import Pricing from './components/pricing';
 import StaffSection from './components/staff-section';
 
@@ -11,6 +12,10 @@ export default function Home() {
       <Header />
       <main>
         <Hero />
+        
+        {/* Payment Required Error Alert */}
+        <PaymentErrorAlert />
+        
         <About />
         <StaffSection />
         <Pricing />
