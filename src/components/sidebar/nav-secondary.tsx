@@ -2,12 +2,12 @@ import { FileClockIcon, type LucideIcon, PenSquareIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import {
-  SidebarGroup,
-  SidebarGroupLabel,
-  SidebarMenu,
-  SidebarMenuButton,
-  SidebarMenuItem,
-  useSidebar,
+    SidebarGroup,
+    SidebarGroupLabel,
+    SidebarMenu,
+    SidebarMenuButton,
+    SidebarMenuItem,
+    useSidebar,
 } from '../ui/sidebar';
 
 interface MenuItem {
@@ -35,6 +35,7 @@ export default function NavSecondary() {
                 href={item.url}
                 className="flex items-center gap-3 py-5"
                 onClick={() => setOpenMobile(false)}
+                data-sidebar={item.url.replace('/', '')}
               >
                 <item.icon className="size-5" />
                 <span className="text-base">{item.title}</span>

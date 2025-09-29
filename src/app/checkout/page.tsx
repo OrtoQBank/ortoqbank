@@ -134,7 +134,6 @@ export default function CheckoutPage() {
       // Step 4: Link payment to order
       await linkPaymentToOrder({
         pendingOrderId,
-        asaasCustomerId: customerId,
         asaasPaymentId: payment.paymentId,
       });
 

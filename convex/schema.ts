@@ -17,6 +17,7 @@ export default defineSchema({
     paymentStatus: v.optional(v.string()),
     // User management
     termsAccepted: v.optional(v.boolean()),
+    onboardingCompleted: v.optional(v.boolean()),
     role: v.optional(v.string()),
     status: v.optional(v.union(
       v.literal("invited"),
@@ -284,68 +285,52 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_expiration", ["accessExpiresAt"]),
 
-  // Pending orders - tracks checkout sessions before payment completion
+  // Pending orders - tracks checkout sessions and payment lifecycle
   pendingOrders: defineTable({
-    // Core identifiers
-    email: v.string(),
+    // Contact info (from checkout)
+    email: v.string(), // Contact email from checkout
     cpf: v.string(),
     name: v.string(),
     productId: v.string(), // Product identifier (e.g., "ortoqbank_2025")
     
-    // Claim system for robust user correlation
-    claimToken: v.string(), // One-time claim token (UUID)
-    claimTokenExpiresAt: v.number(), // Claim token expiration (7 days)
-    claimTokenUsed: v.boolean(), // Whether claim token has been used
+    // Account info (from Clerk after signup)
+    userId: v.optional(v.string()), // Clerk user ID (set when claimed)
+    accountEmail: v.optional(v.string()), // Account email from Clerk (may differ from contact email)
     
-    // Order status
+    // Payment info
+    paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
+    asaasPaymentId: v.optional(v.string()), // AsaaS payment ID
+    externalReference: v.optional(v.string()), // Order ID for external reference
+    originalPrice: v.number(),
+    finalPrice: v.number(),
+    
+    // State management
     status: v.union(
       v.literal("pending"), // Order created, waiting for payment
       v.literal("paid"), // Payment confirmed
-      v.literal("provisionable"), // Ready to provision access
-      v.literal("completed"), // Access provisioned
+      v.literal("provisioned"), // Access granted
+      v.literal("completed"), // Fully processed
       v.literal("failed") // Payment failed or expired
     ),
     
-    // Pricing info
-    originalPrice: v.number(),
-    finalPrice: v.number(),
-    paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
-    
-    // AsaaS integration
-    asaasCustomerId: v.optional(v.string()),
-    asaasPaymentId: v.optional(v.string()), // Set when payment is created
-    
-    // Clerk integration
-    clerkUserId: v.optional(v.string()), // Set when user claims the order
-    
     // Timestamps
-    createdAt: v.number(), // When this order was created
-    expiresAt: v.number(), // When this pending order expires (7 days)
+    createdAt: v.number(), // When order was created
+    paidAt: v.optional(v.number()), // When payment was confirmed
+    provisionedAt: v.optional(v.number()), // When access was granted
+    expiresAt: v.number(), // When this order expires (7 days)
+    
+    // Security (claim system)
+    claimToken: v.string(), // One-time claim token (UUID)
+    claimTokenUsed: v.boolean(), // Whether claim token has been used
+    claimTokenExpiresAt: v.number(), // Claim token expiration (7 days)
   })
     .index("by_email", ["email"])
+    .index("by_user_id", ["userId"])
     .index("by_claim_token", ["claimToken"])
     .index("by_status", ["status"])
     .index("by_asaas_payment", ["asaasPaymentId"])
-    .index("by_clerk_user", ["clerkUserId"]),
+    .index("by_external_reference", ["externalReference"]),
 
 
-  // Payments - idempotent record of all payment events from AsaaS
-  payments: defineTable({
-    asaasPaymentId: v.string(), // AsaaS payment ID
-    asaasEventId: v.string(), // AsaaS webhook event ID for idempotency
-    checkoutId: v.string(), // Links to pendingOrders
-    status: v.string(), // AsaaS payment status
-    paymentMethod: v.optional(v.string()), // PIX, CREDIT_CARD, BOLETO
-    value: v.number(),
-    netValue: v.optional(v.number()),
-    paymentDate: v.optional(v.string()),
-    confirmedDate: v.optional(v.string()),
-    // Raw webhook data for debugging
-    rawWebhookData: v.optional(v.any()),
-    processedAt: v.number(),
-  })
-    .index("by_asaas_payment_id", ["asaasPaymentId"])
-    .index("by_asaas_event_id", ["asaasEventId"])
-    .index("by_checkout_id", ["checkoutId"]),
 
 });

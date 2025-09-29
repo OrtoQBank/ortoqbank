@@ -1,11 +1,11 @@
 import { v } from 'convex/values';
 
-import { Id } from './_generated/dataModel';
 import { internal } from './_generated/api';
+import { Id } from './_generated/dataModel';
 import { internalMutation, mutation, query } from './_generated/server';
 import { getTotalQuestionCount } from './aggregateQueries.js';
 // Removed user-specific aggregate imports - replaced by userStatsCounts table
-import { getCurrentUserOrThrow } from './users';
+import { getCurrentUser, getCurrentUserOrThrow } from './users';
 import { getWeekString } from './utils';
 
 type UserStats = {
@@ -358,12 +358,27 @@ export const getUserStatsFast = query({
     totalQuestions: v.number(),
   }),
   handler: async (ctx): Promise<UserStats> => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const user = await getCurrentUser(ctx);
+    if (!user) {
+      // Return empty stats for unauthenticated users
+      return {
+        overall: {
+          totalAnswered: 0,
+          totalCorrect: 0,
+          totalIncorrect: 0,
+          totalBookmarked: 0,
+          correctPercentage: 0,
+        },
+        byTheme: [],
+        totalQuestions: 0,
+      };
+    }
+    const userId = user._id;
 
     // Get pre-computed counts (ultra-fast single lookup)
     const userCounts = await ctx.db
       .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .withIndex('by_user', q => q.eq('userId', userId))
       .first();
 
     // Get total questions count using existing aggregate

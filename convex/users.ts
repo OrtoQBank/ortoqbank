@@ -102,18 +102,26 @@ export const deleteFromClerk = internalMutation({
   },
 });
 
+/**
+ * Safe version - returns user or null (no throwing)
+ * Use this for queries that should gracefully handle unauthenticated users
+ */
+export async function getCurrentUser(context: QueryContext) {
+  const identity = await context.auth.getUserIdentity();
+  if (identity === null) {
+    return null;
+  }
+  return await userByClerkUserId(context, identity.subject);
+}
+
+/**
+ * Protected version - throws if no user
+ * Use this for mutations and queries that require authentication
+ */
 export async function getCurrentUserOrThrow(context: QueryContext) {
   const userRecord = await getCurrentUser(context);
   if (!userRecord) throw new Error("Can't get current user");
   return userRecord;
-}
-
-export async function getCurrentUser(context: QueryContext) {
-  const identity = await context.auth.getUserIdentity();
-  if (identity === null) {
-    return;
-  }
-  return await userByClerkUserId(context, identity.subject);
 }
 
 async function userByClerkUserId(context: QueryContext, clerkUserId: string) {
@@ -237,6 +245,19 @@ export const setTermsAccepted = mutation({
     if (!user) return;
     await ctx.db.patch(user._id, { termsAccepted: args.accepted });
     return;
+  },
+});
+
+export const completeOnboarding = mutation({
+  args: {},
+  returns: v.null(),
+  async handler(ctx) {
+    const identity = await ctx.auth.getUserIdentity();
+    if (!identity) return null;
+    const user = await userByClerkUserId(ctx, identity.subject);
+    if (!user) return null;
+    await ctx.db.patch(user._id, { onboardingCompleted: true });
+    return null;
   },
 });
 

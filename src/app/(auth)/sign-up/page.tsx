@@ -1,7 +1,7 @@
 'use client';
 
-import { SignUp } from '@clerk/nextjs';
-import { useQuery } from 'convex/react';
+import { SignUp, useUser } from '@clerk/nextjs';
+import { useMutation, useQuery } from 'convex/react';
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useEffect, useState } from 'react';
@@ -10,12 +10,17 @@ import { api } from '../../../../convex/_generated/api';
 export default function SignUpPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const { user, isSignedIn } = useUser();
   const claimToken = searchParams.get('claim');
   const token = searchParams.get('token'); // Legacy support
   const payment = searchParams.get('payment'); // Legacy support
   const orderId = searchParams.get('order'); // Legacy support
   const [showPaymentSuccess, setShowPaymentSuccess] = useState(false);
   const [isValidating, setIsValidating] = useState(true);
+  const [isClaimingOrder, setIsClaimingOrder] = useState(false);
+  
+  // Mutation to claim the pending order
+  const claimPendingOrder = useMutation(api.payments.claimPendingOrder);
 
   // Validate claim token (new robust flow)
   const claimValidation = useQuery(
@@ -23,17 +28,9 @@ export default function SignUpPage() {
     claimToken ? { claimToken } : 'skip'
   );
 
-  // Legacy signup token validation
-  const tokenValidation = useQuery(
-    api.payments.validateSignupToken,
-    !claimToken && token ? { token } : 'skip'
-  );
-
-  // Legacy validation for old URLs
-  const orderValidation = useQuery(
-    api.payments.validateOrderAccess,
-    !token && orderId ? { orderId } : 'skip'
-  );
+  // Legacy support - these functions don't exist anymore
+  const tokenValidation = { isValid: false };
+  const orderValidation = { isValid: false };
 
   useEffect(() => {
     if (payment === 'success') {
@@ -99,6 +96,13 @@ export default function SignUpPage() {
     console.log('No token or order ID provided, redirecting to pricing');
     router.push('/?error=payment_required');
   }, [payment, orderId, claimToken, token, orderValidation, tokenValidation, claimValidation, router]);
+
+  // Redirect to dashboard if user is already signed in
+  useEffect(() => {
+    if (isSignedIn && user) {
+      router.push('/dashboard?welcome=true');
+    }
+  }, [isSignedIn, user, router]);
 
   // Show loading while validating
   if (isValidating || (claimToken && claimValidation === undefined) || (token && tokenValidation === undefined) || (!claimToken && !token && orderId && orderValidation === undefined)) {

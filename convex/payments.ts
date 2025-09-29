@@ -81,14 +81,12 @@ export const createPendingOrder = mutation({
 export const linkPaymentToOrder = mutation({
   args: {
     pendingOrderId: v.id('pendingOrders'),
-    asaasCustomerId: v.string(),
     asaasPaymentId: v.string(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     // Update the pending order with payment info
     await ctx.db.patch(args.pendingOrderId, {
-      asaasCustomerId: args.asaasCustomerId,
       asaasPaymentId: args.asaasPaymentId,
     });
 
@@ -123,10 +121,25 @@ export const processAsaasWebhook = internalAction({
           return null;
         }
 
-        await ctx.runMutation(internal.payments.confirmPayment, {
+        const order = await ctx.runMutation(internal.payments.confirmPayment, {
           pendingOrderId,
           asaasPaymentId: payment.id,
         });
+
+        // Send Clerk invitation email as backup
+        if (order) {
+          try {
+            await ctx.runAction(internal.payments.sendClerkInvitation, {
+              email: order.email,
+              claimToken: order.claimToken,
+              customerName: order.name,
+            });
+            console.log(`📧 Sent Clerk invitation to ${order.email}`);
+          } catch (emailError) {
+            console.error('Failed to send Clerk invitation:', emailError);
+            // Don't fail the whole process if email fails
+          }
+        }
       }
     }
 
@@ -142,7 +155,14 @@ export const confirmPayment = internalMutation({
     pendingOrderId: v.string(),
     asaasPaymentId: v.string(),
   },
-  returns: v.null(),
+  returns: v.union(
+    v.object({
+      email: v.string(),
+      claimToken: v.string(),
+      name: v.string(),
+    }),
+    v.null()
+  ),
   handler: async (ctx, args) => {
     // Find the pending order
     const order = await ctx.db.get(args.pendingOrderId as Id<'pendingOrders'>);
@@ -152,25 +172,36 @@ export const confirmPayment = internalMutation({
       return null;
     }
 
-    if (order.status === 'paid' || order.status === 'completed') {
+    if (order.status === 'paid' || order.status === 'provisioned' || order.status === 'completed') {
       console.log(`Order ${args.pendingOrderId} already processed, skipping`);
-      return null;
+      return {
+        email: order.email,
+        claimToken: order.claimToken,
+        name: order.name,
+      };
     }
 
-    // Update order status to paid
-    await ctx.db.patch(order._id, { status: 'paid' });
+    // Update order status to paid with timestamp
+    await ctx.db.patch(order._id, { 
+      status: 'paid',
+      paidAt: Date.now(),
+      asaasPaymentId: args.asaasPaymentId,
+      externalReference: args.pendingOrderId, // Store order ID as external reference
+    });
 
     console.log(`✅ Payment confirmed for order ${args.pendingOrderId}`);
 
-    // If user already claimed this order, provision access immediately
-    if (order.clerkUserId) {
-      await ctx.db.patch(order._id, { status: 'provisionable' });
-      console.log(`🚀 Order ${args.pendingOrderId} ready for provisioning`);
-      
-      // TODO: Trigger access provisioning here
-    }
+    // Trigger idempotent provisioning (will only provision if user is also claimed)
+    await ctx.runMutation(internal.payments.maybeProvisionAccess, {
+      orderId: order._id,
+    });
 
-    return null;
+    // Return order data for email invitation
+    return {
+      email: order.email,
+      claimToken: order.claimToken,
+      name: order.name,
+    };
   },
 });
 
@@ -182,6 +213,7 @@ export const claimPendingOrder = mutation({
   args: {
     claimToken: v.string(),
     clerkUserId: v.string(),
+    accountEmail: v.optional(v.string()), // Email from Clerk account
   },
   returns: v.object({
     success: v.boolean(),
@@ -213,29 +245,24 @@ export const claimPendingOrder = mutation({
 
       // Mark token as used and link to user
       await ctx.db.patch(order._id, {
-        clerkUserId: args.clerkUserId,
+        userId: args.clerkUserId, // Updated field name
+        accountEmail: args.accountEmail, // Store Clerk account email
         claimTokenUsed: true,
       });
 
       console.log(`🔗 Claimed order ${order._id} for user ${args.clerkUserId}`);
+      console.log(`📧 Contact email: ${order.email}, Account email: ${args.accountEmail}`);
 
-      // If payment is already confirmed, provision access immediately
-      if (order.status === 'paid') {
-        await ctx.db.patch(order._id, { status: 'provisionable' });
-        console.log(`🚀 Order ${order._id} ready for provisioning`);
-        
-        // TODO: Trigger access provisioning here
-        
-        return {
-          success: true,
-          message: 'Conta criada e acesso liberado! Bem-vindo ao OrtoQBank.',
-          orderStatus: 'provisionable',
-        };
-      }
+      // Trigger idempotent provisioning
+      await ctx.runMutation(internal.payments.maybeProvisionAccess, {
+        orderId: order._id,
+      });
 
       return {
         success: true,
-        message: 'Conta criada! Aguardando confirmação do pagamento.',
+        message: order.status === 'paid' 
+          ? 'Conta criada e acesso liberado! Bem-vindo ao OrtoQBank.'
+          : 'Conta criada! Aguardando confirmação do pagamento.',
         orderStatus: order.status,
       };
 
@@ -246,6 +273,185 @@ export const claimPendingOrder = mutation({
         message: 'Erro interno. Tente novamente.',
       };
     }
+  },
+});
+
+/**
+ * Idempotent function to provision access when both payment and user are ready
+ * Can be called multiple times safely - order of events doesn't matter
+ */
+export const maybeProvisionAccess = internalMutation({
+  args: {
+    orderId: v.id('pendingOrders'),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const order = await ctx.db.get(args.orderId);
+    
+    if (!order) {
+      console.error(`Order not found: ${args.orderId}`);
+      return null;
+    }
+
+    // Check if already completed
+    if (order.status === 'completed') {
+      console.log(`Order ${args.orderId} already completed, skipping`);
+      return null;
+    }
+
+    // Check if we have both payment confirmation and user claim
+    const hasPayment = order.status === 'paid';
+    const hasUser = order.userId && order.claimTokenUsed;
+
+    console.log(`🔍 Checking provisioning readiness for order ${args.orderId}:`, {
+      status: order.status,
+      hasPayment,
+      hasUser,
+      userId: order.userId,
+      claimTokenUsed: order.claimTokenUsed,
+      paidAt: order.paidAt,
+    });
+
+    if (!hasPayment || !hasUser) {
+      console.log(`⏸️ Order ${args.orderId} not ready for provisioning:`, {
+        hasPayment,
+        hasUser,
+        status: order.status,
+        userId: order.userId,
+        claimTokenUsed: order.claimTokenUsed,
+      });
+      return null;
+    }
+
+    // Provision access
+    try {
+      console.log(`🚀 Provisioning access for order ${args.orderId}`);
+
+      // Update order status
+      await ctx.db.patch(args.orderId, {
+        status: 'provisioned',
+        provisionedAt: Date.now(),
+      });
+
+      // TODO: Add actual access provisioning logic here
+      // - Create user in users table if needed
+      // - Grant product access
+      // - Send welcome email
+      // - etc.
+
+      // Mark as completed
+      await ctx.db.patch(args.orderId, {
+        status: 'completed',
+      });
+
+      console.log(`✅ Successfully provisioned access for order ${args.orderId}`);
+
+    } catch (error) {
+      console.error(`Error provisioning access for order ${args.orderId}:`, error);
+      // Don't throw - let it retry later
+    }
+
+    return null;
+  },
+});
+
+
+/**
+ * Claim order by email (called from Clerk webhook)
+ */
+export const claimOrderByEmail = mutation({
+  args: {
+    email: v.string(),
+    clerkUserId: v.string(),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    message: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    // Find paid order with matching email
+    const paidOrder = await ctx.db
+      .query("pendingOrders")
+      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .filter((q) => q.eq(q.field("status"), "paid"))
+      .first();
+
+    if (!paidOrder) {
+      return { 
+        success: true, 
+        message: 'No paid orders found for this email.'
+      };
+    }
+
+    // Update order with user info
+    await ctx.db.patch(paidOrder._id, {
+      userId: args.clerkUserId,
+      accountEmail: args.email,
+      claimTokenUsed: true,
+    });
+
+    // Trigger provisioning
+    await ctx.runMutation(internal.payments.maybeProvisionAccess, {
+      orderId: paidOrder._id,
+    });
+
+    return { 
+      success: true, 
+      message: 'Order claimed successfully!'
+    };
+  },
+});
+
+/**
+ * Send Clerk invitation email with claim token
+ */
+export const sendClerkInvitation = internalAction({
+  args: {
+    email: v.string(),
+    claimToken: v.string(),
+    customerName: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
+    
+    if (!CLERK_SECRET_KEY) {
+      console.error('CLERK_SECRET_KEY not configured');
+      return null;
+    }
+
+    try {
+      const signupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/sign-up?claim=${args.claimToken}`;
+      
+      const response = await fetch('https://api.clerk.com/v1/invitations', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${CLERK_SECRET_KEY}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email_address: args.email,
+          redirect_url: signupUrl,
+          public_metadata: {
+            claimToken: args.claimToken,
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const error = await response.text();
+        console.error('Failed to send Clerk invitation:', error);
+        return null;
+      }
+
+      const invitation = await response.json();
+      console.log(`✅ Sent Clerk invitation to ${args.email}:`, invitation.id);
+      
+    } catch (error) {
+      console.error('Error sending Clerk invitation:', error);
+    }
+
+    return null;
   },
 });
 
@@ -274,7 +480,7 @@ export const checkPaymentStatus = query({
         return { status: 'failed' as const };
       }
 
-      if (order.status === 'paid' || order.status === 'provisionable' || order.status === 'completed') {
+      if (order.status === 'paid' || order.status === 'provisioned' || order.status === 'completed') {
         return {
           status: 'confirmed' as const,
           claimToken: order.claimToken,

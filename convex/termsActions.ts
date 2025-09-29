@@ -1,40 +1,17 @@
-'use node';
-
 import { v } from 'convex/values';
 
-import { api } from './_generated/api';
-import { action } from './_generated/server';
+import { Doc } from './_generated/dataModel';
+import { mutation } from './_generated/server';
+import { getCurrentUser } from './users';
 
-export const acceptTermsInClerk = action({
+export const acceptTermsInClerk = mutation({
   args: {},
   returns: v.null(),
-  async handler(ctx) {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      throw new Error('User not authenticated');
-    }
+  handler: async ctx => {
+    const user: Doc<'users'> | null | undefined = await getCurrentUser(ctx);
 
-    try {
-      // Import clerkClient here to avoid issues with server-side imports
-      const clerkBackend = await import('@clerk/backend');
-      const clerkClient = clerkBackend.createClerkClient({
-        secretKey: process.env.CLERK_SECRET_KEY!,
-      });
+    if (!user) return null;
 
-      // Update Clerk metadata to mark terms as accepted
-      await clerkClient.users.updateUserMetadata(identity.subject, {
-        publicMetadata: {
-          termsAccepted: true,
-        },
-      });
-
-      // Also update our local database
-      await ctx.runMutation(api.users.setTermsAccepted, { accepted: true });
-
-      return null;
-    } catch (error) {
-      console.error('Error updating terms acceptance in Clerk:', error);
-      throw new Error('Failed to update terms acceptance');
-    }
+    await ctx.db.patch(user?._id, { termsAccepted: true });
   },
 });

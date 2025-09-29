@@ -2,7 +2,7 @@ import type { WebhookEvent } from '@clerk/backend';
 import { httpRouter } from 'convex/server';
 import { Webhook } from 'svix';
 
-import { internal } from './_generated/api';
+import { api, internal } from './_generated/api';
 import { httpAction } from './_generated/server';
 
 const http = httpRouter();
@@ -34,19 +34,21 @@ http.route({
             data: userData,
           });
 
-          // For new users, try to link any confirmed payments (strict mode)
+          // Handle claim token from invitation metadata or find by email
           if (event.type === 'user.created' && event.data.email_addresses?.[0]?.email_address) {
             try {
-              console.log(`🔗 New user created: ${event.data.email_addresses[0].email_address}`);
+              const email = event.data.email_addresses[0].email_address;
+              console.log(`🔗 New user created: ${email}`);
               
-              const result = await ctx.runMutation(internal.asaas.linkUserAfterSignup, {
+              // Try to find and claim any paid orders for this email
+              const result = await ctx.runMutation(api.payments.claimOrderByEmail, {
+                email: email,
                 clerkUserId: event.data.id,
-                email: event.data.email_addresses[0].email_address,
               });
               
-              console.log(`✅ Linked ${result.linkedOrders} confirmed payment(s) to new user`);
+              console.log(`✅ Claim result:`, result);
             } catch (linkError) {
-              console.error('Error linking user after signup:', linkError);
+              console.error('Error claiming order with token:', linkError);
               // Don't fail the whole webhook if linking fails
             }
           }

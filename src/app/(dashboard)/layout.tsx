@@ -1,14 +1,53 @@
+'use client';
+
 import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
+import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay';
 import { SessionProvider } from '@/components/providers/SessionProvider';
 import { TermsProvider } from '@/components/providers/TermsProvider';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
 export default function Layout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const searchParams = useSearchParams();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const { isLoading, isAuthenticated, user } = useCurrentUser();
+  
+  // Check if user should see onboarding
+  useEffect(() => {
+    const isWelcome = searchParams.get('welcome') === 'true';
+    const hasCompletedOnboarding = user?.onboardingCompleted;
+    
+    if (isAuthenticated && isWelcome && !hasCompletedOnboarding) {
+      // Small delay to ensure sidebar is rendered
+      setTimeout(() => setShowOnboarding(true), 500);
+    }
+  }, [searchParams, user?.onboardingCompleted, isAuthenticated]);
+
+  // Show loading while user is being stored
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Redirect to sign-in if not authenticated
+  if (!isAuthenticated) {
+    window.location.href = '/sign-in';
+    return null;
+  }
+
   return (
     <SidebarProvider>
       <SessionProvider>
@@ -31,6 +70,11 @@ export default function Layout({
         
         {/* Mobile bottom nav visible only on screens smaller than md */}
         <MobileBottomNav />
+        
+        {/* Onboarding overlay */}
+        {showOnboarding && (
+          <OnboardingOverlay onComplete={() => setShowOnboarding(false)} />
+        )}
       </SessionProvider>
     </SidebarProvider>
   );
