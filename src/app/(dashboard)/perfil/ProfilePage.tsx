@@ -1,26 +1,26 @@
 'use client';
 
-import { Preloaded, useMutation, usePreloadedQuery } from 'convex/react';
+import { useMutation, useQuery } from 'convex/react';
 import { useState } from 'react';
 import {
-    Cell,
-    LabelList,
-    Legend,
-    Pie,
-    PieChart,
-    ResponsiveContainer,
-    Tooltip,
+  Cell,
+  LabelList,
+  Legend,
+  Pie,
+  PieChart,
+  ResponsiveContainer,
+  Tooltip,
 } from 'recharts';
 
 import { Button } from '@/components/ui/button';
 import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle,
-    DialogTrigger,
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
 
@@ -61,14 +61,9 @@ function getStatsValues(stats: any) {
   return;
 }
 
-interface ProfilePageProps {
-  preloadedUserStats: Preloaded<typeof api.userStats.getUserStatsFast>;
-  preloadedWeeklyProgress: Preloaded<typeof api.userStats.getUserWeeklyProgress>;
-}
-
-export default function ProfilePage({ preloadedUserStats, preloadedWeeklyProgress }: ProfilePageProps) {
-  // Use preloaded data instead of direct query
-  const userStats = usePreloadedQuery(preloadedUserStats);
+export default function ProfilePage() {
+  // Use direct queries - Convex handles caching automatically
+  const userStats = useQuery(api.userStats.getUserStatsFast);
   const [showThemeStats, setShowThemeStats] = useState(false);
 
   // Determine if we're loading the data
@@ -273,7 +268,7 @@ export default function ProfilePage({ preloadedUserStats, preloadedWeeklyProgres
       {/* Progress over time chart */}
       {!isLoadingSummary && values && (
         <div className="mb-6">
-          <ProgressOverTimeChart preloadedWeeklyProgress={preloadedWeeklyProgress} />
+          <ProgressOverTimeChart />
         </div>
       )}
 

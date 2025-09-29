@@ -1,8 +1,7 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
-import { useMutation } from 'convex/react';
-import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useMutation, useQuery } from 'convex/react';
 import {
   Baby,
   Bone,
@@ -92,7 +91,7 @@ function getStatusBadge(status: 'not_started' | 'in_progress' | 'completed') {
 }
 
 export default function SimuladoPage() {
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useCurrentUser();
   const router = useRouter();
 
   // Fetch simulados using optimized query
@@ -116,10 +115,10 @@ export default function SimuladoPage() {
 
   // Check if all data is loaded (queries return undefined while loading)
   const isLoading =
+    userLoading ||
     simuladosQuery === undefined ||
     incompleteSessionsQuery === undefined ||
-    completedSessionsQuery === undefined ||
-    !user;
+    completedSessionsQuery === undefined;
 
   // Group simulados by subcategory
   const simuladosBySubcategory: Record<string, typeof simulados> = {};

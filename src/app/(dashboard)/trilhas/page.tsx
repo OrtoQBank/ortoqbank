@@ -1,11 +1,9 @@
 'use client';
 
-import { useUser } from '@clerk/nextjs';
-import { useMutation } from 'convex/react';
-import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useMutation, useQuery } from 'convex/react';
 import { BookOpen, Clock, FileText } from 'lucide-react';
 import Image from 'next/image';
-import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useCallback, useEffect, useMemo } from 'react';
 
@@ -61,7 +59,7 @@ const ThemeIcon = ({
 };
 
 export default function TrilhasPage() {
-  const { user } = useUser();
+  const { user, isLoading: userLoading } = useCurrentUser();
   const router = useRouter();
   const startSession = useMutation(api.quizSessions.startQuizSession);
 
@@ -75,7 +73,7 @@ export default function TrilhasPage() {
   );
 
   const isLoading =
-    !user ||
+    userLoading ||
     [
       themesQuery,
       trilhasQuery,

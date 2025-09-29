@@ -1,5 +1,5 @@
-import { ProfileWrapper } from './ProfileWrapper';
+import ProfilePage from './ProfilePage';
 
 export default function Page() {
-  return <ProfileWrapper />;
+  return <ProfilePage />;
 }

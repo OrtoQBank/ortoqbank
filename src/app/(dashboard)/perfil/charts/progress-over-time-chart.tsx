@@ -1,15 +1,15 @@
 'use client';
 
-import { Preloaded, usePreloadedQuery } from 'convex/react';
+import { useQuery } from 'convex/react';
 import {
-    Area,
-    AreaChart,
-    CartesianGrid,
-    LabelList,
-    ResponsiveContainer,
-    Tooltip,
-    XAxis,
-    YAxis,
+  Area,
+  AreaChart,
+  CartesianGrid,
+  LabelList,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
 } from 'recharts';
 
 import { Skeleton } from '@/components/ui/skeleton';
@@ -17,12 +17,8 @@ import { formatWeekString } from '@/utils/dateUtils';
 
 import { api } from '../../../../../convex/_generated/api';
 
-interface ProgressOverTimeChartProps {
-  preloadedWeeklyProgress: Preloaded<typeof api.userStats.getUserWeeklyProgress>;
-}
-
-export function ProgressOverTimeChart({ preloadedWeeklyProgress }: ProgressOverTimeChartProps) {
-  const weeklyData = usePreloadedQuery(preloadedWeeklyProgress);
+export function ProgressOverTimeChart() {
+  const weeklyData = useQuery(api.userStats.getUserWeeklyProgress);
 
   if (weeklyData === undefined) {
     return (
