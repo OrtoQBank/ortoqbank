@@ -31,19 +31,23 @@ const sifonn = localFont({
 
 export const metadata: Metadata = {
   title: 'OrtoQBank - Preparação para TEOT | Banco de Questões de Ortopedia',
-  description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Trilhas de estudo, simulados completos e testes personalizados. Planos a partir de R$ 97.',
-  keywords: 'TEOT, ortopedia, questões, simulados, preparação, residência médica, ortopedista',
+  description:
+    'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Trilhas de estudo, simulados completos e testes personalizados. Planos a partir de R$ 97.',
+  keywords:
+    'TEOT, ortopedia, questões, simulados, preparação, residência médica, ortopedista',
   authors: [{ name: 'OrtoQBank' }],
   openGraph: {
     title: 'OrtoQBank - Preparação para TEOT',
-    description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+    description:
+      'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
     type: 'website',
     locale: 'pt_BR',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'OrtoQBank - Preparação para TEOT',
-    description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+    description:
+      'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
   },
   robots: {
     index: true,
@@ -63,9 +67,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID
   return (
     <html lang="pt-BR">
-      <GoogleTagManager gtmId={process.env.NEXT_PUBLIC_GTM_ID!} />
+   
+   {gtmId && <GoogleTagManager gtmId={gtmId} />}
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sifonn.variable} antialiased`}
       >
