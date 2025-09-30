@@ -3,6 +3,7 @@
 import { useMutation } from 'convex/react';
 import { ArrowRight, X } from 'lucide-react';
 import { useState } from 'react';
+
 import { api } from '../../../convex/_generated/api';
 
 interface OnboardingOverlayProps {
@@ -141,7 +142,7 @@ export default function OnboardingOverlay({ onComplete }: OnboardingOverlayProps
       {/* Tooltip */}
       <div 
         className={`${getTooltipPosition()} bg-white rounded-lg shadow-xl p-6 max-w-sm relative z-10 transition-all duration-300 pointer-events-auto`}
-        style={currentStepData.position !== 'center' ? {
+        style={currentStepData.position === 'center' ? {} : {
           position: 'fixed',
           ...(() => {
             const target = currentStepData.target ? document.querySelector(currentStepData.target) : null;
@@ -152,7 +153,7 @@ export default function OnboardingOverlay({ onComplete }: OnboardingOverlayProps
               top: rect.top + rect.height / 2 - 80,
             };
           })()
-        } : {}}
+        }}
       >
         {getArrowComponent()}
         

@@ -1,7 +1,6 @@
 'use client';
 
 import { useMutation, useQuery } from 'convex/react';
-import { useSearchParams } from 'next/navigation';
 import { useState } from 'react';
 
 import { api } from '../../../../convex/_generated/api';
@@ -10,8 +9,6 @@ import { SearchUsers } from './search-users';
 
 export default function AdminDashboard() {
   // Role check moved to layout
-  const searchParams = useSearchParams();
-  const query = searchParams.get('search');
 
   // Convex mutations for role management
   const setUserRole = useMutation(api.users.setUserRole);
@@ -20,17 +17,12 @@ export default function AdminDashboard() {
   const [loadingUsers, setLoadingUsers] = useState<Set<Id<'users'>>>(new Set());
 
   // Fetch users from backend database instead of Clerk
-  const usersFromSearch = useQuery(
-    api.users.searchUsersForAdmin,
-    query ? { searchQuery: query, limit: 20 } : 'skip',
-  );
-
   const usersFromAll = useQuery(
     api.users.getAllUsersForAdmin,
-    query ? 'skip' : { limit: 20 },
+    { limit: 20 },
   );
 
-  const users = query ? usersFromSearch : usersFromAll;
+  const users = usersFromAll;
 
   const handleSetRole = async (userId: Id<'users'>, role: string) => {
     setLoadingUsers(prev => new Set(prev).add(userId));
@@ -71,24 +63,12 @@ export default function AdminDashboard() {
       <h2 className="mb-4 text-xl font-semibold">Permissões de Usuários</h2>
       <SearchUsers />
 
-      {query && (
-        <div className="mt-4 px-1">
-          <p className="text-muted-foreground text-sm">
-            {users && users.length > 0
-              ? `Encontrados ${users.length} usuário${users.length === 1 ? '' : 's'} correspondentes a &ldquo;${query}&rdquo;`
-              : `Nenhum usuário encontrado correspondente a &ldquo;${query}&rdquo;`}
-          </p>
-        </div>
-      )}
-
-      {!query && (
-        <div className="mt-4 px-1">
-          <p className="text-muted-foreground text-sm">
-            Mostrando todos os {users?.length || 0} usuário
-            {users?.length === 1 ? '' : 's'}
-          </p>
-        </div>
-      )}
+      <div className="mt-4 px-1">
+        <p className="text-muted-foreground text-sm">
+          Mostrando todos os {users?.length || 0} usuário
+          {users?.length === 1 ? '' : 's'}
+        </p>
+      </div>
 
       {users && users.length > 0 && (
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -176,3 +156,4 @@ export default function AdminDashboard() {
     </div>
   );
 }
+

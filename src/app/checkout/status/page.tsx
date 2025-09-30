@@ -1,15 +1,16 @@
 'use client';
 
+import { CheckCircle, Clock, RefreshCw, XCircle } from 'lucide-react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { CheckCircle, Clock, RefreshCw, XCircle } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
 
 type PaymentStatus = 'pending' | 'confirmed' | 'failed' | 'expired';
 
-export default function CheckoutStatusPage() {
+function CheckoutStatusContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const paymentId = searchParams.get('payment');
@@ -53,68 +54,88 @@ export default function CheckoutStatusPage() {
       if (status === 'pending') {
         checkPaymentStatus();
       }
-    }, 10000);
+    }, 10_000);
 
     return () => clearInterval(interval);
   }, [paymentId, status]);
 
   const getStatusIcon = () => {
     switch (status) {
-      case 'confirmed':
+      case 'confirmed': {
         return <CheckCircle className="w-12 h-12 text-green-600" />;
-      case 'pending':
+      }
+      case 'pending': {
         return <Clock className="w-12 h-12 text-yellow-600" />;
-      case 'failed':
+      }
+      case 'failed': {
         return <XCircle className="w-12 h-12 text-red-600" />;
-      case 'expired':
+      }
+      case 'expired': {
         return <XCircle className="w-12 h-12 text-gray-600" />;
-      default:
+      }
+      default: {
         return <Clock className="w-12 h-12 text-gray-600" />;
+      }
     }
   };
 
   const getStatusTitle = () => {
     switch (status) {
-      case 'confirmed':
+      case 'confirmed': {
         return 'Pagamento Confirmado!';
-      case 'pending':
+      }
+      case 'pending': {
         return 'Aguardando Pagamento';
-      case 'failed':
+      }
+      case 'failed': {
         return 'Pagamento Falhou';
-      case 'expired':
+      }
+      case 'expired': {
         return 'Pagamento Expirado';
-      default:
+      }
+      default: {
         return 'Verificando Status...';
+      }
     }
   };
 
   const getStatusDescription = () => {
     switch (status) {
-      case 'confirmed':
+      case 'confirmed': {
         return 'Seu pagamento foi processado com sucesso!';
-      case 'pending':
+      }
+      case 'pending': {
         return 'Ainda estamos aguardando a confirmação do seu pagamento PIX';
-      case 'failed':
+      }
+      case 'failed': {
         return 'Houve um problema com seu pagamento';
-      case 'expired':
+      }
+      case 'expired': {
         return 'O prazo para pagamento expirou';
-      default:
+      }
+      default: {
         return 'Verificando o status do seu pagamento...';
+      }
     }
   };
 
   const getStatusColor = () => {
     switch (status) {
-      case 'confirmed':
+      case 'confirmed': {
         return 'text-green-600';
-      case 'pending':
+      }
+      case 'pending': {
         return 'text-yellow-600';
-      case 'failed':
+      }
+      case 'failed': {
         return 'text-red-600';
-      case 'expired':
+      }
+      case 'expired': {
         return 'text-gray-600';
-      default:
+      }
+      default: {
         return 'text-gray-600';
+      }
     }
   };
 
@@ -262,5 +283,13 @@ export default function CheckoutStatusPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutStatusPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <CheckoutStatusContent />
+    </Suspense>
   );
 }

@@ -1,6 +1,5 @@
 'use client';
 
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMutation, useQuery } from 'convex/react';
 import { BookOpen, Clock, FileText } from 'lucide-react';
 import Image from 'next/image';
@@ -16,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';

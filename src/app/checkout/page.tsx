@@ -1,18 +1,31 @@
 'use client';
 
+import { zodResolver } from '@hookform/resolvers/zod';
+import { useAction, useMutation } from 'convex/react';
+import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useState } from 'react';
+import { useForm } from 'react-hook-form';
+import { z } from 'zod';
+
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useAction, useMutation } from 'convex/react';
-import { Loader2 } from 'lucide-react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useState } from 'react';
-import { useForm } from 'react-hook-form';
-import { z } from 'zod';
+
 import { api } from '../../../convex/_generated/api';
+
+// Utility functions
+const formatCPF = (value: string) => {
+  const numbers = value.replaceAll(/\D/g, '');
+  return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+};
+
+const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const formatted = formatCPF(e.target.value);
+  e.target.value = formatted;
+};
 
 // Form validation schema
 const checkoutSchema = z.object({
@@ -36,8 +49,7 @@ type CheckoutForm = z.infer<typeof checkoutSchema>;
 
 export default function CheckoutPage() {
   const router = useRouter();
-  const searchParams = useSearchParams();
-  const planId = searchParams.get('plan') || 'ortoqbank_2025';
+  const planId = 'ortoqbank_2025'; // Default plan
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -62,16 +74,6 @@ export default function CheckoutPage() {
     },
   });
 
-  const formatCPF = (value: string) => {
-    const numbers = value.replace(/\D/g, '');
-    return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-  };
-
-  const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const formatted = formatCPF(e.target.value);
-    e.target.value = formatted;
-  };
-
   const onSubmit = async (data: CheckoutForm) => {
     setIsLoading(true);
     setError(null);
@@ -80,7 +82,7 @@ export default function CheckoutPage() {
       // Step 1: Create pending order first (robust pattern)
       const { pendingOrderId, claimToken } = await createPendingOrder({
         email: data.email,
-        cpf: data.cpf.replace(/\D/g, ''),
+        cpf: data.cpf.replaceAll(/\D/g, ''),
         name: data.name,
         productId: planId,
         paymentMethod: data.paymentMethod,
@@ -90,7 +92,7 @@ export default function CheckoutPage() {
       const { customerId } = await createCustomer({
         name: data.name,
         email: data.email,
-        cpf: data.cpf.replace(/\D/g, ''),
+        cpf: data.cpf.replaceAll(/\D/g, ''),
       });
 
       let payment: any;
@@ -114,7 +116,7 @@ export default function CheckoutPage() {
           pendingOrderId,
           creditCard: {
             holderName: data.cardHolderName,
-            number: data.cardNumber.replace(/\s/g, ''),
+            number: data.cardNumber.replaceAll(/\s/g, ''),
             expiryMonth: data.cardExpiryMonth,
             expiryYear: data.cardExpiryYear,
             ccv: data.cardCvv,
@@ -122,7 +124,7 @@ export default function CheckoutPage() {
           creditCardHolderInfo: {
             name: data.name,
             email: data.email,
-            cpfCnpj: data.cpf.replace(/\D/g, ''),
+            cpfCnpj: data.cpf.replaceAll(/\D/g, ''),
             postalCode: data.postalCode,
             addressNumber: data.addressNumber,
             phone: data.phone,
@@ -275,8 +277,8 @@ export default function CheckoutPage() {
                       disabled={isLoading}
                       maxLength={19}
                       onChange={(e) => {
-                        const value = e.target.value.replace(/\D/g, '');
-                        const formatted = value.replace(/(\d{4})(?=\d)/g, '$1 ');
+                        const value = e.target.value.replaceAll(/\D/g, '');
+                        const formatted = value.replaceAll(/(\d{4})(?=\d)/g, '$1 ');
                         e.target.value = formatted;
                       }}
                     />
@@ -333,7 +335,7 @@ export default function CheckoutPage() {
                         disabled={isLoading}
                         maxLength={9}
                         onChange={(e) => {
-                          const value = e.target.value.replace(/\D/g, '');
+                          const value = e.target.value.replaceAll(/\D/g, '');
                           const formatted = value.replace(/(\d{5})(\d{3})/, '$1-$2');
                           e.target.value = formatted;
                         }}
@@ -351,7 +353,7 @@ export default function CheckoutPage() {
                           disabled={isLoading}
                           maxLength={15}
                           onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '');
+                            const value = e.target.value.replaceAll(/\D/g, '');
                             const formatted = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
                             e.target.value = formatted;
                           }}

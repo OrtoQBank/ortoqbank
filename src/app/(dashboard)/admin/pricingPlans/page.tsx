@@ -7,7 +7,6 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Switch } from '@/components/ui/switch';
 import { Textarea } from '@/components/ui/textarea';
 
 import { api } from '../../../../../convex/_generated/api';
@@ -31,6 +30,7 @@ export default function PricingPlansAdminPage() {
     description?: string;
     features?: string;
     buttonText?: string;
+    productId?: string;
   }>({});
   const [isCreating, setIsCreating] = useState(false);
   const [createForm, setCreateForm] = useState({
@@ -43,6 +43,7 @@ export default function PricingPlansAdminPage() {
     description: '',
     features: '',
     buttonText: '',
+    productId: '',
   });
 
   function startEdit(plan: PricingPlan) {
@@ -57,6 +58,7 @@ export default function PricingPlansAdminPage() {
       description: plan.description,
       features: plan.features.join('\n'),
       buttonText: plan.buttonText,
+      productId: plan.productId,
     });
   }
 
@@ -79,6 +81,7 @@ export default function PricingPlansAdminPage() {
         .map(f => f.trim())
         .filter(f => f.length > 0),
       buttonText: formData.buttonText?.trim() || '',
+      productId: formData.productId?.trim() || '',
     };
   }
 
@@ -109,6 +112,7 @@ export default function PricingPlansAdminPage() {
         description: '',
         features: '',
         buttonText: '',
+        productId: '',
       });
       setIsCreating(false);
     }
@@ -138,6 +142,16 @@ export default function PricingPlansAdminPage() {
             <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden w-full min-h-[500px] flex flex-col border-2 border-dashed border-blue-300">
               <div className="p-4 space-y-3">
                 
+
+                <div className="space-y-1">
+                  <Label className="text-xs">Product ID</Label>
+                  <Input
+                    value={createForm.productId}
+                    onChange={e => setCreateForm(f => ({ ...f, productId: e.target.value }))}
+                    placeholder="Ex: ortoqbank_2025"
+                    className="text-xs"
+                  />
+                </div>
 
                 <div className="space-y-1">
                   <Label className="text-xs">Nome</Label>
@@ -236,6 +250,15 @@ export default function PricingPlansAdminPage() {
             >
               {editingId === plan._id ? (
                 <div className="p-4 space-y-3">
+                  <div className="space-y-1">
+                    <Label className="text-xs">Product ID</Label>
+                    <Input
+                      value={editForm.productId || ''}
+                      onChange={e => setEditForm(f => ({ ...f, productId: e.target.value }))}
+                      className="text-xs"
+                    />
+                  </div>
+
                   <div className="space-y-1">
                     <Label className="text-xs">Badge</Label>
                     <Input

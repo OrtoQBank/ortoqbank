@@ -1,21 +1,23 @@
 'use client';
 
-import { Button } from '@/components/ui/button';
 import { MessageCircle, RefreshCw, XCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
+import { Suspense } from 'react';
 
-export default function PaymentFailedPage() {
+import { Button } from '@/components/ui/button';
+
+const handleRetryPayment = () => {
+  // Redirect back to pricing plans to retry
+  globalThis.location.href = '/';
+};
+
+function PaymentFailedContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get('order');
 
-  const handleRetryPayment = () => {
-    // Redirect back to pricing plans to retry
-    window.location.href = '/';
-  };
-
   const handleContactSupport = () => {
     // Redirect to support with context
-    window.location.href = `/suporte?issue=payment-failed&order=${orderId}`;
+    globalThis.location.href = `/suporte?issue=payment-failed&order=${orderId}`;
   };
 
   return (
@@ -103,5 +105,13 @@ export default function PaymentFailedPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function PaymentFailedPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <PaymentFailedContent />
+    </Suspense>
   );
 }

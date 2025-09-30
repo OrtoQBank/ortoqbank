@@ -1,6 +1,6 @@
 import { v } from "convex/values";
 import { api } from "./_generated/api";
-import { action, internalMutation } from "./_generated/server";
+import { action } from "./_generated/server";
 
 // Asaas API Types
 interface AsaasCustomer {

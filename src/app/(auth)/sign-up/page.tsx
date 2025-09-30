@@ -4,10 +4,11 @@ import { SignUp, useUser } from '@clerk/nextjs';
 import { useMutation, useQuery } from 'convex/react';
 import { AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+
 import { api } from '../../../../convex/_generated/api';
 
-export default function SignUpPage() {
+function SignUpContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const { user, isSignedIn } = useUser();
@@ -35,7 +36,7 @@ export default function SignUpPage() {
   useEffect(() => {
     if (payment === 'success') {
       // Old URL format - redirect to processing
-      window.location.href = `/payment/processing?order=${orderId}`;
+      globalThis.location.href = `/payment/processing?order=${orderId}`;
       return;
     }
 
@@ -196,5 +197,13 @@ export default function SignUpPage() {
         
       </div>
     </div>
+  );
+}
+
+export default function SignUpPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <SignUpContent />
+    </Suspense>
   );
 }

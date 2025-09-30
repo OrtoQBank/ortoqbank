@@ -1,12 +1,12 @@
 'use client';
 
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { CheckCircleIcon } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 export default function OnboardingPage() {
   const router = useRouter();

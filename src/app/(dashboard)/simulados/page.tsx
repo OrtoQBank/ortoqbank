@@ -1,6 +1,5 @@
 'use client';
 
-import { useCurrentUser } from '@/hooks/useCurrentUser';
 import { useMutation, useQuery } from 'convex/react';
 import {
   Baby,
@@ -27,6 +26,7 @@ import {
 } from '@/components/ui/accordion';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';

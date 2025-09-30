@@ -1,11 +1,12 @@
 'use client';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
 import { AlertCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 
-export default function PaymentErrorAlert() {
+import { Alert, AlertDescription } from '@/components/ui/alert';
+
+function PaymentErrorAlertContent() {
   const searchParams = useSearchParams();
   const [showPaymentError, setShowPaymentError] = useState(false);
 
@@ -14,7 +15,7 @@ export default function PaymentErrorAlert() {
     if (error === 'payment_required') {
       setShowPaymentError(true);
       // Auto-hide after 10 seconds
-      const timer = setTimeout(() => setShowPaymentError(false), 10000);
+      const timer = setTimeout(() => setShowPaymentError(false), 10_000);
       return () => clearTimeout(timer);
     }
   }, [searchParams]);
@@ -33,5 +34,13 @@ export default function PaymentErrorAlert() {
         </AlertDescription>
       </Alert>
     </div>
+  );
+}
+
+export default function PaymentErrorAlert() {
+  return (
+    <Suspense fallback={null}>
+      <PaymentErrorAlertContent />
+    </Suspense>
   );
 }

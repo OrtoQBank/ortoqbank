@@ -1,15 +1,17 @@
 'use client';
 
-import { Alert, AlertDescription } from '@/components/ui/alert';
-import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useQuery } from 'convex/react';
 import { AlertCircle, Clock, Loader2 } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
+
+import { Alert, AlertDescription } from '@/components/ui/alert';
+import { Button } from '@/components/ui/button';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+
 import { api } from '../../../../convex/_generated/api';
 
-export default function PaymentProcessingPage() {
+function PaymentProcessingContent() {
   const searchParams = useSearchParams();
   const router = useRouter();
   const pendingOrderId = searchParams.get('order');
@@ -48,7 +50,7 @@ export default function PaymentProcessingPage() {
       if (paymentStatus?.status === 'pending') {
         setShowManualCheck(true);
       }
-    }, 30000);
+    }, 30_000);
 
     return () => clearTimeout(timer);
   }, [paymentStatus, router]);
@@ -175,5 +177,13 @@ export default function PaymentProcessingPage() {
         </CardContent>
       </Card>
     </div>
+  );
+}
+
+export default function PaymentProcessingPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+      <PaymentProcessingContent />
+    </Suspense>
   );
 }

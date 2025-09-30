@@ -1,10 +1,10 @@
 'use client';
 
-import { Search, Users, X } from 'lucide-react';
+import { Search, X } from 'lucide-react';
 import { usePathname, useRouter, useSearchParams } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 
-export const SearchUsers = () => {
+function SearchUsersContent() {
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -68,5 +68,13 @@ export const SearchUsers = () => {
         </button>
       </form>
     </div>
+  );
+}
+
+export const SearchUsers = () => {
+  return (
+    <Suspense fallback={<div>Loading search...</div>}>
+      <SearchUsersContent />
+    </Suspense>
   );
 };
