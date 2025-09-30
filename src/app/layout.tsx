@@ -1,16 +1,16 @@
 import './globals.css';
 
+import ErrorBoundary from '@/components/error-boundary';
+import { PostHogProvider } from '@/components/PostHogProvider';
+import { ErrorLogger } from '@/components/providers/error-logger';
+import { Toaster } from '@/components/ui/toaster';
+import { GoogleTagManager } from '@next/third-parties/google';
 import { Analytics } from '@vercel/analytics/next';
 import type { Metadata } from 'next';
 import { Geist, Geist_Mono } from 'next/font/google';
 import localFont from 'next/font/local';
 import Script from 'next/script';
 import NextTopLoader from 'nextjs-toploader';
-
-import ErrorBoundary from '@/components/error-boundary';
-import { PostHogProvider } from '@/components/PostHogProvider';
-import { ErrorLogger } from '@/components/providers/error-logger';
-import { Toaster } from '@/components/ui/toaster';
 
 import ConvexClientProvider from './convex-client-provider';
 
@@ -31,19 +31,23 @@ const sifonn = localFont({
 
 export const metadata: Metadata = {
   title: 'OrtoQBank - Preparação para TEOT | Banco de Questões de Ortopedia',
-  description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Trilhas de estudo, simulados completos e testes personalizados. Planos a partir de R$ 97.',
-  keywords: 'TEOT, ortopedia, questões, simulados, preparação, residência médica, ortopedista',
+  description:
+    'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Trilhas de estudo, simulados completos e testes personalizados. Planos a partir de R$ 97.',
+  keywords:
+    'TEOT, ortopedia, questões, simulados, preparação, residência médica, ortopedista',
   authors: [{ name: 'OrtoQBank' }],
   openGraph: {
     title: 'OrtoQBank - Preparação para TEOT',
-    description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+    description:
+      'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
     type: 'website',
     locale: 'pt_BR',
   },
   twitter: {
     card: 'summary_large_image',
     title: 'OrtoQBank - Preparação para TEOT',
-    description: 'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+    description:
+      'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
   },
   robots: {
     index: true,
@@ -63,8 +67,11 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID
   return (
     <html lang="pt-BR">
+   
+   {gtmId && <GoogleTagManager gtmId={gtmId} />}
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sifonn.variable} antialiased`}
       >
