@@ -3,8 +3,8 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useAction, useMutation } from 'convex/react';
 import { Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
@@ -47,9 +47,9 @@ const checkoutSchema = z.object({
 
 type CheckoutForm = z.infer<typeof checkoutSchema>;
 
-export default function CheckoutPage() {
+function CheckoutPageContent() {
   const router = useRouter();
-  const planId = 'ortoqbank_2025'; // Default plan
+  const planId = useSearchParams().get('plan'); // get planId from url
   
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -73,6 +73,10 @@ export default function CheckoutPage() {
       paymentMethod: 'PIX',
     },
   });
+
+  if (!planId) {
+    return <div>Plano não encontrado</div>;
+  }
 
   const onSubmit = async (data: CheckoutForm) => {
     setIsLoading(true);
@@ -417,5 +421,17 @@ export default function CheckoutPage() {
         </Card>
       </div>
     </div>
+  );
+}
+
+export default function CheckoutPage() {
+  return (
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 py-8 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    }>
+      <CheckoutPageContent />
+    </Suspense>
   );
 }

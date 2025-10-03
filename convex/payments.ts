@@ -31,6 +31,7 @@ export const createPendingOrder = mutation({
     });
 
     if (!pricingPlan || !pricingPlan.isActive) {
+      console.error(args);
       throw new Error('Product not found or inactive');
     }
 
