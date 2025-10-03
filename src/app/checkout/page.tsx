@@ -1,8 +1,8 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useAction, useMutation } from 'convex/react';
-import { Loader2 } from 'lucide-react';
+import { useAction, useMutation, useQuery } from 'convex/react';
+import { Loader2, Tag } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -54,6 +54,10 @@ function CheckoutPageContent() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedPaymentMethod, setSelectedPaymentMethod] = useState<'PIX' | 'CREDIT_CARD'>('PIX');
+  const [couponCode, setCouponCode] = useState('');
+  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [couponError, setCouponError] = useState<string | null>(null);
+  const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
 
   // Convex actions and mutations
   const createPendingOrder = useMutation(api.payments.createPendingOrder);
@@ -61,6 +65,9 @@ function CheckoutPageContent() {
   const createCustomer = useAction(api.asaas.createAsaasCustomer);
   const createPixPayment = useAction(api.asaas.createPixPayment);
   const createCreditCardPayment = useAction(api.asaas.createCreditCardPayment);
+  
+  // Get pricing plan
+  const pricingPlan = useQuery(api.pricingPlans.getByProductId, planId ? { productId: planId } : 'skip');
 
   const {
     register,
@@ -74,9 +81,73 @@ function CheckoutPageContent() {
     },
   });
 
+  // Validate coupon
+  const handleValidateCoupon = async () => {
+    if (!couponCode.trim()) {
+      setCouponError('Digite um código de cupom');
+      return;
+    }
+
+    if (!pricingPlan) {
+      setCouponError('Aguarde o carregamento do plano');
+      return;
+    }
+
+    setIsValidatingCoupon(true);
+    setCouponError(null);
+    
+    try {
+      // Use regular price as base (before PIX discount)
+      const originalPrice = pricingPlan.regularPriceNum || 0;
+      
+      // Import convex client to make the query
+      const { ConvexHttpClient } = await import('convex/browser');
+      const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
+      
+      const validateResult: any = await client.query(api.promoCoupons.validateAndApplyCoupon, {
+        code: couponCode,
+        originalPrice,
+      });
+
+      if (validateResult.isValid) {
+        setAppliedCoupon(validateResult);
+        setCouponError(null);
+      } else {
+        setCouponError(validateResult.errorMessage || 'Cupom inválido');
+        setAppliedCoupon(null);
+      }
+    } catch (err) {
+      console.error('Coupon validation error:', err);
+      setCouponError('Erro ao validar cupom');
+      setAppliedCoupon(null);
+    } finally {
+      setIsValidatingCoupon(false);
+    }
+  };
+
+  const handleRemoveCoupon = () => {
+    setCouponCode('');
+    setAppliedCoupon(null);
+    setCouponError(null);
+  };
+
   if (!planId) {
     return <div>Plano não encontrado</div>;
   }
+
+  if (!pricingPlan) {
+    return (
+      <div className="min-h-screen bg-gray-50 py-8 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    );
+  }
+
+  // Calculate prices based on payment method
+  const regularPrice = pricingPlan.regularPriceNum || 0;
+  const pixPrice = pricingPlan.pixPriceNum || regularPrice;
+  const basePrice = selectedPaymentMethod === 'PIX' ? pixPrice : regularPrice;
+  const pixSavings = regularPrice - pixPrice; // How much you save by choosing PIX
 
   const onSubmit = async (data: CheckoutForm) => {
     setIsLoading(true);
@@ -84,12 +155,13 @@ function CheckoutPageContent() {
 
     try {
       // Step 1: Create pending order first (robust pattern)
-      const { pendingOrderId, claimToken } = await createPendingOrder({
+      const { pendingOrderId, claimToken, priceBreakdown } = await createPendingOrder({
         email: data.email,
         cpf: data.cpf.replaceAll(/\D/g, ''),
         name: data.name,
         productId: planId,
         paymentMethod: data.paymentMethod,
+        couponCode: appliedCoupon ? couponCode : undefined,
       });
 
       // Step 2: Create customer using Convex action
@@ -226,6 +298,10 @@ function CheckoutPageContent() {
                     onClick={() => {
                       setSelectedPaymentMethod('PIX');
                       setValue('paymentMethod', 'PIX');
+                      // Clear coupon when changing payment method
+                      if (appliedCoupon) {
+                        handleRemoveCoupon();
+                      }
                     }}
                   >
                     <div className="text-center">
@@ -242,6 +318,10 @@ function CheckoutPageContent() {
                     onClick={() => {
                       setSelectedPaymentMethod('CREDIT_CARD');
                       setValue('paymentMethod', 'CREDIT_CARD');
+                      // Clear coupon when changing payment method
+                      if (appliedCoupon) {
+                        handleRemoveCoupon();
+                      }
                     }}
                   >
                     <div className="text-center">
@@ -251,6 +331,66 @@ function CheckoutPageContent() {
                   </div>
                 </div>
                 <input type="hidden" {...register('paymentMethod')} />
+              </div>
+
+              {/* Coupon Code */}
+              <div className="space-y-2">
+                <Label htmlFor="couponCode">Cupom de Desconto (Opcional)</Label>
+                {!appliedCoupon ? (
+                  <div className="flex gap-2">
+                    <div className="relative flex-1">
+                      <Tag className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
+                      <Input
+                        id="couponCode"
+                        type="text"
+                        placeholder="Digite o código do cupom"
+                        value={couponCode}
+                        onChange={(e) => setCouponCode(e.target.value.toUpperCase())}
+                        disabled={isLoading || isValidatingCoupon}
+                        className="pl-10"
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            handleValidateCoupon();
+                          }
+                        }}
+                      />
+                    </div>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={handleValidateCoupon}
+                      disabled={isLoading || isValidatingCoupon || !couponCode.trim()}
+                    >
+                      {isValidatingCoupon ? (
+                        <Loader2 className="h-4 w-4 animate-spin" />
+                      ) : (
+                        'Aplicar'
+                      )}
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <Tag className="h-4 w-4 text-green-600" />
+                    <div className="flex-1">
+                      <div className="font-medium text-green-900">{couponCode}</div>
+                      <div className="text-sm text-green-700">{appliedCoupon.couponDescription}</div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveCoupon}
+                      disabled={isLoading}
+                      className="text-green-700 hover:text-green-900"
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                )}
+                {couponError && (
+                  <p className="text-sm text-red-600">{couponError}</p>
+                )}
               </div>
 
               {/* Credit Card Fields (conditional) */}
@@ -381,20 +521,57 @@ function CheckoutPageContent() {
 
               {/* Order Summary */}
               <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2">Resumo do Pedido</h3>
+                <h3 className="font-semibold mb-3">Resumo do Pedido</h3>
                 <div className="space-y-2">
-                  <div className="flex justify-between items-center">
-                    <span>Plano {planId}</span>
-                  </div>
-                  <div className="flex justify-between items-center font-bold text-lg">
-                    <span>Total:</span>
-                    <span className="text-green-600">
-                      {selectedPaymentMethod === 'PIX' ? 'Preço PIX' : 'Preço Cartão'}
+                  <div className="flex justify-between items-center text-sm">
+                    <span className="text-gray-600">{pricingPlan.name}</span>
+                    <span className="font-medium">
+                      {selectedPaymentMethod === 'PIX' ? (
+                        <>
+                          <span className="line-through text-gray-400 mr-2">R$ {regularPrice.toFixed(2)}</span>
+                          <span>R$ {pixPrice.toFixed(2)}</span>
+                        </>
+                      ) : (
+                        <span>R$ {regularPrice.toFixed(2)}</span>
+                      )}
                     </span>
                   </div>
-                  <p className="text-xs text-gray-600">
-                    * Preço final será calculado no servidor
-                  </p>
+                  
+                  {selectedPaymentMethod === 'PIX' && pixSavings > 0 && (
+                    <div className="flex justify-between items-center text-sm text-blue-600">
+                      <span>💰 Desconto PIX</span>
+                      <span>- R$ {pixSavings.toFixed(2)}</span>
+                    </div>
+                  )}
+                  
+                  {appliedCoupon && (
+                    <div className="flex justify-between items-center text-sm text-green-600">
+                      <span>🎟️ Cupom ({couponCode})</span>
+                      <span>- R$ {appliedCoupon.discountAmount.toFixed(2)}</span>
+                    </div>
+                  )}
+                  
+                  <div className="border-t pt-2 flex justify-between items-center font-bold text-lg">
+                    <span>Total:</span>
+                    <span className="text-green-600">
+                      R$ {appliedCoupon ? appliedCoupon.finalPrice.toFixed(2) : basePrice.toFixed(2)}
+                    </span>
+                  </div>
+                  
+                  {(appliedCoupon || (selectedPaymentMethod === 'PIX' && pixSavings > 0)) && (
+                    <p className="text-xs text-green-600 font-medium">
+                      ✓ Você está economizando R$ {(() => {
+                        let totalSavings = 0;
+                        if (selectedPaymentMethod === 'PIX') {
+                          totalSavings += pixSavings;
+                        }
+                        if (appliedCoupon) {
+                          totalSavings += appliedCoupon.discountAmount;
+                        }
+                        return totalSavings.toFixed(2);
+                      })()}!
+                    </p>
+                  )}
                 </div>
               </div>
 

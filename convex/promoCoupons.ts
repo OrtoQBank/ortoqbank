@@ -123,3 +123,159 @@ export const remove = mutation({
     return null;
   },
 });
+
+/**
+ * Validate and apply coupon to a price
+ * Returns the final price after applying coupon discount
+ * Note: This is for UI preview only. Server must re-validate on order creation.
+ */
+export const validateAndApplyCoupon = query({
+  args: {
+    code: v.string(),
+    originalPrice: v.number(),
+    userCpf: v.optional(v.string()), // For checking per-user limits
+  },
+  returns: v.union(
+    v.object({
+      isValid: v.boolean(),
+      finalPrice: v.number(),
+      discountAmount: v.number(),
+      couponDescription: v.string(),
+      coupon: v.object({
+        _id: v.id('coupons'),
+        code: v.string(),
+        type: v.union(
+          v.literal('percentage'),
+          v.literal('fixed'),
+          v.literal('fixed_price'),
+        ),
+        value: v.number(),
+        description: v.string(),
+      }),
+    }),
+    v.object({
+      isValid: v.boolean(),
+      errorMessage: v.string(),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const code = args.code.toUpperCase().trim();
+    
+    if (!code) {
+      return {
+        isValid: false,
+        errorMessage: 'Código de cupom inválido',
+      };
+    }
+
+    // Find the coupon
+    const coupon = await ctx.db
+      .query('coupons')
+      .withIndex('by_code', q => q.eq('code', code))
+      .unique();
+
+    if (!coupon) {
+      return {
+        isValid: false,
+        errorMessage: 'Cupom não encontrado',
+      };
+    }
+
+    // Check if coupon is active
+    if (!coupon.active) {
+      return {
+        isValid: false,
+        errorMessage: 'Cupom inativo',
+      };
+    }
+
+    // Check if coupon is within valid date range
+    const now = Date.now();
+    if (coupon.validFrom !== undefined && now < coupon.validFrom) {
+      return {
+        isValid: false,
+        errorMessage: 'Cupom ainda não está válido',
+      };
+    }
+    if (coupon.validUntil !== undefined && now > coupon.validUntil) {
+      return {
+        isValid: false,
+        errorMessage: 'Cupom expirado',
+      };
+    }
+
+    // Check maximum total uses
+    if (coupon.maxUses !== undefined) {
+      const currentUses = coupon.currentUses || 0;
+      if (currentUses >= coupon.maxUses) {
+        return {
+          isValid: false,
+          errorMessage: 'Cupom esgotado',
+        };
+      }
+    }
+
+    // Check per-user usage limit (if CPF provided)
+    if (coupon.maxUsesPerUser !== undefined) {
+      if (!args.userCpf) {
+        // If per-user limit is set but no CPF provided, show warning
+        console.warn(`Coupon ${code} has per-user limit but no CPF provided for validation`);
+      } else {
+        const cleanCpf = args.userCpf.replace(/\D/g, '');
+        const userUsageCount = await ctx.db
+          .query('couponUsage')
+          .withIndex('by_coupon_user', q => 
+            q.eq('couponCode', code).eq('userCpf', cleanCpf)
+          )
+          .collect();
+        
+        if (userUsageCount.length >= coupon.maxUsesPerUser) {
+          return {
+            isValid: false,
+            errorMessage: 'Você já utilizou este cupom o número máximo de vezes',
+          };
+        }
+      }
+    }
+
+    // Calculate discount
+    let finalPrice: number;
+    let discountAmount: number;
+
+    if (coupon.type === 'fixed_price') {
+      finalPrice = coupon.value;
+      discountAmount = args.originalPrice - coupon.value;
+    } else if (coupon.type === 'percentage') {
+      discountAmount = (args.originalPrice * coupon.value) / 100;
+      finalPrice = args.originalPrice - discountAmount;
+    } else {
+      // fixed discount
+      discountAmount = coupon.value;
+      finalPrice = args.originalPrice - discountAmount;
+    }
+
+    // Ensure final price is not negative
+    finalPrice = Math.max(finalPrice, 0);
+    discountAmount = Math.min(discountAmount, args.originalPrice);
+
+    // Apply minimum price protection
+    if (coupon.minimumPrice !== undefined && finalPrice < coupon.minimumPrice) {
+      finalPrice = coupon.minimumPrice;
+      discountAmount = args.originalPrice - finalPrice;
+    }
+
+    return {
+      isValid: true,
+      finalPrice: Math.round(finalPrice * 100) / 100,
+      discountAmount: Math.round(discountAmount * 100) / 100,
+      couponDescription: coupon.description,
+      coupon: {
+        _id: coupon._id,
+        code: coupon.code,
+        type: coupon.type,
+        value: coupon.value,
+        description: coupon.description,
+      },
+    };
+  },
+});

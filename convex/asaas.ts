@@ -165,7 +165,23 @@ export const createPixPayment = action({
     expirationDate: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    // Get pricing plan to determine the correct price (security)
+    // Get the pending order to get the final price (with coupons already applied)
+    const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
+      orderId: args.pendingOrderId,
+    });
+
+    if (!pendingOrder) {
+      throw new Error('Pending order not found');
+    }
+
+    // Use the final price from the pending order (already includes coupon and PIX discounts)
+    const finalPrice = pendingOrder.finalPrice;
+    
+    if (finalPrice <= 0) {
+      throw new Error('Invalid product price');
+    }
+
+    // Get pricing plan for description
     const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
       productId: args.productId,
     });
@@ -174,22 +190,21 @@ export const createPixPayment = action({
       throw new Error('Product not found or inactive');
     }
 
-    // Use PIX price from the pricing plan (server-side security)
-    const pixPrice = pricingPlan.pixPriceNum || pricingPlan.regularPriceNum || 0;
-    
-    if (pixPrice <= 0) {
-      throw new Error('Invalid product price');
-    }
-
     const asaas = new AsaasClient();
     
+    // Build description with coupon info if applicable
+    let description = `${pricingPlan.name} - PIX`;
+    if (pendingOrder.couponCode) {
+      description += ` (Cupom: ${pendingOrder.couponCode})`;
+    }
+
     // Create PIX payment with pendingOrderId as externalReference
     const payment = await asaas.createCharge({
       customer: args.customerId,
       billingType: 'PIX',
-      value: pixPrice,
+      value: finalPrice,
       dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
-      description: `${pricingPlan.name} - PIX`,
+      description,
       externalReference: args.pendingOrderId, // This is the key for webhook correlation
     });
 
@@ -212,7 +227,7 @@ export const createPixPayment = action({
 
     return {
       paymentId: payment.id,
-      value: pixPrice,
+      value: finalPrice,
       qrPayload: pixData?.payload,
       qrCodeBase64: pixData?.encodedImage,
       expirationDate: pixData?.expirationDate,
@@ -254,7 +269,23 @@ export const createCreditCardPayment = action({
     invoiceUrl: v.optional(v.string()),
   }),
   handler: async (ctx, args) => {
-    // Get pricing plan to determine the correct price (security)
+    // Get the pending order to get the final price (with coupons already applied)
+    const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
+      orderId: args.pendingOrderId,
+    });
+
+    if (!pendingOrder) {
+      throw new Error('Pending order not found');
+    }
+
+    // Use the final price from the pending order (already includes coupon discount, but not PIX)
+    const finalPrice = pendingOrder.finalPrice;
+    
+    if (finalPrice <= 0) {
+      throw new Error('Invalid product price');
+    }
+
+    // Get pricing plan for description
     const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
       productId: args.productId,
     });
@@ -263,22 +294,21 @@ export const createCreditCardPayment = action({
       throw new Error('Product not found or inactive');
     }
 
-    // Use regular price for credit card (server-side security)
-    const creditCardPrice = pricingPlan.regularPriceNum || 0;
-    
-    if (creditCardPrice <= 0) {
-      throw new Error('Invalid product price');
-    }
-
     const asaas = new AsaasClient();
+    
+    // Build description with coupon info if applicable
+    let description = `${pricingPlan.name} - Cartão de Crédito`;
+    if (pendingOrder.couponCode) {
+      description += ` (Cupom: ${pendingOrder.couponCode})`;
+    }
     
     // Create Credit Card payment with immediate processing
     const payment = await asaas.createCharge({
       customer: args.customerId,
       billingType: 'CREDIT_CARD',
-      value: creditCardPrice,
+      value: finalPrice,
       dueDate: new Date().toISOString().split('T')[0], // Today (immediate processing)
-      description: `${pricingPlan.name} - Cartão de Crédito`,
+      description,
       externalReference: args.pendingOrderId, // This is the key for webhook correlation
       creditCard: args.creditCard,
       creditCardHolderInfo: args.creditCardHolderInfo,
@@ -287,7 +317,7 @@ export const createCreditCardPayment = action({
 
     return {
       paymentId: payment.id,
-      value: creditCardPrice,
+      value: finalPrice,
       status: payment.status,
       creditCardToken: (payment as any).creditCardToken,
       invoiceUrl: payment.invoiceUrl,

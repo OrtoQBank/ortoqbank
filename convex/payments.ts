@@ -19,10 +19,17 @@ export const createPendingOrder = mutation({
     name: v.string(),
     productId: v.string(),
     paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
+    couponCode: v.optional(v.string()), // Optional coupon code
   },
   returns: v.object({
     pendingOrderId: v.id('pendingOrders'),
     claimToken: v.string(),
+    priceBreakdown: v.object({
+      originalPrice: v.number(),
+      couponDiscount: v.number(),
+      pixDiscount: v.number(),
+      finalPrice: v.number(),
+    }),
   }),
   handler: async (ctx, args) => {
     // Get pricing plan to determine correct price
@@ -35,13 +42,48 @@ export const createPendingOrder = mutation({
       throw new Error('Product not found or inactive');
     }
 
-    // Determine price based on payment method
-    const pixPrice = pricingPlan.pixPriceNum || pricingPlan.regularPriceNum || 0;
+    // Base prices from the pricing plan (set by admin)
     const regularPrice = pricingPlan.regularPriceNum || 0;
-    const finalPrice = args.paymentMethod === 'PIX' ? pixPrice : regularPrice;
+    const pixPrice = pricingPlan.pixPriceNum || pricingPlan.regularPriceNum || 0;
+
+    if (regularPrice <= 0 || pixPrice <= 0) {
+      throw new Error('Invalid product price');
+    }
+
+    // Determine which base price to use based on payment method
+    const basePrice = args.paymentMethod === 'PIX' ? pixPrice : regularPrice;
+    let finalPrice = basePrice;
+    let couponDiscount = 0;
+    let appliedCouponCode: string | undefined;
+
+    // Apply coupon if provided (applies to the selected payment method's price)
+    if (args.couponCode && args.couponCode.trim()) {
+      // Validate coupon with user CPF for usage tracking
+      const couponResult: any = await ctx.runQuery(api.promoCoupons.validateAndApplyCoupon, {
+        code: args.couponCode,
+        originalPrice: basePrice,
+        userCpf: args.cpf.replace(/\D/g, ''),
+      });
+
+      if (couponResult.isValid) {
+        finalPrice = couponResult.finalPrice;
+        couponDiscount = couponResult.discountAmount;
+        appliedCouponCode = args.couponCode.toUpperCase();
+        console.log(`✅ Applied coupon ${appliedCouponCode}: -R$ ${couponDiscount}`);
+      } else {
+        throw new Error(couponResult.errorMessage || 'Cupom inválido');
+      }
+    }
+
+    // Calculate PIX savings (difference between regular and PIX price)
+    const pixDiscount = args.paymentMethod === 'PIX' ? (regularPrice - pixPrice) : 0;
+
+    // Round to 2 decimal places
+    finalPrice = Math.round(finalPrice * 100) / 100;
+    couponDiscount = Math.round(couponDiscount * 100) / 100;
 
     if (finalPrice <= 0) {
-      throw new Error('Invalid product price');
+      throw new Error('Invalid final price');
     }
 
     // Generate claim token (valid for 7 days)
@@ -61,16 +103,57 @@ export const createPendingOrder = mutation({
       status: 'pending',
       originalPrice: regularPrice,
       finalPrice,
+      couponCode: appliedCouponCode,
+      couponDiscount,
+      pixDiscount,
       paymentMethod: args.paymentMethod,
       createdAt: now,
       expiresAt: now + sevenDays,
     });
 
     console.log(`📝 Created pending order ${pendingOrderId} with claim token ${claimToken}`);
+    console.log(`💰 Price breakdown: Method=${args.paymentMethod}, Base R$ ${basePrice}, Coupon R$ ${couponDiscount}, Final R$ ${finalPrice}`);
+
+    // Track coupon usage (will be confirmed when payment is received)
+    if (appliedCouponCode) {
+      const coupon = await ctx.db
+        .query('coupons')
+        .withIndex('by_code', q => q.eq('code', appliedCouponCode))
+        .unique();
+      
+      if (coupon) {
+        // Create usage record (pending until payment confirmed)
+        await ctx.db.insert('couponUsage', {
+          couponId: coupon._id,
+          couponCode: appliedCouponCode,
+          orderId: pendingOrderId,
+          userEmail: args.email,
+          userCpf: args.cpf.replace(/\D/g, ''),
+          discountAmount: couponDiscount,
+          originalPrice: basePrice,
+          finalPrice,
+          usedAt: now,
+        });
+
+        // Increment usage counter
+        const currentUses = coupon.currentUses || 0;
+        await ctx.db.patch(coupon._id, {
+          currentUses: currentUses + 1,
+        });
+        
+        console.log(`📊 Tracked coupon usage: ${appliedCouponCode} (${currentUses + 1}/${coupon.maxUses || '∞'})`);
+      }
+    }
 
     return {
       pendingOrderId,
       claimToken,
+      priceBreakdown: {
+        originalPrice: regularPrice,
+        couponDiscount,
+        pixDiscount,
+        finalPrice,
+      },
     };
   },
 });
@@ -121,6 +204,36 @@ export const processAsaasWebhook = internalAction({
           console.error(`No externalReference found in payment ${payment.id}`);
           return null;
         }
+
+        // SECURITY: Verify payment amount matches order amount
+        const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
+          orderId: pendingOrderId,
+        });
+
+        if (!pendingOrder) {
+          console.error(`Order not found: ${pendingOrderId}`);
+          return null;
+        }
+
+        // Check if payment amount matches expected amount (with small tolerance for rounding)
+        const tolerance = 0.02; // 2 cents tolerance
+        const paidAmount = payment.value || payment.totalValue || 0;
+        const expectedAmount = pendingOrder.finalPrice;
+        
+        if (Math.abs(paidAmount - expectedAmount) > tolerance) {
+          console.error(`🚨 SECURITY ALERT: Payment amount mismatch!`, {
+            orderId: pendingOrderId,
+            paymentId: payment.id,
+            expected: expectedAmount,
+            paid: paidAmount,
+            difference: paidAmount - expectedAmount,
+          });
+          
+          // Don't process the payment - this is a potential fraud attempt
+          return null;
+        }
+
+        console.log(`✅ Payment amount verified: R$ ${paidAmount} matches order R$ ${expectedAmount}`);
 
         const order = await ctx.runMutation(internal.payments.confirmPayment, {
           pendingOrderId,
@@ -548,6 +661,57 @@ export const validateClaimToken = query({
     } catch (error) {
       console.error('Error validating claim token:', error);
       return { isValid: false };
+    }
+  },
+});
+
+/**
+ * Get pending order by ID (for Asaas payment creation)
+ */
+export const getPendingOrderById = query({
+  args: {
+    orderId: v.string(),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id('pendingOrders'),
+      email: v.string(),
+      cpf: v.string(),
+      name: v.string(),
+      productId: v.string(),
+      finalPrice: v.number(),
+      originalPrice: v.number(),
+      couponCode: v.optional(v.string()),
+      couponDiscount: v.optional(v.number()),
+      pixDiscount: v.optional(v.number()),
+      paymentMethod: v.string(),
+      status: v.string(),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    try {
+      const order = await ctx.db.get(args.orderId as Id<'pendingOrders'>);
+      if (!order) {
+        return null;
+      }
+      return {
+        _id: order._id,
+        email: order.email,
+        cpf: order.cpf,
+        name: order.name,
+        productId: order.productId,
+        finalPrice: order.finalPrice,
+        originalPrice: order.originalPrice,
+        couponCode: order.couponCode,
+        couponDiscount: order.couponDiscount,
+        pixDiscount: order.pixDiscount,
+        paymentMethod: order.paymentMethod,
+        status: order.status,
+      };
+    } catch (error) {
+      console.error('Error getting pending order:', error);
+      return null;
     }
   },
 });

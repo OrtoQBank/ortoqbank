@@ -218,7 +218,30 @@ export default defineSchema({
     active: v.boolean(),
     validFrom: v.optional(v.number()), // epoch ms
     validUntil: v.optional(v.number()), // epoch ms
+    // Usage limits
+    maxUses: v.optional(v.number()), // Maximum total uses (null = unlimited)
+    maxUsesPerUser: v.optional(v.number()), // Max uses per CPF/email (null = unlimited)
+    currentUses: v.optional(v.number()), // Current total usage count
+    // Minimum price protection
+    minimumPrice: v.optional(v.number()), // Minimum final price after discount
   }).index('by_code', ['code']),
+
+  // Coupon usage tracking
+  couponUsage: defineTable({
+    couponId: v.id('coupons'),
+    couponCode: v.string(),
+    orderId: v.id('pendingOrders'),
+    userEmail: v.string(),
+    userCpf: v.string(),
+    discountAmount: v.number(),
+    originalPrice: v.number(),
+    finalPrice: v.number(),
+    usedAt: v.number(),
+  })
+    .index('by_coupon', ['couponId'])
+    .index('by_coupon_user', ['couponCode', 'userCpf'])
+    .index('by_email', ['userEmail'])
+    .index('by_cpf', ['userCpf']),
 
   //pricing plans
   pricingPlans: defineTable({
@@ -303,6 +326,11 @@ export default defineSchema({
     externalReference: v.optional(v.string()), // Order ID for external reference
     originalPrice: v.number(),
     finalPrice: v.number(),
+    
+    // Coupon info
+    couponCode: v.optional(v.string()), // Coupon code used (if any)
+    couponDiscount: v.optional(v.number()), // Discount amount from coupon
+    pixDiscount: v.optional(v.number()), // Additional PIX discount
     
     // State management
     status: v.union(
