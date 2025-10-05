@@ -212,6 +212,21 @@ function CheckoutPageContent() {
           productId: planId,
           pendingOrderId,
         });
+        
+        // Step 4: Link payment to order with PIX data
+        await linkPaymentToOrder({
+          pendingOrderId,
+          asaasPaymentId: payment.paymentId,
+          pixData: {
+            qrPayload: payment.qrPayload,
+            qrCodeBase64: payment.qrCodeBase64,
+            expirationDate: payment.expirationDate,
+          },
+        });
+
+        // Redirect to PIX payment page to show QR code
+        router.push(`/payment/pix?order=${pendingOrderId}`);
+        return; // Exit early for PIX
       } else {
         // Validate credit card fields
         if (!data.cardHolderName || !data.cardNumber || !data.cardExpiryMonth || !data.cardExpiryYear || !data.cardCvv || !data.phone || !data.postalCode || !data.address || !data.addressNumber) {
@@ -241,16 +256,16 @@ function CheckoutPageContent() {
           },
           installments: selectedInstallments > 1 ? selectedInstallments : undefined,
         });
+        
+        // Step 4: Link payment to order
+        await linkPaymentToOrder({
+          pendingOrderId,
+          asaasPaymentId: payment.paymentId,
+        });
+
+        // Redirect to processing page for credit card
+        router.push(`/payment/processing?order=${pendingOrderId}`);
       }
-
-      // Step 4: Link payment to order
-      await linkPaymentToOrder({
-        pendingOrderId,
-        asaasPaymentId: payment.paymentId,
-      });
-
-      // Redirect to processing page with pendingOrderId
-      router.push(`/payment/processing?order=${pendingOrderId}`);
 
     } catch (error) {
       console.error('Checkout error:', error);

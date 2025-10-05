@@ -327,6 +327,13 @@ export default defineSchema({
     originalPrice: v.number(),
     finalPrice: v.number(),
     
+    // PIX payment data (for displaying QR code)
+    pixData: v.optional(v.object({
+      qrPayload: v.optional(v.string()), // PIX copy-paste code
+      qrCodeBase64: v.optional(v.string()), // QR code image as base64
+      expirationDate: v.optional(v.string()), // When the PIX QR code expires
+    })),
+    
     // Coupon info
     couponCode: v.optional(v.string()), // Coupon code used (if any)
     couponDiscount: v.optional(v.number()), // Discount amount from coupon

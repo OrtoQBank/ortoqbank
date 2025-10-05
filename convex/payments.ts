@@ -166,15 +166,24 @@ export const linkPaymentToOrder = mutation({
   args: {
     pendingOrderId: v.id('pendingOrders'),
     asaasPaymentId: v.string(),
+    pixData: v.optional(v.object({
+      qrPayload: v.optional(v.string()),
+      qrCodeBase64: v.optional(v.string()),
+      expirationDate: v.optional(v.string()),
+    })),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     // Update the pending order with payment info
     await ctx.db.patch(args.pendingOrderId, {
       asaasPaymentId: args.asaasPaymentId,
+      pixData: args.pixData,
     });
 
     console.log(`🔗 Linked payment ${args.asaasPaymentId} to order ${args.pendingOrderId}`);
+    if (args.pixData) {
+      console.log(`📱 Stored PIX QR code data`);
+    }
     return null;
   },
 });
@@ -584,6 +593,11 @@ export const checkPaymentStatus = query({
       productId: v.string(),
       finalPrice: v.number(),
     })),
+    pixData: v.optional(v.object({
+      qrPayload: v.optional(v.string()),
+      qrCodeBase64: v.optional(v.string()),
+      expirationDate: v.optional(v.string()),
+    })),
   }),
   handler: async (ctx, args) => {
     try {
@@ -603,10 +617,19 @@ export const checkPaymentStatus = query({
             productId: order.productId,
             finalPrice: order.finalPrice,
           },
+          pixData: order.pixData,
         };
       }
 
-      return { status: 'pending' as const };
+      return { 
+        status: 'pending' as const,
+        orderDetails: {
+          email: order.email,
+          productId: order.productId,
+          finalPrice: order.finalPrice,
+        },
+        pixData: order.pixData,
+      };
     } catch (error) {
       console.error('Error checking payment status:', error);
       return { status: 'failed' as const };
