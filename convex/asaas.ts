@@ -103,6 +103,7 @@ class AsaasClient {
       email: string;
       cpfCnpj: string;
       postalCode?: string;
+      address?: string;
       addressNumber?: string;
       phone?: string;
       mobilePhone?: string;
@@ -256,6 +257,7 @@ export const createCreditCardPayment = action({
       email: v.string(),
       cpfCnpj: v.string(),
       postalCode: v.optional(v.string()),
+      address: v.optional(v.string()),
       addressNumber: v.optional(v.string()),
       phone: v.optional(v.string()),
       mobilePhone: v.optional(v.string()),

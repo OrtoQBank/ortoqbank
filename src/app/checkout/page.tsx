@@ -39,9 +39,10 @@ const checkoutSchema = z.object({
   cardExpiryMonth: z.string().optional(),
   cardExpiryYear: z.string().optional(),
   cardCvv: z.string().optional(),
-  // Required for credit card by Asaas
-  postalCode: z.string().optional(),
+  // Required by Asaas for credit card payments
   phone: z.string().optional(),
+  postalCode: z.string().optional(),
+  address: z.string().optional(),
   addressNumber: z.string().optional(),
   // Installments
   installments: z.number().min(1).max(12).optional(),
@@ -61,6 +62,7 @@ function CheckoutPageContent() {
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [selectedInstallments, setSelectedInstallments] = useState<number>(1);
+  const [isLoadingCep, setIsLoadingCep] = useState(false);
 
   // Convex actions and mutations
   const createPendingOrder = useMutation(api.payments.createPendingOrder);
@@ -83,6 +85,33 @@ function CheckoutPageContent() {
       paymentMethod: 'PIX',
     },
   });
+
+  // ViaCEP integration
+  const handleCepChange = async (cep: string) => {
+    const cleanCep = cep.replace(/\D/g, '');
+    
+    if (cleanCep.length === 8) {
+      setIsLoadingCep(true);
+      try {
+        const response = await fetch(`https://viacep.com.br/ws/${cleanCep}/json/`);
+        const data = await response.json();
+        
+        if (data.erro) {
+          setError('CEP não encontrado');
+        } else {
+          // Auto-fill address fields
+          setValue('address', `${data.logradouro}, ${data.bairro}`);
+          setValue('postalCode', data.cep);
+          setError(null);
+        }
+      } catch (error) {
+        console.error('Erro ao buscar CEP:', error);
+        setError('Erro ao buscar CEP');
+      } finally {
+        setIsLoadingCep(false);
+      }
+    }
+  };
 
   // Validate coupon
   const handleValidateCoupon = async () => {
@@ -185,7 +214,7 @@ function CheckoutPageContent() {
         });
       } else {
         // Validate credit card fields
-        if (!data.cardHolderName || !data.cardNumber || !data.cardExpiryMonth || !data.cardExpiryYear || !data.cardCvv || !data.postalCode || !data.phone || !data.addressNumber) {
+        if (!data.cardHolderName || !data.cardNumber || !data.cardExpiryMonth || !data.cardExpiryYear || !data.cardCvv || !data.phone || !data.postalCode || !data.address || !data.addressNumber) {
           throw new Error('Todos os campos do cartão são obrigatórios');
         }
 
@@ -204,10 +233,11 @@ function CheckoutPageContent() {
             name: data.name,
             email: data.email,
             cpfCnpj: data.cpf.replaceAll(/\D/g, ''),
-            postalCode: data.postalCode,
-            addressNumber: data.addressNumber,
             phone: data.phone,
             mobilePhone: data.phone,
+            postalCode: data.postalCode,
+            address: data.address,
+            addressNumber: data.addressNumber,
           },
           installments: selectedInstallments > 1 ? selectedInstallments : undefined,
         });
@@ -232,29 +262,52 @@ function CheckoutPageContent() {
 
   return (
     <div className="min-h-screen bg-gray-50 py-8">
-      <div className="container mx-auto px-4 max-w-md">
-        <Card>
-          <CardHeader>
-            <CardTitle>Finalizar Compra</CardTitle>
-            <CardDescription>
-              Preencha seus dados e escolha a forma de pagamento
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              {/* Name */}
-              <div className="space-y-2">
-                <Label htmlFor="name">Nome Completo</Label>
-                <Input
-                  id="name"
-                  type="text"
-                  placeholder="Seu nome completo"
-                  {...register('name')}
-                  disabled={isLoading}
-                />
-                {errors.name && (
-                  <p className="text-sm text-red-600">{errors.name.message}</p>
-                )}
+      <div className="container mx-auto px-4 max-w-7xl">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+          {/* Main Form - Takes 2 columns on desktop */}
+          <div className="lg:col-span-2">
+            <Card>
+              <CardHeader>
+                <CardTitle>Finalizar Compra</CardTitle>
+                <CardDescription>
+                  Preencha seus dados e escolha a forma de pagamento
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
+              {/* Personal Information */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Name */}
+                <div className="space-y-2">
+                  <Label htmlFor="name">Nome Completo</Label>
+                  <Input
+                    id="name"
+                    type="text"
+                    placeholder="Seu nome completo"
+                    {...register('name')}
+                    disabled={isLoading}
+                  />
+                  {errors.name && (
+                    <p className="text-sm text-red-600">{errors.name.message}</p>
+                  )}
+                </div>
+
+                {/* CPF */}
+                <div className="space-y-2">
+                  <Label htmlFor="cpf">CPF</Label>
+                  <Input
+                    id="cpf"
+                    type="text"
+                    placeholder="000.000.000-00"
+                    {...register('cpf')}
+                    disabled={isLoading}
+                    maxLength={14}
+                    onChange={handleCPFChange}
+                  />
+                  {errors.cpf && (
+                    <p className="text-sm text-red-600">{errors.cpf.message}</p>
+                  )}
+                </div>
               </div>
 
               {/* Email */}
@@ -269,23 +322,6 @@ function CheckoutPageContent() {
                 />
                 {errors.email && (
                   <p className="text-sm text-red-600">{errors.email.message}</p>
-                )}
-              </div>
-
-              {/* CPF */}
-              <div className="space-y-2">
-                <Label htmlFor="cpf">CPF</Label>
-                <Input
-                  id="cpf"
-                  type="text"
-                  placeholder="000.000.000-00"
-                  {...register('cpf')}
-                  onChange={handleCPFChange}
-                  maxLength={14}
-                  disabled={isLoading}
-                />
-                {errors.cpf && (
-                  <p className="text-sm text-red-600">{errors.cpf.message}</p>
                 )}
               </div>
 
@@ -402,95 +438,111 @@ function CheckoutPageContent() {
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="font-semibold text-gray-900">Dados do Cartão</h3>
 
-                  {/* Card Holder Name */}
-                  <div className="space-y-2">
-                    <Label htmlFor="cardHolderName">Nome no Cartão</Label>
-                    <Input
-                      id="cardHolderName"
-                      type="text"
-                      placeholder="Nome como está no cartão"
-                      {...register('cardHolderName')}
-                      disabled={isLoading}
-                    />
-                  </div>
-
-                  {/* Card Number */}
-                  <div className="space-y-2">
-                    <Label htmlFor="cardNumber">Número do Cartão</Label>
-                    <Input
-                      id="cardNumber"
-                      type="text"
-                      placeholder="0000 0000 0000 0000"
-                      {...register('cardNumber')}
-                      disabled={isLoading}
-                      maxLength={19}
-                      onChange={(e) => {
-                        const value = e.target.value.replaceAll(/\D/g, '');
-                        const formatted = value.replaceAll(/(\d{4})(?=\d)/g, '$1 ');
-                        e.target.value = formatted;
-                      }}
-                    />
-                  </div>
-
-                  {/* Expiry and CVV */}
-                  <div className="grid grid-cols-3 gap-3">
-                    <div className="space-y-2">
-                      <Label htmlFor="cardExpiryMonth">Mês</Label>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {/* Card Holder Name */}
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="cardHolderName">Nome no Cartão</Label>
                       <Input
-                        id="cardExpiryMonth"
+                        id="cardHolderName"
                         type="text"
-                        placeholder="MM"
-                        {...register('cardExpiryMonth')}
+                        placeholder="Nome como está no cartão"
+                        {...register('cardHolderName')}
                         disabled={isLoading}
-                        maxLength={2}
                       />
                     </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cardExpiryYear">Ano</Label>
-                      <Input
-                        id="cardExpiryYear"
-                        type="text"
-                        placeholder="AAAA"
-                        {...register('cardExpiryYear')}
-                        disabled={isLoading}
-                        maxLength={4}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="cardCvv">CVV</Label>
-                      <Input
-                        id="cardCvv"
-                        type="text"
-                        placeholder="000"
-                        {...register('cardCvv')}
-                        disabled={isLoading}
-                        maxLength={4}
-                      />
-                    </div>
-                  </div>
 
-                  {/* Required fields for Asaas */}
-                  <div className="space-y-4 border-t pt-4">
-                    <h4 className="font-medium text-gray-900">Informações Adicionais (Obrigatórias)</h4>
-                    
-                    <div className="space-y-2">
-                      <Label htmlFor="postalCode">CEP *</Label>
+                    {/* Card Number */}
+                    <div className="space-y-2 md:col-span-2">
+                      <Label htmlFor="cardNumber">Número do Cartão</Label>
                       <Input
-                        id="postalCode"
+                        id="cardNumber"
                         type="text"
-                        placeholder="00000-000"
-                        {...register('postalCode')}
+                        placeholder="0000 0000 0000 0000"
+                        {...register('cardNumber')}
                         disabled={isLoading}
-                        maxLength={9}
+                        maxLength={19}
                         onChange={(e) => {
                           const value = e.target.value.replaceAll(/\D/g, '');
-                          const formatted = value.replace(/(\d{5})(\d{3})/, '$1-$2');
+                          const formatted = value.replaceAll(/(\d{4})(?=\d)/g, '$1 ');
                           e.target.value = formatted;
                         }}
                       />
                     </div>
 
-                    <div className="grid grid-cols-2 gap-3">
+                    {/* Expiry and CVV in one row */}
+                    <div className="space-y-2 md:col-span-2">
+                      <Label>Mês / Ano / CVV </Label>
+                      <div className="grid grid-cols-3 gap-3">
+                        <div>
+                          <Input
+                            id="cardExpiryMonth"
+                            type="text"
+                            placeholder="MM"
+                            {...register('cardExpiryMonth')}
+                            disabled={isLoading}
+                            maxLength={2}
+                            className="text-center"
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            id="cardExpiryYear"
+                            type="text"
+                            placeholder="AAAA"
+                            {...register('cardExpiryYear')}
+                            disabled={isLoading}
+                            maxLength={4}
+                            className="text-center"
+                          />
+                        </div>
+                        <div>
+                          <Input
+                            id="cardCvv"
+                            type="text"
+                            placeholder="CVV"
+                            {...register('cardCvv')}
+                            disabled={isLoading}
+                            maxLength={3}
+                            className="text-center"
+                          />
+                        </div>
+                      </div>
+                  
+                    </div>
+                  </div>
+
+                  {/* Required fields for Asaas credit card */}
+                  <div className="space-y-4 border-t pt-4">
+                    <h4 className="font-medium text-gray-900">Dados de Faturamento</h4>
+                                     
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {/* CEP */}
+                      <div className="space-y-2">
+                        <Label htmlFor="postalCode">CEP *</Label>
+                        <div className="relative">
+                          <Input
+                            id="postalCode"
+                            type="text"
+                            placeholder="00000-000"
+                            {...register('postalCode')}
+                            disabled={isLoading || isLoadingCep}
+                            maxLength={9}
+                            onChange={(e) => {
+                              const value = e.target.value.replaceAll(/\D/g, '');
+                              const formatted = value.replace(/(\d{5})(\d{3})/, '$1-$2');
+                              e.target.value = formatted;
+                              handleCepChange(formatted);
+                            }}
+                          />
+                          {isLoadingCep && (
+                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Phone */}
                       <div className="space-y-2">
                         <Label htmlFor="phone">Telefone com DDD *</Label>
                         <Input
@@ -508,15 +560,30 @@ function CheckoutPageContent() {
                         />
                       </div>
 
-                      <div className="space-y-2">
-                        <Label htmlFor="addressNumber">Número do Endereço *</Label>
-                        <Input
-                          id="addressNumber"
-                          type="text"
-                          placeholder="123"
-                          {...register('addressNumber')}
-                          disabled={isLoading}
-                        />
+                      {/* Address - Takes more space */}
+                      <div className="space-y-2 md:col-span-2">
+                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                          <div className="md:col-span-3 space-y-2">
+                            <Label htmlFor="address">Endereço *</Label>
+                            <Input
+                              id="address"
+                              type="text"
+                              placeholder="Rua das Flores"
+                              {...register('address')}
+                              disabled={isLoading}
+                            />
+                          </div>
+                          <div className="space-y-2">
+                            <Label htmlFor="addressNumber">Número *</Label>
+                            <Input
+                              id="addressNumber"
+                              type="text"
+                              placeholder="123"
+                              {...register('addressNumber')}
+                              disabled={isLoading}
+                            />
+                          </div>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -552,69 +619,6 @@ function CheckoutPageContent() {
                 </div>
               )}
 
-              {/* Order Summary */}
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-3">Resumo do Pedido</h3>
-                <div className="space-y-2">
-                  <div className="flex justify-between items-center text-sm">
-                    <span className="text-gray-600">{pricingPlan.name}</span>
-                    <span className="font-medium">
-                      {selectedPaymentMethod === 'PIX' ? (
-                        <>
-                          <span className="line-through text-gray-400 mr-2">R$ {regularPrice.toFixed(2)}</span>
-                          <span>R$ {pixPrice.toFixed(2)}</span>
-                        </>
-                      ) : (
-                        <span>R$ {regularPrice.toFixed(2)}</span>
-                      )}
-                    </span>
-                  </div>
-                  
-                  {selectedPaymentMethod === 'CREDIT_CARD' && selectedInstallments > 1 && (
-                    <div className="flex justify-between items-center text-sm text-blue-600">
-                      <span>💳 Parcelamento</span>
-                      <span>{selectedInstallments}x de R$ {(regularPrice / selectedInstallments).toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  {selectedPaymentMethod === 'PIX' && pixSavings > 0 && (
-                    <div className="flex justify-between items-center text-sm text-blue-600">
-                      <span>💰 Desconto PIX</span>
-                      <span>- R$ {pixSavings.toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  {appliedCoupon && (
-                    <div className="flex justify-between items-center text-sm text-green-600">
-                      <span>🎟️ Cupom ({couponCode})</span>
-                      <span>- R$ {appliedCoupon.discountAmount.toFixed(2)}</span>
-                    </div>
-                  )}
-                  
-                  <div className="border-t pt-2 flex justify-between items-center font-bold text-lg">
-                    <span>Total:</span>
-                    <span className="text-green-600">
-                      R$ {appliedCoupon ? appliedCoupon.finalPrice.toFixed(2) : basePrice.toFixed(2)}
-                    </span>
-                  </div>
-                  
-                  {(appliedCoupon || (selectedPaymentMethod === 'PIX' && pixSavings > 0)) && (
-                    <p className="text-xs text-green-600 font-medium">
-                      ✓ Você está economizando R$ {(() => {
-                        let totalSavings = 0;
-                        if (selectedPaymentMethod === 'PIX') {
-                          totalSavings += pixSavings;
-                        }
-                        if (appliedCoupon) {
-                          totalSavings += appliedCoupon.discountAmount;
-                        }
-                        return totalSavings.toFixed(2);
-                      })()}!
-                    </p>
-                  )}
-                </div>
-              </div>
-
               {/* Error Message */}
               {error && (
                 <Alert variant="destructive">
@@ -637,9 +641,95 @@ function CheckoutPageContent() {
                       : 'Pagar com Cartão'
                 )}
               </Button>
-            </form>
-          </CardContent>
-        </Card>
+                </form>
+              </CardContent>
+            </Card>
+          </div>
+
+          {/* Order Summary Sidebar - Takes 1 column on desktop */}
+          <div className="lg:col-span-1">
+            <div className="lg:sticky lg:top-8">
+              <Card>
+                <CardHeader>
+                  <CardTitle>Resumo do Pedido</CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-4">
+                    <div className="flex justify-between items-center text-sm">
+                      <span className="text-gray-600">{pricingPlan.name}</span>
+                      <span className="font-medium">
+                        {selectedPaymentMethod === 'PIX' ? (
+                          <>
+                            <span className="line-through text-gray-400 mr-2">R$ {regularPrice.toFixed(2)}</span>
+                            <span>R$ {pixPrice.toFixed(2)}</span>
+                          </>
+                        ) : (
+                          <span>R$ {regularPrice.toFixed(2)}</span>
+                        )}
+                      </span>
+                    </div>
+                    
+                    {selectedPaymentMethod === 'CREDIT_CARD' && selectedInstallments > 1 && (
+                      <div className="flex justify-between items-center text-sm text-blue-600">
+                        <span>💳 Parcelamento</span>
+                        <span>{selectedInstallments}x de R$ {(regularPrice / selectedInstallments).toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {selectedPaymentMethod === 'PIX' && pixSavings > 0 && (
+                      <div className="flex justify-between items-center text-sm text-blue-600">
+                        <span>💰 Desconto PIX</span>
+                        <span>- R$ {pixSavings.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    {appliedCoupon && (
+                      <div className="flex justify-between items-center text-sm text-green-600">
+                        <span>🎟️ Cupom ({couponCode})</span>
+                        <span>- R$ {appliedCoupon.discountAmount.toFixed(2)}</span>
+                      </div>
+                    )}
+                    
+                    <div className="border-t pt-4 flex justify-between items-center font-bold text-lg">
+                      <span>Total:</span>
+                      <span className="text-green-600">
+                        R$ {appliedCoupon ? appliedCoupon.finalPrice.toFixed(2) : basePrice.toFixed(2)}
+                      </span>
+                    </div>
+                    
+                    {(appliedCoupon || (selectedPaymentMethod === 'PIX' && pixSavings > 0)) && (
+                      <div className="bg-green-50 p-3 rounded-lg">
+                        <p className="text-sm text-green-700 font-medium">
+                          ✓ Você está economizando R$ {(() => {
+                            let totalSavings = 0;
+                            if (selectedPaymentMethod === 'PIX') {
+                              totalSavings += pixSavings;
+                            }
+                            if (appliedCoupon) {
+                              totalSavings += appliedCoupon.discountAmount;
+                            }
+                            return totalSavings.toFixed(2);
+                          })()}!
+                        </p>
+                      </div>
+                    )}
+
+                    <div className="border-t pt-4 space-y-2 text-xs text-gray-600">
+                      <div className="flex items-center gap-2">
+                        <span>🔒</span>
+                        <span>Pagamento seguro</span>
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <span>✓</span>
+                        <span>Acesso imediato após aprovação</span>
+                      </div>
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
   );
