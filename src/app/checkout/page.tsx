@@ -43,6 +43,8 @@ const checkoutSchema = z.object({
   postalCode: z.string().optional(),
   phone: z.string().optional(),
   addressNumber: z.string().optional(),
+  // Installments
+  installments: z.number().min(1).max(12).optional(),
 });
 
 type CheckoutForm = z.infer<typeof checkoutSchema>;
@@ -58,6 +60,7 @@ function CheckoutPageContent() {
   const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
+  const [selectedInstallments, setSelectedInstallments] = useState<number>(1);
 
   // Convex actions and mutations
   const createPendingOrder = useMutation(api.payments.createPendingOrder);
@@ -206,6 +209,7 @@ function CheckoutPageContent() {
             phone: data.phone,
             mobilePhone: data.phone,
           },
+          installments: selectedInstallments > 1 ? selectedInstallments : undefined,
         });
       }
 
@@ -516,6 +520,35 @@ function CheckoutPageContent() {
                       </div>
                     </div>
                   </div>
+
+                  {/* Installments Selection */}
+                  <div className="space-y-2 border-t pt-4">
+                    <Label htmlFor="installments">Parcelamento</Label>
+                    <select
+                      id="installments"
+                      value={selectedInstallments}
+                      onChange={(e) => setSelectedInstallments(Number(e.target.value))}
+                      disabled={isLoading}
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                    >
+                      {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => {
+                        const installmentValue = regularPrice / num;
+                        return (
+                          <option key={num} value={num}>
+                            {num === 1 
+                              ? `À vista - R$ ${regularPrice.toFixed(2)}`
+                              : `${num}x de R$ ${installmentValue.toFixed(2)} - Total: R$ ${regularPrice.toFixed(2)}`
+                            }
+                          </option>
+                        );
+                      })}
+                    </select>
+                    {selectedInstallments > 1 && (
+                      <p className="text-xs text-gray-600">
+                        💳 Parcelamento sem juros no cartão de crédito
+                      </p>
+                    )}
+                  </div>
                 </div>
               )}
 
@@ -536,6 +569,13 @@ function CheckoutPageContent() {
                       )}
                     </span>
                   </div>
+                  
+                  {selectedPaymentMethod === 'CREDIT_CARD' && selectedInstallments > 1 && (
+                    <div className="flex justify-between items-center text-sm text-blue-600">
+                      <span>💳 Parcelamento</span>
+                      <span>{selectedInstallments}x de R$ {(regularPrice / selectedInstallments).toFixed(2)}</span>
+                    </div>
+                  )}
                   
                   {selectedPaymentMethod === 'PIX' && pixSavings > 0 && (
                     <div className="flex justify-between items-center text-sm text-blue-600">
@@ -590,7 +630,11 @@ function CheckoutPageContent() {
                     {selectedPaymentMethod === 'PIX' ? 'Gerando PIX...' : 'Processando Cartão...'}
                   </>
                 ) : (
-                  selectedPaymentMethod === 'PIX' ? 'Gerar Pagamento PIX' : 'Pagar com Cartão'
+                  selectedPaymentMethod === 'PIX' 
+                    ? 'Gerar Pagamento PIX' 
+                    : selectedInstallments > 1 
+                      ? `Pagar ${selectedInstallments}x no Cartão`
+                      : 'Pagar com Cartão'
                 )}
               </Button>
             </form>

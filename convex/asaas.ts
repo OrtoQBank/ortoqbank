@@ -108,6 +108,7 @@ class AsaasClient {
       mobilePhone?: string;
     };
     remoteIp?: string;
+    installments?: number;
   }): Promise<AsaasPayment> {
     return this.makeRequest<AsaasPayment>('/payments', {
       method: 'POST',
@@ -260,6 +261,7 @@ export const createCreditCardPayment = action({
       mobilePhone: v.optional(v.string()),
     }),
     remoteIp: v.optional(v.string()),
+    installments: v.optional(v.number()),
   },
   returns: v.object({
     paymentId: v.string(),
@@ -302,6 +304,11 @@ export const createCreditCardPayment = action({
       description += ` (Cupom: ${pendingOrder.couponCode})`;
     }
     
+    // Add installment info to description if applicable
+    if (args.installments && args.installments > 1) {
+      description += ` (${args.installments}x)`;
+    }
+    
     // Create Credit Card payment with immediate processing
     const payment = await asaas.createCharge({
       customer: args.customerId,
@@ -313,6 +320,7 @@ export const createCreditCardPayment = action({
       creditCard: args.creditCard,
       creditCardHolderInfo: args.creditCardHolderInfo,
       ...(args.remoteIp && { remoteIp: args.remoteIp }),
+      ...(args.installments && { installments: args.installments }),
     });
 
     return {
