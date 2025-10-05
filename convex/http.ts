@@ -83,7 +83,7 @@ http.route({
       // Get webhook body
       const rawBody = await request.text();
       
-      // For development/testing, we'll be more lenient with webhook authentication
+      // Validate webhook authentication (required for both sandbox and production)
       const asaasSignature = request.headers.get('asaas-access-token') || 
                            request.headers.get('authorization') ||
                            request.headers.get('x-asaas-signature');
@@ -98,20 +98,25 @@ http.route({
         'content-type': request.headers.get('content-type'),
       });
 
-      // Skip authentication for sandbox testing if no token configured
-      if (webhookSecret && webhookSecret !== 'your-secret-key-here') {
-        if (!asaasSignature) {
-          console.error('Missing AsaaS authentication header');
-          return new Response('Missing authentication', { status: 400 });
-        }
-
-        if (asaasSignature !== webhookSecret) {
-          console.error('Invalid AsaaS webhook signature');
-          return new Response('Invalid signature', { status: 401 });
-        }
-      } else {
-        console.log('⚠️ Webhook authentication disabled for testing');
+      // ALWAYS require webhook secret to be configured
+      if (!webhookSecret) {
+        console.error('ASAAS_WEBHOOK_SECRET environment variable not configured');
+        return new Response('Server configuration error', { status: 500 });
       }
+
+      // ALWAYS require authentication header
+      if (!asaasSignature) {
+        console.error('Missing AsaaS authentication header');
+        return new Response('Unauthorized - Missing authentication', { status: 401 });
+      }
+
+      // ALWAYS validate signature
+      if (asaasSignature !== webhookSecret) {
+        console.error('Invalid AsaaS webhook signature');
+        return new Response('Unauthorized - Invalid signature', { status: 401 });
+      }
+      
+      console.log('✅ Webhook authentication successful');
 
       const body = JSON.parse(rawBody);
       const { event, payment, checkout } = body;

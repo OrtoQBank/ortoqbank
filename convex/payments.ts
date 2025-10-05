@@ -114,37 +114,6 @@ export const createPendingOrder = mutation({
     console.log(`📝 Created pending order ${pendingOrderId} with claim token ${claimToken}`);
     console.log(`💰 Price breakdown: Method=${args.paymentMethod}, Base R$ ${basePrice}, Coupon R$ ${couponDiscount}, Final R$ ${finalPrice}`);
 
-    // Track coupon usage (will be confirmed when payment is received)
-    if (appliedCouponCode) {
-      const coupon = await ctx.db
-        .query('coupons')
-        .withIndex('by_code', q => q.eq('code', appliedCouponCode))
-        .unique();
-      
-      if (coupon) {
-        // Create usage record (pending until payment confirmed)
-        await ctx.db.insert('couponUsage', {
-          couponId: coupon._id,
-          couponCode: appliedCouponCode,
-          orderId: pendingOrderId,
-          userEmail: args.email,
-          userCpf: args.cpf.replace(/\D/g, ''),
-          discountAmount: couponDiscount,
-          originalPrice: basePrice,
-          finalPrice,
-          usedAt: now,
-        });
-
-        // Increment usage counter
-        const currentUses = coupon.currentUses || 0;
-        await ctx.db.patch(coupon._id, {
-          currentUses: currentUses + 1,
-        });
-        
-        console.log(`📊 Tracked coupon usage: ${appliedCouponCode} (${currentUses + 1}/${coupon.maxUses || '∞'})`);
-      }
-    }
-
     return {
       pendingOrderId,
       claimToken,
@@ -313,6 +282,37 @@ export const confirmPayment = internalMutation({
     });
 
     console.log(`✅ Payment confirmed for order ${args.pendingOrderId}`);
+
+    // Track coupon usage NOW (after payment confirmed)
+    if (order.couponCode) {
+      const coupon = await ctx.db
+        .query('coupons')
+        .withIndex('by_code', q => q.eq('code', order.couponCode))
+        .unique();
+      
+      if (coupon) {
+        // Create usage record (payment is confirmed)
+        await ctx.db.insert('couponUsage', {
+          couponId: coupon._id,
+          couponCode: order.couponCode,
+          orderId: order._id,
+          userEmail: order.email,
+          userCpf: order.cpf,
+          discountAmount: order.couponDiscount || 0,
+          originalPrice: order.originalPrice,
+          finalPrice: order.finalPrice,
+          usedAt: Date.now(),
+        });
+
+        // Increment usage counter
+        const currentUses = coupon.currentUses || 0;
+        await ctx.db.patch(coupon._id, {
+          currentUses: currentUses + 1,
+        });
+        
+        console.log(`📊 Confirmed coupon usage: ${order.couponCode} (${currentUses + 1}/${coupon.maxUses || '∞'})`);
+      }
+    }
 
     // Trigger idempotent provisioning (will only provision if user is also claimed)
     await ctx.runMutation(internal.payments.maybeProvisionAccess, {
