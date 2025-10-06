@@ -227,7 +227,7 @@ function PixPaymentContent() {
                   <ol className="text-sm space-y-1 ml-4 list-decimal">
                     <li>Abra o aplicativo do seu banco</li>
                     <li>Acesse a área PIX</li>
-                    <li>Escolha "Pagar com QR Code" ou "PIX Copia e Cola"</li>
+                    <li>Escolha Pagar com QR Code ou PIX Copia e Cola</li>
                     <li>Escaneie o código acima ou cole o código copiado</li>
                     <li>Confirme o pagamento</li>
                   </ol>

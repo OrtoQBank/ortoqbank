@@ -285,9 +285,10 @@ export const confirmPayment = internalMutation({
 
     // Track coupon usage NOW (after payment confirmed)
     if (order.couponCode) {
+      const couponCode = order.couponCode;
       const coupon = await ctx.db
         .query('coupons')
-        .withIndex('by_code', q => q.eq('code', order.couponCode))
+        .withIndex('by_code', q => q.eq('code', couponCode))
         .unique();
       
       if (coupon) {

@@ -88,7 +88,7 @@ function CheckoutPageContent() {
 
   // ViaCEP integration
   const handleCepChange = async (cep: string) => {
-    const cleanCep = cep.replace(/\D/g, '');
+    const cleanCep = cep.replaceAll(/\D/g, '');
     
     if (cleanCep.length === 8) {
       setIsLoadingCep(true);
@@ -148,8 +148,8 @@ function CheckoutPageContent() {
         setCouponError(validateResult.errorMessage || 'Cupom inválido');
         setAppliedCoupon(null);
       }
-    } catch (err) {
-      console.error('Coupon validation error:', err);
+    } catch (error_) {
+      console.error('Coupon validation error:', error_);
       setCouponError('Erro ao validar cupom');
       setAppliedCoupon(null);
     } finally {
@@ -391,7 +391,25 @@ function CheckoutPageContent() {
               {/* Coupon Code */}
               <div className="space-y-2">
                 <Label htmlFor="couponCode">Cupom de Desconto (Opcional)</Label>
-                {!appliedCoupon ? (
+                {appliedCoupon ? (
+                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                    <Tag className="h-4 w-4 text-green-600" />
+                    <div className="flex-1">
+                      <div className="font-medium text-green-900">{couponCode}</div>
+                      <div className="text-sm text-green-700">{appliedCoupon.couponDescription}</div>
+                    </div>
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      onClick={handleRemoveCoupon}
+                      disabled={isLoading}
+                      className="text-green-700 hover:text-green-900"
+                    >
+                      Remover
+                    </Button>
+                  </div>
+                ) : (
                   <div className="flex gap-2">
                     <div className="relative flex-1">
                       <Tag className="absolute left-3 top-3 h-4 w-4 text-gray-400" />
@@ -422,24 +440,6 @@ function CheckoutPageContent() {
                       ) : (
                         'Aplicar'
                       )}
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
-                    <Tag className="h-4 w-4 text-green-600" />
-                    <div className="flex-1">
-                      <div className="font-medium text-green-900">{couponCode}</div>
-                      <div className="text-sm text-green-700">{appliedCoupon.couponDescription}</div>
-                    </div>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="sm"
-                      onClick={handleRemoveCoupon}
-                      disabled={isLoading}
-                      className="text-green-700 hover:text-green-900"
-                    >
-                      Remover
                     </Button>
                   </div>
                 )}
