@@ -129,8 +129,10 @@ function CheckoutPageContent() {
     setCouponError(null);
     
     try {
-      // Use regular price as base (before PIX discount)
-      const originalPrice = pricingPlan.regularPriceNum || 0;
+      // Use the appropriate base price based on payment method (matches backend logic)
+      const regularPrice = pricingPlan.regularPriceNum || 0;
+      const pixPrice = pricingPlan.pixPriceNum || regularPrice;
+      const originalPrice = selectedPaymentMethod === 'PIX' ? pixPrice : regularPrice;
       
       // Import convex client to make the query
       const { ConvexHttpClient } = await import('convex/browser');
@@ -691,14 +693,27 @@ function CheckoutPageContent() {
                       </div>
                     )}
                     
-                    {selectedPaymentMethod === 'PIX' && pixSavings > 0 && (
+                    {selectedPaymentMethod === 'PIX' && pixSavings > 0 && !appliedCoupon && (
                       <div className="flex justify-between items-center text-sm text-blue-600">
                         <span>💰 Desconto PIX</span>
                         <span>- R$ {pixSavings.toFixed(2)}</span>
                       </div>
                     )}
                     
-                    {appliedCoupon && (
+                    {selectedPaymentMethod === 'PIX' && appliedCoupon && (
+                      <>
+                        <div className="flex justify-between items-center text-sm text-blue-600">
+                          <span>💰 Desconto PIX</span>
+                          <span>- R$ {pixSavings.toFixed(2)}</span>
+                        </div>
+                        <div className="flex justify-between items-center text-sm text-green-600">
+                          <span>🎟️ Cupom ({couponCode})</span>
+                          <span>- R$ {appliedCoupon.discountAmount.toFixed(2)}</span>
+                        </div>
+                      </>
+                    )}
+                    
+                    {selectedPaymentMethod === 'CREDIT_CARD' && appliedCoupon && (
                       <div className="flex justify-between items-center text-sm text-green-600">
                         <span>🎟️ Cupom ({couponCode})</span>
                         <span>- R$ {appliedCoupon.discountAmount.toFixed(2)}</span>

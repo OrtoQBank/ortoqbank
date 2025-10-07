@@ -240,29 +240,31 @@ export const validateAndApplyCoupon = query({
 
     // Calculate discount
     let finalPrice: number;
-    let discountAmount: number;
 
     if (coupon.type === 'fixed_price') {
       finalPrice = coupon.value;
-      discountAmount = args.originalPrice - coupon.value;
     } else if (coupon.type === 'percentage') {
-      discountAmount = (args.originalPrice * coupon.value) / 100;
+      const discountAmount = (args.originalPrice * coupon.value) / 100;
       finalPrice = args.originalPrice - discountAmount;
     } else {
       // fixed discount
-      discountAmount = coupon.value;
-      finalPrice = args.originalPrice - discountAmount;
+      finalPrice = args.originalPrice - coupon.value;
     }
 
-    // Ensure final price is not negative
-    finalPrice = Math.max(finalPrice, 0);
-    discountAmount = Math.min(discountAmount, args.originalPrice);
-
-    // Apply minimum price protection
+    // Apply minimum price protection if it benefits the customer
     if (coupon.minimumPrice !== undefined && finalPrice < coupon.minimumPrice) {
       finalPrice = coupon.minimumPrice;
-      discountAmount = args.originalPrice - finalPrice;
     }
+
+    // Clamp finalPrice to valid range [0, originalPrice]
+    // This prevents negative prices and prices exceeding the original
+    finalPrice = Math.max(0, Math.min(finalPrice, args.originalPrice));
+
+    // Derive discount amount from clamped final price
+    let discountAmount = args.originalPrice - finalPrice;
+
+    // Ensure discount is within valid bounds
+    discountAmount = Math.max(0, Math.min(discountAmount, args.originalPrice));
 
     return {
       isValid: true,

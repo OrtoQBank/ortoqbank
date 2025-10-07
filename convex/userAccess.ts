@@ -106,13 +106,12 @@ export const checkUserAccessToYear = query({
     // Check for premium pack access (lifetime access to all years)
     const premiumAccess = await ctx.db
       .query("userProducts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .filter((q) => q.eq(q.field("productId"), "premium_pack"))
-      .filter((q) => q.eq(q.field("status"), "active"))
-      .filter((q) => q.eq(q.field("hasAccess"), true))
+      .withIndex("by_user_product", (q) =>
+        q.eq("userId", args.userId).eq("productId", "premium_pack"),
+      )
       .unique();
 
-    if (premiumAccess) {
+    if (premiumAccess && premiumAccess.status === "active" && premiumAccess.hasAccess) {
       return {
         hasAccess: true,
         accessType: "premium_pack",
@@ -132,11 +131,9 @@ export const checkUserAccessToYear = query({
         .withIndex("by_user_product", (q) => 
           q.eq("userId", args.userId).eq("productId", yearPricingPlan.productId!)
         )
-        .filter((q) => q.eq(q.field("status"), "active"))
-        .filter((q) => q.eq(q.field("hasAccess"), true))
         .unique();
 
-      if (userProduct) {
+      if (userProduct && userProduct.status === "active" && userProduct.hasAccess) {
         const now = Date.now();
         const isExpired = userProduct.accessExpiresAt 
           ? userProduct.accessExpiresAt < now 
@@ -304,10 +301,9 @@ export const userHasAccess = query({
       .withIndex("by_user_product", (q) => 
         q.eq("userId", args.userId).eq("productId", args.productId)
       )
-      .filter((q) => q.eq(q.field("status"), "active"))
       .unique();
 
-    if (!userProduct) {
+    if (!userProduct || userProduct.status !== "active") {
       return { hasAccess: false };
     }
 

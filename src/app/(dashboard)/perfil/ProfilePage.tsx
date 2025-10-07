@@ -75,6 +75,9 @@ export default function ProfilePage() {
   // Extract the values safely
   const values = getStatsValues(stats);
 
+  // Normalize theme stats to handle both payload shapes
+  const themeStats = userStats?.byTheme ?? [];
+
   // Use extracted values or defaults
   const totalAnswered = values?.totalAnswered || 0;
   const totalCorrect = values?.totalCorrect || 0;
@@ -277,7 +280,7 @@ export default function ProfilePage() {
         !showThemeStats &&
         values &&
         userStats &&
-        userStats.byTheme.length > 0 && (
+        themeStats.length > 0 && (
           <div className="mt-6 flex justify-center">
             <Button onClick={() => setShowThemeStats(true)} variant="outline">
               Ver estatísticas por tema
@@ -291,7 +294,7 @@ export default function ProfilePage() {
             process.env.NODE_ENV === 'development' ? 'md:grid-cols-2' : ''
           }`}
         >
-          {!userStats || userStats.byTheme.length === 0 ? (
+          {themeStats.length === 0 ? (
             <>
               <div className="bg-card text-card-foreground flex h-[300px] items-center justify-center rounded-lg border p-3 shadow-sm">
                 <p className="text-muted-foreground text-sm">
@@ -308,7 +311,7 @@ export default function ProfilePage() {
             </>
           ) : (
             <>
-              <ThemeBarChart themeStats={userStats.byTheme} />
+              <ThemeBarChart themeStats={themeStats} />
               {process.env.NODE_ENV === 'development' && <ThemeRadarChart />}
             </>
           )}

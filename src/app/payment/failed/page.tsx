@@ -16,8 +16,16 @@ function PaymentFailedContent() {
   const orderId = searchParams.get('order');
 
   const handleContactSupport = () => {
-    // Redirect to support with context
-    globalThis.location.href = `/suporte?issue=payment-failed&order=${orderId}`;
+    // Redirect to support with context using URLSearchParams for proper encoding
+    const params = new URLSearchParams();
+    params.append('issue', 'payment-failed');
+    
+    // Only append order if orderId is non-null/defined
+    if (orderId) {
+      params.append('order', orderId);
+    }
+    
+    globalThis.location.href = `/suporte?${params.toString()}`;
   };
 
   return (

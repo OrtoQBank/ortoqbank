@@ -1,5 +1,6 @@
 'use client';
 
+import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
@@ -15,7 +16,9 @@ export default function Layout({
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
   const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const { isLoading, isAuthenticated, user } = useCurrentUser();
   
   // Check if user should see onboarding (simplified without URL params)
@@ -27,6 +30,14 @@ export default function Layout({
       setTimeout(() => setShowOnboarding(true), 500);
     }
   }, [user?.onboardingCompleted, isAuthenticated]);
+
+  // Redirect to sign-in if not authenticated using Next.js navigation
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      setIsRedirecting(true);
+      router.replace('/sign-in');
+    }
+  }, [isLoading, isAuthenticated, router]);
 
   // Show loading while user is being stored
   if (isLoading) {
@@ -40,9 +51,8 @@ export default function Layout({
     );
   }
 
-  // Redirect to sign-in if not authenticated
-  if (!isAuthenticated) {
-    globalThis.location.href = '/sign-in';
+  // Show loading placeholder while redirecting to sign-in
+  if (!isAuthenticated || isRedirecting) {
     return null;
   }
 

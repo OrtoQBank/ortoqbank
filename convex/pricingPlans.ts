@@ -130,7 +130,7 @@ export const grantProductAccess = internalMutation({
       await ctx.db.patch(existingAccess._id, {
         hasAccess: true,
         accessGrantedAt: now,
-        accessExpiresAt: accessExpiresAt || existingAccess.accessExpiresAt,
+        accessExpiresAt: accessExpiresAt,
         status: "active",
         paymentId: args.paymentId,
         purchasePrice: args.purchasePrice,

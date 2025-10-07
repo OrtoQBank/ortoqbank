@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
-type PaymentStatus = 'pending' | 'confirmed' | 'failed' | 'expired';
+type PaymentStatus = 'pending' | 'confirmed' | 'failed' | 'expired' | 'error';
 
 function CheckoutStatusContent() {
   const router = useRouter();
@@ -31,16 +31,21 @@ function CheckoutStatusContent() {
       if (response.ok) {
         const data = await response.json();
         setStatus(data.status);
+        setLastChecked(new Date());
       } else {
-        // Simulate random status for demo
-        const statuses: PaymentStatus[] = ['pending', 'confirmed', 'failed'];
-        const randomStatus = statuses[Math.floor(Math.random() * statuses.length)];
-        setStatus(randomStatus);
+        // Handle non-OK responses deterministically
+        console.error('Payment status check failed:', {
+          status: response.status,
+          statusText: response.statusText,
+          paymentId,
+        });
+        setStatus('error');
+        setLastChecked(new Date());
       }
-      
-      setLastChecked(new Date());
     } catch (error) {
       console.error('Error checking payment status:', error);
+      setStatus('error');
+      setLastChecked(new Date());
     } finally {
       setIsLoading(false);
     }
@@ -73,6 +78,9 @@ function CheckoutStatusContent() {
       case 'expired': {
         return <XCircle className="w-12 h-12 text-gray-600" />;
       }
+      case 'error': {
+        return <XCircle className="w-12 h-12 text-red-600" />;
+      }
       default: {
         return <Clock className="w-12 h-12 text-gray-600" />;
       }
@@ -92,6 +100,9 @@ function CheckoutStatusContent() {
       }
       case 'expired': {
         return 'Pagamento Expirado';
+      }
+      case 'error': {
+        return 'Erro ao Verificar Pagamento';
       }
       default: {
         return 'Verificando Status...';
@@ -113,6 +124,9 @@ function CheckoutStatusContent() {
       case 'expired': {
         return 'O prazo para pagamento expirou';
       }
+      case 'error': {
+        return 'Não foi possível verificar o status do pagamento no momento';
+      }
       default: {
         return 'Verificando o status do seu pagamento...';
       }
@@ -132,6 +146,9 @@ function CheckoutStatusContent() {
       }
       case 'expired': {
         return 'text-gray-600';
+      }
+      case 'error': {
+        return 'text-red-600';
       }
       default: {
         return 'text-gray-600';
@@ -218,6 +235,16 @@ function CheckoutStatusContent() {
               </Alert>
             )}
 
+            {status === 'error' && (
+              <Alert variant="destructive">
+                <XCircle className="h-4 w-4" />
+                <AlertDescription>
+                  <strong>Erro:</strong> Não foi possível verificar o status do pagamento. 
+                  Tente verificar novamente ou entre em contato com o suporte.
+                </AlertDescription>
+              </Alert>
+            )}
+
             {/* Payment Info */}
             <div className="bg-gray-50 p-4 rounded-lg">
               <h3 className="font-semibold mb-2">Informações do Pagamento</h3>
@@ -262,6 +289,22 @@ function CheckoutStatusContent() {
                   className="flex items-center"
                 >
                   Tentar Novamente
+                </Button>
+              )}
+
+              {status === 'error' && (
+                <Button 
+                  onClick={checkPaymentStatus}
+                  disabled={isLoading}
+                  variant="outline"
+                  className="flex items-center"
+                >
+                  {isLoading ? (
+                    <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <RefreshCw className="w-4 h-4 mr-2" />
+                  )}
+                  Verificar Novamente
                 </Button>
               )}
 
