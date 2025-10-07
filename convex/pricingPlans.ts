@@ -5,7 +5,7 @@ import { requireAdmin } from './users';
 
 export const getPricingPlans = query({
   args: {},
-  
+  returns: v.array(v.any()),
   handler: async (ctx) => {
     return await ctx.db.query('pricingPlans').order('asc').collect();
   },
@@ -33,7 +33,7 @@ export const savePricingPlan = mutation({
       isActive: v.optional(v.boolean()),
       displayOrder: v.optional(v.number()),
     },
-     
+    returns: v.id('pricingPlans'),
     handler: async (ctx, args) => {
       // Verificação de admin usando a função existente do users.ts
       await requireAdmin(ctx);
@@ -54,7 +54,7 @@ export const savePricingPlan = mutation({
 
 export const removePricingPlan = mutation({
   args: { id: v.id('pricingPlans') },
-  
+  returns: v.null(),
   handler: async (ctx, args) => {
     // Verificação de admin usando a função existente do users.ts
     await requireAdmin(ctx);
@@ -69,6 +69,7 @@ export const removePricingPlan = mutation({
  */
 export const getActiveProducts = query({
   args: {},
+  returns: v.array(v.any()),
   handler: async (ctx) => {
     return await ctx.db
       .query("pricingPlans")
@@ -82,6 +83,7 @@ export const getActiveProducts = query({
  */
 export const getByProductId = query({
   args: { productId: v.string() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
       .query("pricingPlans")
@@ -105,6 +107,7 @@ export const grantProductAccess = internalMutation({
     discountAmount: v.optional(v.number()),
     checkoutId: v.optional(v.string()),
   },
+  returns: v.id("userProducts"),
   handler: async (ctx, args) => {
     // Get pricing plan details to calculate expiration
     const pricingPlan = await ctx.db.get(args.pricingPlanId);
@@ -171,6 +174,7 @@ export const revokeProductAccess = internalMutation({
     paymentId: v.string(),
     reason: v.optional(v.string()),
   },
+  returns: v.null(),
   handler: async (ctx, args) => {
     // Find all user products with this payment ID
     const userProducts = await ctx.db
