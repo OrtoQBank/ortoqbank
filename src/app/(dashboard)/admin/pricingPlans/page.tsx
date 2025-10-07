@@ -5,11 +5,17 @@ import { Check, Edit2, Plus, Save, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Checkbox } from '@/components/ui/checkbox';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Doc, Id } from '../../../../../convex/_generated/dataModel';
@@ -98,11 +104,11 @@ export default function PricingPlansAdminPage() {
       .map(f => f.trim())
       .filter(f => f.length > 0);
 
-    const year = formData.year ? parseInt(formData.year) : undefined;
-    const regularPriceNum = formData.regularPriceNum ? parseFloat(formData.regularPriceNum) : undefined;
-    const pixPriceNum = formData.pixPriceNum ? parseFloat(formData.pixPriceNum) : undefined;
-    const accessDurationDays = formData.accessDurationDays ? parseInt(formData.accessDurationDays) : undefined;
-    const displayOrder = formData.displayOrder ? parseInt(formData.displayOrder) : undefined;
+    const year = formData.year ? Number.parseInt(formData.year, 10) : undefined;
+    const regularPriceNum = formData.regularPriceNum ? Number.parseFloat(formData.regularPriceNum) : undefined;
+    const pixPriceNum = formData.pixPriceNum ? Number.parseFloat(formData.pixPriceNum) : undefined;
+    const accessDurationDays = formData.accessDurationDays ? Number.parseInt(formData.accessDurationDays, 10) : undefined;
+    const displayOrder = formData.displayOrder ? Number.parseInt(formData.displayOrder, 10) : undefined;
 
     // Handle category - only include if it's a valid value (empty string is falsy, so just check truthiness)
     const category = formData.category 
