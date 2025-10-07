@@ -24,11 +24,23 @@ export default function Layout({
   // Check if user should see onboarding (simplified without URL params)
   useEffect(() => {
     const hasCompletedOnboarding = user?.onboardingCompleted;
+    let timerId: NodeJS.Timeout | undefined;
     
-    if (isAuthenticated && !hasCompletedOnboarding) {
+    // Only show onboarding if explicitly marked as false (not undefined or loading)
+    if (isAuthenticated && user && hasCompletedOnboarding === false) {
       // Small delay to ensure sidebar is rendered
-      setTimeout(() => setShowOnboarding(true), 500);
+      timerId = setTimeout(() => setShowOnboarding(true), 500);
+    } else {
+      // Hide onboarding in all other cases
+      setShowOnboarding(false);
     }
+    
+    // Cleanup: cancel pending timer when effect re-runs or component unmounts
+    return () => {
+      if (timerId) {
+        clearTimeout(timerId);
+      }
+    };
   }, [user?.onboardingCompleted, isAuthenticated]);
 
   // Redirect to sign-in if not authenticated using Next.js navigation
