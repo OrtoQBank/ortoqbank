@@ -25,11 +25,15 @@ export default function Layout({
   useEffect(() => {
     const hasCompletedOnboarding = user?.onboardingCompleted;
     
-    if (isAuthenticated && !hasCompletedOnboarding) {
+    // Only show onboarding if explicitly marked as false (not undefined or loading)
+    if (isAuthenticated && user && hasCompletedOnboarding === false) {
       // Small delay to ensure sidebar is rendered
       setTimeout(() => setShowOnboarding(true), 500);
+    } else {
+      // Hide onboarding in all other cases
+      setShowOnboarding(false);
     }
-  }, [user?.onboardingCompleted, isAuthenticated]);
+  }, [user?.onboardingCompleted, isAuthenticated, user]);
 
   // Redirect to sign-in if not authenticated using Next.js navigation
   useEffect(() => {
