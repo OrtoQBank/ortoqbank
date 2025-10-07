@@ -11,6 +11,32 @@ import {
 
 export const current = query({
   args: {},
+  returns: v.union(
+    v.object({
+      _id: v.id('users'),
+      _creationTime: v.number(),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      imageUrl: v.optional(v.string()),
+      clerkUserId: v.string(),
+      paid: v.optional(v.boolean()),
+      paymentId: v.optional(v.union(v.string(), v.number())),
+      testeId: v.optional(v.string()),
+      paymentDate: v.optional(v.string()),
+      paymentStatus: v.optional(v.string()),
+      termsAccepted: v.optional(v.boolean()),
+      onboardingCompleted: v.optional(v.boolean()),
+      role: v.optional(v.string()),
+      status: v.optional(v.union(
+        v.literal("invited"),
+        v.literal("active"), 
+        v.literal("suspended"),
+        v.literal("expired")
+      )),
+    }),
+    v.null()
+  ),
   handler: async context => {
     return await getCurrentUser(context);
   },
@@ -18,6 +44,7 @@ export const current = query({
 
 export const getUserByClerkId = internalQuery({
   args: { clerkUserId: v.string() },
+  returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     return await userByClerkUserId(ctx, args.clerkUserId);
   },
@@ -27,6 +54,7 @@ export const upsertFromClerk = internalMutation({
   args: {
     data: v.any(),
   }, // no runtime validation, trust Clerk
+  returns: v.union(v.id('users'), v.null()),
   async handler(context, { data }) {
     // Extract any payment data from Clerk's public metadata
     const publicMetadata = data.public_metadata || {};
@@ -89,6 +117,7 @@ export const upsertFromClerk = internalMutation({
 
 export const deleteFromClerk = internalMutation({
   args: { clerkUserId: v.string() },
+  returns: v.null(),
   async handler(context, { clerkUserId }) {
     const user = await userByClerkUserId(context, clerkUserId);
 
@@ -99,6 +128,7 @@ export const deleteFromClerk = internalMutation({
     } else {
       await context.db.delete(user._id);
     }
+    return null;
   },
 });
 
@@ -203,7 +233,13 @@ export const checkUserPaid = query({
 
 // You can also add this function to get user payment details
 export const getUserPaymentDetails = query({
-  args: {}, 
+  args: {},
+  returns: v.object({
+    paid: v.optional(v.boolean()),
+    paymentId: v.optional(v.union(v.string(), v.number())),
+    paymentDate: v.optional(v.string()),
+    paymentStatus: v.optional(v.string()),
+  }),
   async handler(ctx) {
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
@@ -240,11 +276,11 @@ export const setTermsAccepted = mutation({
   returns: v.null(),
   async handler(ctx, args) {
     const identity = await ctx.auth.getUserIdentity();
-    if (!identity) return;
+    if (!identity) return null;
     const user = await userByClerkUserId(ctx, identity.subject);
-    if (!user) return;
+    if (!user) return null;
     await ctx.db.patch(user._id, { termsAccepted: args.accepted });
-    return;
+    return null;
   },
 });
 
@@ -278,7 +314,14 @@ export const getAllUsersForAdmin = query({
     paymentDate: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     termsAccepted: v.optional(v.boolean()),
+    onboardingCompleted: v.optional(v.boolean()),
     role: v.optional(v.string()),
+    status: v.optional(v.union(
+      v.literal("invited"),
+      v.literal("active"), 
+      v.literal("suspended"),
+      v.literal("expired")
+    )),
   })),
   handler: async (ctx, args) => {
     // Verify admin access
@@ -313,7 +356,14 @@ export const searchUsersForAdmin = query({
     paymentDate: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
     termsAccepted: v.optional(v.boolean()),
+    onboardingCompleted: v.optional(v.boolean()),
     role: v.optional(v.string()),
+    status: v.optional(v.union(
+      v.literal("invited"),
+      v.literal("active"), 
+      v.literal("suspended"),
+      v.literal("expired")
+    )),
   })),
   handler: async (ctx, args) => {
     // Verify admin access
