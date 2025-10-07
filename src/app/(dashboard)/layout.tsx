@@ -1,14 +1,61 @@
+'use client';
+
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
+
 import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
+import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay';
 import { SessionProvider } from '@/components/providers/SessionProvider';
 import { TermsProvider } from '@/components/providers/TermsProvider';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
+import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 export default function Layout({
   children,
 }: {
   children: React.ReactNode;
 }) {
+  const router = useRouter();
+  const [showOnboarding, setShowOnboarding] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
+  const { isLoading, isAuthenticated, user } = useCurrentUser();
+  
+  // Check if user should see onboarding (simplified without URL params)
+  useEffect(() => {
+    const hasCompletedOnboarding = user?.onboardingCompleted;
+    
+    if (isAuthenticated && !hasCompletedOnboarding) {
+      // Small delay to ensure sidebar is rendered
+      setTimeout(() => setShowOnboarding(true), 500);
+    }
+  }, [user?.onboardingCompleted, isAuthenticated]);
+
+  // Redirect to sign-in if not authenticated using Next.js navigation
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      setIsRedirecting(true);
+      router.replace('/sign-in');
+    }
+  }, [isLoading, isAuthenticated, router]);
+
+  // Show loading while user is being stored
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Carregando...</p>
+        </div>
+      </div>
+    );
+  }
+
+  // Show loading placeholder while redirecting to sign-in
+  if (!isAuthenticated || isRedirecting) {
+    return null;
+  }
+
   return (
     <SidebarProvider>
       <SessionProvider>
@@ -31,6 +78,11 @@ export default function Layout({
         
         {/* Mobile bottom nav visible only on screens smaller than md */}
         <MobileBottomNav />
+        
+        {/* Onboarding overlay */}
+        {showOnboarding && (
+          <OnboardingOverlay onComplete={() => setShowOnboarding(false)} />
+        )}
       </SessionProvider>
     </SidebarProvider>
   );

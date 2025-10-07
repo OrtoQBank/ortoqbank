@@ -9,17 +9,27 @@ export default defineSchema({
     email: v.string(),
     imageUrl: v.optional(v.string()),
     clerkUserId: v.string(),
-    // Payment fields from Mercado Pago
+    // Legacy payment fields (for backward compatibility with MercadoPago)
     paid: v.optional(v.boolean()),
     paymentId: v.optional(v.union(v.string(), v.number())),
     testeId: v.optional(v.string()),
     paymentDate: v.optional(v.string()),
     paymentStatus: v.optional(v.string()),
+    // User management
     termsAccepted: v.optional(v.boolean()),
+    onboardingCompleted: v.optional(v.boolean()),
     role: v.optional(v.string()),
+    status: v.optional(v.union(
+      v.literal("invited"),
+      v.literal("active"), 
+      v.literal("suspended"),
+      v.literal("expired")
+    )),
   })
     .index('by_clerkUserId', ['clerkUserId'])
-    .index('by_paid', ['paid']),
+    .index('by_paid', ['paid'])
+    .index('by_email', ['email'])
+    .index('by_status', ['status']),
 
   themes: defineTable({
     name: v.string(),
@@ -208,18 +218,154 @@ export default defineSchema({
     active: v.boolean(),
     validFrom: v.optional(v.number()), // epoch ms
     validUntil: v.optional(v.number()), // epoch ms
+    // Usage limits
+    maxUses: v.optional(v.number()), // Maximum total uses (null = unlimited)
+    maxUsesPerUser: v.optional(v.number()), // Max uses per CPF/email (null = unlimited)
+    currentUses: v.optional(v.number()), // Current total usage count
+    // Minimum price protection
+    minimumPrice: v.optional(v.number()), // Minimum final price after discount
   }).index('by_code', ['code']),
+
+  // Coupon usage tracking
+  couponUsage: defineTable({
+    couponId: v.id('coupons'),
+    couponCode: v.string(),
+    orderId: v.id('pendingOrders'),
+    userEmail: v.string(),
+    userCpf: v.string(),
+    discountAmount: v.number(),
+    originalPrice: v.number(),
+    finalPrice: v.number(),
+    usedAt: v.number(),
+  })
+    .index('by_coupon', ['couponId'])
+    .index('by_coupon_user', ['couponCode', 'userCpf'])
+    .index('by_email', ['userEmail'])
+    .index('by_cpf', ['userCpf']),
 
   //pricing plans
   pricingPlans: defineTable({
     name: v.string(),
     badge: v.string(),
-    originalPrice: v.string(),
+    originalPrice: v.optional(v.string()), // Marketing strikethrough price
     price: v.string(),
     installments: v.string(),
     installmentDetails: v.string(),
     description: v.string(),
     features: v.array(v.string()),
     buttonText: v.string(),
+    // Extended fields for product identification and access control
+    productId: v.string(), // e.g., "ortoqbank_2025", "ortoqbank_2026", "premium_pack" - REQUIRED
+    category: v.optional(v.union(v.literal("year_access"), v.literal("premium_pack"), v.literal("addon"))),
+    year: v.optional(v.number()), // 2025, 2026, 2027, etc.
+    // Pricing (converted to numbers for calculations)
+    regularPriceNum: v.optional(v.number()),
+    pixPriceNum: v.optional(v.number()),
+    // Access control
+    accessDurationDays: v.optional(v.number()), // How long access lasts
+    isActive: v.optional(v.boolean()),
+    displayOrder: v.optional(v.number()),
   })
+    .index("by_product_id", ["productId"])
+    .index("by_category", ["category"])
+    .index("by_year", ["year"])
+    .index("by_active", ["isActive"]),
+
+  // User Products - Junction table for user-product relationships  
+  userProducts: defineTable({
+    userId: v.id("users"),
+    pricingPlanId: v.id("pricingPlans"), // Reference to pricingPlans table
+    productId: v.string(), // Reference to pricingPlans.productId for easy lookup
+    // Purchase info
+    purchaseDate: v.number(),
+    paymentGateway: v.union(v.literal("mercadopago"), v.literal("asaas")),
+    paymentId: v.string(),
+    purchasePrice: v.number(),
+    couponUsed: v.optional(v.string()),
+    discountAmount: v.optional(v.number()),
+    // Access control
+    hasAccess: v.boolean(),
+    accessGrantedAt: v.number(),
+    accessExpiresAt: v.optional(v.number()),
+    // Status
+    status: v.union(
+      v.literal("active"),
+      v.literal("expired"), 
+      v.literal("suspended"),
+      v.literal("refunded")
+    ),
+    // Metadata
+    checkoutId: v.optional(v.string()), // Link to pendingOrders
+    notes: v.optional(v.string()),
+  })
+    .index("by_user", ["userId"])
+    .index("by_user_product", ["userId", "productId"])
+    .index("by_user_pricing_plan", ["userId", "pricingPlanId"])
+    .index("by_user_status", ["userId", "status"])
+    .index("by_product", ["productId"])
+    .index("by_pricing_plan", ["pricingPlanId"])
+    .index("by_payment_id", ["paymentId"])
+    .index("by_status", ["status"])
+    .index("by_expiration", ["accessExpiresAt"]),
+
+  // Pending orders - tracks checkout sessions and payment lifecycle
+  pendingOrders: defineTable({
+    // Contact info (from checkout)
+    email: v.string(), // Contact email from checkout
+    cpf: v.string(),
+    name: v.string(),
+    productId: v.string(), // Product identifier (e.g., "ortoqbank_2025")
+    
+    // Account info (from Clerk after signup)
+    userId: v.optional(v.string()), // Clerk user ID (set when claimed)
+    accountEmail: v.optional(v.string()), // Account email from Clerk (may differ from contact email)
+    
+    // Payment info
+    paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
+    asaasPaymentId: v.optional(v.string()), // AsaaS payment ID
+    externalReference: v.optional(v.string()), // Order ID for external reference
+    originalPrice: v.number(),
+    finalPrice: v.number(),
+    
+    // PIX payment data (for displaying QR code)
+    pixData: v.optional(v.object({
+      qrPayload: v.optional(v.string()), // PIX copy-paste code
+      qrCodeBase64: v.optional(v.string()), // QR code image as base64
+      expirationDate: v.optional(v.string()), // When the PIX QR code expires
+    })),
+    
+    // Coupon info
+    couponCode: v.optional(v.string()), // Coupon code used (if any)
+    couponDiscount: v.optional(v.number()), // Discount amount from coupon
+    pixDiscount: v.optional(v.number()), // Additional PIX discount
+    
+    // State management
+    status: v.union(
+      v.literal("pending"), // Order created, waiting for payment
+      v.literal("paid"), // Payment confirmed
+      v.literal("provisioned"), // Access granted
+      v.literal("completed"), // Fully processed
+      v.literal("failed") // Payment failed or expired
+    ),
+    
+    // Timestamps
+    createdAt: v.number(), // When order was created
+    paidAt: v.optional(v.number()), // When payment was confirmed
+    provisionedAt: v.optional(v.number()), // When access was granted
+    expiresAt: v.number(), // When this order expires (7 days)
+    
+    // Security (claim system)
+    claimToken: v.string(), // One-time claim token (UUID)
+    claimTokenUsed: v.boolean(), // Whether claim token has been used
+    claimTokenExpiresAt: v.number(), // Claim token expiration (7 days)
+  })
+    .index("by_email", ["email"])
+    .index("by_user_id", ["userId"])
+    .index("by_claim_token", ["claimToken"])
+    .index("by_status", ["status"])
+    .index("by_asaas_payment", ["asaasPaymentId"])
+    .index("by_external_reference", ["externalReference"]),
+
+
+
 });

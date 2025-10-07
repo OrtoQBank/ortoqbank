@@ -1,9 +1,9 @@
 'use client';
 
-import { Check } from 'lucide-react';
+import { Check, Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
-import CheckoutEmailModal from '@/components/checkout-email-modal';
 import { Button } from '@/components/ui/button';
 
 import { Doc } from '../../../convex/_generated/dataModel';
@@ -13,7 +13,24 @@ interface PricingClientProps {
 }
 
 export function PricingClient({ plans }: PricingClientProps) {
-  const [showEmailModal, setShowEmailModal] = useState(false);
+  const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
+  const router = useRouter();
+
+   const handleCheckout = async (plan: Doc<'pricingPlans'>) => {
+     setLoadingPlanId(plan._id);
+     
+     try {
+       // Redirect to transparent checkout with plan details
+       const searchParams = new URLSearchParams({
+         plan: plan.productId || plan._id,
+       });
+       
+       router.push(`/checkout?${searchParams.toString()}`);
+     } catch (error) {
+       console.error('Erro ao redirecionar para checkout:', error);
+       setLoadingPlanId(null);
+     }
+   };
 
   return (
     <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
@@ -77,20 +94,23 @@ export function PricingClient({ plans }: PricingClientProps) {
               <div className="px-6 pb-6">
                 <Button
                   className="cursor-pointer hover:bg-opacity-90 w-full bg-[#2196F3] text-lg font-semibold text-white"
-                  onClick={() => setShowEmailModal(true)}
+                  onClick={() => handleCheckout(plan)}
+                  disabled={loadingPlanId === plan._id}
                 >
-                  {plan.buttonText}
+                  {loadingPlanId === plan._id ? (
+                    <>
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                      Processando...
+                    </>
+                  ) : (
+                    plan.buttonText
+                  )}
                 </Button>
               </div>
             </div>
           ))}
         </div>
       </div>
-
-      <CheckoutEmailModal
-        open={showEmailModal}
-        onOpenChange={setShowEmailModal}
-      />
     </div>
   );
 }

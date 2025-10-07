@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useQuery } from 'convex/react';
 import {
   Area,
   AreaChart,
