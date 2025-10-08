@@ -4,6 +4,7 @@ import { Id } from './_generated/dataModel';
 import {
   internalAction,
   internalMutation,
+  internalQuery,
   mutation,
   query,
 } from './_generated/server';
@@ -282,6 +283,12 @@ export const confirmPayment = internalMutation({
     });
 
     console.log(`✅ Payment confirmed for order ${args.pendingOrderId}`);
+
+    // Trigger invoice generation (non-blocking)
+    await ctx.scheduler.runAfter(0, internal.payments.generateInvoice, {
+      orderId: order._id,
+      asaasPaymentId: args.asaasPaymentId,
+    });
 
     // Track coupon usage NOW (after payment confirmed)
     if (order.couponCode) {
@@ -737,5 +744,221 @@ export const getPendingOrderById = query({
       console.error('Error getting pending order:', error);
       return null;
     }
+  },
+});
+
+/**
+ * Create invoice record and trigger Asaas invoice generation
+ */
+export const generateInvoice = internalMutation({
+  args: {
+    orderId: v.id('pendingOrders'),
+    asaasPaymentId: v.string(),
+  },
+  returns: v.union(v.id('invoices'), v.null()),
+  handler: async (ctx, args) => {
+    // Check if invoice already exists
+    const existingInvoice = await ctx.db
+      .query('invoices')
+      .withIndex('by_order', q => q.eq('orderId', args.orderId))
+      .first();
+    
+    if (existingInvoice) {
+      console.log(`Invoice already exists for order ${args.orderId}`);
+      return existingInvoice._id;
+    }
+    
+    // Get order details
+    const order = await ctx.db.get(args.orderId);
+    if (!order) {
+      console.error(`Order not found: ${args.orderId}`);
+      return null;
+    }
+    
+    // Create invoice record
+    const invoiceId = await ctx.db.insert('invoices', {
+      orderId: args.orderId,
+      asaasPaymentId: args.asaasPaymentId,
+      status: 'pending',
+      municipalServiceId: '', // Will be set during processing
+      serviceDescription: 'Acesso à plataforma OrtoQBank',
+      value: order.finalPrice,
+      customerName: order.name,
+      customerEmail: order.email,
+      customerCpfCnpj: order.cpf,
+      createdAt: Date.now(),
+    });
+    
+    console.log(`📄 Created invoice record ${invoiceId} for order ${args.orderId}`);
+    
+    // Schedule async invoice generation
+    await ctx.scheduler.runAfter(0, internal.payments.processInvoiceGeneration, {
+      invoiceId,
+    });
+    
+    return invoiceId;
+  },
+});
+
+/**
+ * Process invoice generation with Asaas (async, non-blocking)
+ */
+export const processInvoiceGeneration = internalAction({
+  args: {
+    invoiceId: v.id('invoices'),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    try {
+      // Get invoice record
+      const invoice: any = await ctx.runQuery(internal.payments.getInvoiceById, {
+        invoiceId: args.invoiceId,
+      });
+      
+      if (!invoice) {
+        console.error(`Invoice not found: ${args.invoiceId}`);
+        return null;
+      }
+      
+      // Get municipal service ID (code: 02964)
+      const serviceInfo = await ctx.runAction(api.asaas.getMunicipalServiceId, {
+        serviceCode: '02964',
+      });
+      
+      // Update invoice with service ID
+      await ctx.runMutation(internal.payments.updateInvoiceServiceId, {
+        invoiceId: args.invoiceId,
+        municipalServiceId: serviceInfo.serviceId,
+      });
+      
+      // Schedule invoice with Asaas
+      const result = await ctx.runAction(api.asaas.scheduleInvoice, {
+        asaasPaymentId: invoice.asaasPaymentId,
+        serviceDescription: invoice.serviceDescription,
+        municipalServiceId: serviceInfo.serviceId,
+        observations: `Pedido: ${invoice.orderId}`,
+      });
+      
+      // Update invoice record with success
+      await ctx.runMutation(internal.payments.updateInvoiceSuccess, {
+        invoiceId: args.invoiceId,
+        asaasInvoiceId: result.invoiceId,
+      });
+      
+      console.log(`✅ Invoice generated successfully: ${result.invoiceId}`);
+      
+    } catch (error) {
+      console.error(`❌ Invoice generation failed for ${args.invoiceId}:`, error);
+      
+      // Update invoice record with error (non-blocking)
+      await ctx.runMutation(internal.payments.updateInvoiceError, {
+        invoiceId: args.invoiceId,
+        errorMessage: error instanceof Error ? error.message : String(error),
+      });
+      
+      // Alert admin via console (can be extended to email/Sentry)
+      console.error(`🚨 ADMIN ALERT: Invoice generation failed`, {
+        invoiceId: args.invoiceId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+    
+    return null;
+  },
+});
+
+// Helper queries and mutations for invoice processing
+export const getInvoiceById = internalQuery({
+  args: { invoiceId: v.id('invoices') },
+  returns: v.union(v.any(), v.null()),
+  handler: async (ctx, args) => {
+    return await ctx.db.get(args.invoiceId);
+  },
+});
+
+export const updateInvoiceServiceId = internalMutation({
+  args: {
+    invoiceId: v.id('invoices'),
+    municipalServiceId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invoiceId, {
+      municipalServiceId: args.municipalServiceId,
+      status: 'processing',
+    });
+    return null;
+  },
+});
+
+export const updateInvoiceSuccess = internalMutation({
+  args: {
+    invoiceId: v.id('invoices'),
+    asaasInvoiceId: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invoiceId, {
+      asaasInvoiceId: args.asaasInvoiceId,
+      status: 'issued',
+      issuedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+export const updateInvoiceError = internalMutation({
+  args: {
+    invoiceId: v.id('invoices'),
+    errorMessage: v.string(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invoiceId, {
+      status: 'failed',
+      errorMessage: args.errorMessage,
+    });
+    return null;
+  },
+});
+
+/**
+ * Get invoice status for an order (for admin dashboard)
+ */
+export const getInvoiceForOrder = query({
+  args: {
+    orderId: v.id('pendingOrders'),
+  },
+  returns: v.union(
+    v.object({
+      _id: v.id('invoices'),
+      status: v.string(),
+      asaasInvoiceId: v.optional(v.string()),
+      invoiceUrl: v.optional(v.string()),
+      errorMessage: v.optional(v.string()),
+      createdAt: v.number(),
+      issuedAt: v.optional(v.number()),
+    }),
+    v.null()
+  ),
+  handler: async (ctx, args) => {
+    const invoice = await ctx.db
+      .query('invoices')
+      .withIndex('by_order', q => q.eq('orderId', args.orderId))
+      .first();
+    
+    if (!invoice) {
+      return null;
+    }
+    
+    return {
+      _id: invoice._id,
+      status: invoice.status,
+      asaasInvoiceId: invoice.asaasInvoiceId,
+      invoiceUrl: invoice.invoiceUrl,
+      errorMessage: invoice.errorMessage,
+      createdAt: invoice.createdAt,
+      issuedAt: invoice.issuedAt,
+    };
   },
 });

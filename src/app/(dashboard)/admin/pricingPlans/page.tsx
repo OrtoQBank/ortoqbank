@@ -37,7 +37,7 @@ type FormData = {
   year: string;
   regularPriceNum: string;
   pixPriceNum: string;
-  accessDurationDays: string;
+  accessYears: string;
   isActive: boolean;
   displayOrder: string;
 };
@@ -65,7 +65,7 @@ export default function PricingPlansAdminPage() {
     year: '',
     regularPriceNum: '',
     pixPriceNum: '',
-    accessDurationDays: '',
+    accessYears: '',
     isActive: true,
     displayOrder: '',
   });
@@ -87,7 +87,7 @@ export default function PricingPlansAdminPage() {
       year: plan.year?.toString() || '',
       regularPriceNum: plan.regularPriceNum?.toString() || '',
       pixPriceNum: plan.pixPriceNum?.toString() || '',
-      accessDurationDays: plan.accessDurationDays?.toString() || '',
+      accessYears: plan.accessYears?.join(',') || '',
       isActive: plan.isActive ?? true,
       displayOrder: plan.displayOrder?.toString() || '',
     });
@@ -107,7 +107,9 @@ export default function PricingPlansAdminPage() {
     const year = formData.year ? Number.parseInt(formData.year, 10) : undefined;
     const regularPriceNum = formData.regularPriceNum ? Number.parseFloat(formData.regularPriceNum) : undefined;
     const pixPriceNum = formData.pixPriceNum ? Number.parseFloat(formData.pixPriceNum) : undefined;
-    const accessDurationDays = formData.accessDurationDays ? Number.parseInt(formData.accessDurationDays, 10) : undefined;
+    const accessYears = formData.accessYears 
+      ? formData.accessYears.split(',').map(y => Number.parseInt(y.trim(), 10)).filter(y => !Number.isNaN(y))
+      : undefined;
     const displayOrder = formData.displayOrder ? Number.parseInt(formData.displayOrder, 10) : undefined;
 
     // Handle category - only include if it's a valid value (empty string is falsy, so just check truthiness)
@@ -130,7 +132,7 @@ export default function PricingPlansAdminPage() {
       year,
       regularPriceNum,
       pixPriceNum,
-      accessDurationDays,
+      accessYears,
       isActive: formData.isActive,
       displayOrder,
     };
@@ -168,7 +170,7 @@ export default function PricingPlansAdminPage() {
         year: '',
         regularPriceNum: '',
         pixPriceNum: '',
-        accessDurationDays: '',
+        accessYears: '',
         isActive: true,
         displayOrder: '',
       });
@@ -270,15 +272,14 @@ export default function PricingPlansAdminPage() {
                     </div>
 
                     <div className="space-y-1">
-                      <Label className="text-xs font-medium">Duração do Acesso (dias)</Label>
+                      <Label className="text-xs font-medium">Anos de Acesso</Label>
                       <Input
-                        type="number"
-                        value={createForm.accessDurationDays}
-                        onChange={e => setCreateForm(f => ({ ...f, accessDurationDays: e.target.value }))}
-                        placeholder="Ex: 365"
+                        value={createForm.accessYears}
+                        onChange={e => setCreateForm(f => ({ ...f, accessYears: e.target.value }))}
+                        placeholder="Ex: 2026,2027"
                         className="text-xs"
                       />
-                      <p className="text-xs text-gray-500">Deixe vazio para acesso permanente</p>
+                      <p className="text-xs text-gray-500">Anos que o usuário terá acesso (separados por vírgula)</p>
                     </div>
 
                     <div className="space-y-1">
@@ -494,13 +495,14 @@ export default function PricingPlansAdminPage() {
                       </div>
 
                       <div className="space-y-1">
-                        <Label className="text-xs font-medium">Duração do Acesso (dias)</Label>
+                        <Label className="text-xs font-medium">Anos de Acesso</Label>
                         <Input
-                          type="number"
-                          value={editForm.accessDurationDays || ''}
-                          onChange={e => setEditForm(f => ({ ...f, accessDurationDays: e.target.value }))}
+                          value={editForm.accessYears || ''}
+                          onChange={e => setEditForm(f => ({ ...f, accessYears: e.target.value }))}
+                          placeholder="Ex: 2026,2027"
                           className="text-xs"
                         />
+                        <p className="text-xs text-gray-500">Anos separados por vírgula</p>
                       </div>
 
                       <div className="space-y-1">
@@ -679,9 +681,9 @@ export default function PricingPlansAdminPage() {
                         }`}>
                           {plan.isActive ? '✓ Ativo' : '✗ Inativo'}
                         </span>
-                        {plan.accessDurationDays && (
+                        {plan.accessYears && plan.accessYears.length > 0 && (
                           <span className="text-gray-500">
-                            ⏱️ {plan.accessDurationDays} dias
+                            📅 Anos: {plan.accessYears.join(', ')}
                           </span>
                         )}
                         {plan.displayOrder !== undefined && (
