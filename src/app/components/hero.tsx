@@ -2,13 +2,16 @@
 
 import { CircleCheckIcon } from 'lucide-react';
 import Image from 'next/image';
-import { useState } from 'react';
 
-import CheckoutEmailModal from '@/components/checkout-email-modal';
 import { Button } from '@/components/ui/button';
 
 export default function HeroSection() {
-  const [showEmailModal, setShowEmailModal] = useState(false);
+  const scrollToPricing = () => {
+    const pricingSection = document.getElementById('pricing');
+    if (pricingSection) {
+      pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  };
 
   return (
     <section className="w-full bg-white py-12 md:py-18">
@@ -35,7 +38,7 @@ export default function HeroSection() {
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <Button
                   size="lg"
-                  onClick={() => setShowEmailModal(true)}
+                  onClick={scrollToPricing}
                   className="cursor-pointer"
                 >
                   Comprar Acesso
@@ -56,11 +59,6 @@ export default function HeroSection() {
           </div>
         </div>
       </div>
-
-      <CheckoutEmailModal
-        open={showEmailModal}
-        onOpenChange={setShowEmailModal}
-      />
     </section>
   );
 }

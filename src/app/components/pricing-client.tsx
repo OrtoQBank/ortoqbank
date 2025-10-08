@@ -33,7 +33,7 @@ export function PricingClient({ plans }: PricingClientProps) {
    };
 
   return (
-    <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
+    <div id="pricing" className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
       <div className="container mx-auto mb-16 px-4 text-center">
         <h1 className="mb-3 text-4xl font-bold text-blue-500">
           Orto<span className="text-blue-500">Q</span>Bank
