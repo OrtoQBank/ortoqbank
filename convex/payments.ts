@@ -4,6 +4,7 @@ import { Id } from './_generated/dataModel';
 import {
   internalAction,
   internalMutation,
+  internalQuery,
   mutation,
   query,
 } from './_generated/server';
