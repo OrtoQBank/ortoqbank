@@ -103,6 +103,14 @@ export const checkUserAccessToYear = query({
     expiresAt: v.optional(v.number()),
   }),
   handler: async (ctx, args) => {
+    // First, check if user has the active year access flag
+    const user = await ctx.db.get(args.userId);
+    if (!user || !user.hasActiveYearAccess) {
+      return {
+        hasAccess: false,
+      };
+    }
+
     // Check for premium pack access (lifetime access to all years)
     const premiumAccess = await ctx.db
       .query("userProducts")
@@ -118,29 +126,20 @@ export const checkUserAccessToYear = query({
       };
     }
 
-    // Check for year-specific access
-    const yearPricingPlan = await ctx.db
-      .query("pricingPlans")
-      .withIndex("by_year", (q) => q.eq("year", args.year))
-      .filter((q) => q.eq(q.field("category"), "year_access"))
-      .unique();
+    // Check for year-specific access by looking at all user's products
+    const userProducts = await ctx.db
+      .query("userProducts")
+      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .filter((q) => q.eq(q.field("status"), "active"))
+      .filter((q) => q.eq(q.field("hasAccess"), true))
+      .collect();
 
-    if (yearPricingPlan && yearPricingPlan.productId) {
-      const userProduct = await ctx.db
-        .query("userProducts")
-        .withIndex("by_user_product", (q) => 
-          q.eq("userId", args.userId).eq("productId", yearPricingPlan.productId!)
-        )
-        .unique();
-
-      if (userProduct && userProduct.status === "active" && userProduct.hasAccess) {
-        const now = Date.now();
-        const isExpired = userProduct.accessExpiresAt 
-          ? userProduct.accessExpiresAt < now 
-          : false;
-
+    for (const userProduct of userProducts) {
+      const pricingPlan = await ctx.db.get(userProduct.pricingPlanId);
+      
+      if (pricingPlan && pricingPlan.accessYears && pricingPlan.accessYears.includes(args.year)) {
         return {
-          hasAccess: !isExpired,
+          hasAccess: true,
           accessType: "year_access",
           expiresAt: userProduct.accessExpiresAt,
         };
@@ -150,6 +149,18 @@ export const checkUserAccessToYear = query({
     return {
       hasAccess: false,
     };
+  },
+});
+
+/**
+ * Check if user has active year access (simple flag check)
+ */
+export const checkUserHasActiveAccess = query({
+  args: { userId: v.id("users") },
+  returns: v.boolean(),
+  handler: async (ctx, args) => {
+    const user = await ctx.db.get(args.userId);
+    return user?.hasActiveYearAccess === true;
   },
 });
 

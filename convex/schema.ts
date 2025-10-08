@@ -25,6 +25,8 @@ export default defineSchema({
       v.literal("suspended"),
       v.literal("expired")
     )),
+    // Year-based access control
+    hasActiveYearAccess: v.optional(v.boolean()),
   })
     .index('by_clerkUserId', ['clerkUserId'])
     .index('by_paid', ['paid'])
@@ -257,12 +259,12 @@ export default defineSchema({
     // Extended fields for product identification and access control
     productId: v.string(), // e.g., "ortoqbank_2025", "ortoqbank_2026", "premium_pack" - REQUIRED
     category: v.optional(v.union(v.literal("year_access"), v.literal("premium_pack"), v.literal("addon"))),
-    year: v.optional(v.number()), // 2025, 2026, 2027, etc.
+    year: v.optional(v.number()), // 2025, 2026, 2027, etc. - kept for productId naming/identification
     // Pricing (converted to numbers for calculations)
     regularPriceNum: v.optional(v.number()),
     pixPriceNum: v.optional(v.number()),
-    // Access control
-    accessDurationDays: v.optional(v.number()), // How long access lasts
+    // Access control - year-based
+    accessYears: v.optional(v.array(v.number())), // Array of years user gets access to (e.g., [2026, 2027])
     isActive: v.optional(v.boolean()),
     displayOrder: v.optional(v.number()),
   })

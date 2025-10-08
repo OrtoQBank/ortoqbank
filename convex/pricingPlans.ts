@@ -29,7 +29,7 @@ export const savePricingPlan = mutation({
       year: v.optional(v.number()),
       regularPriceNum: v.optional(v.number()),
       pixPriceNum: v.optional(v.number()),
-      accessDurationDays: v.optional(v.number()),
+      accessYears: v.optional(v.array(v.number())),
       isActive: v.optional(v.boolean()),
       displayOrder: v.optional(v.number()),
     },
@@ -116,8 +116,9 @@ export const grantProductAccess = internalMutation({
     }
 
     const now = Date.now();
-    const accessExpiresAt = pricingPlan.accessDurationDays
-      ? now + (pricingPlan.accessDurationDays * 24 * 60 * 60 * 1000)
+    // Calculate expiration as December 31, 23:59:59.999 of the latest year in accessYears
+    const accessExpiresAt = pricingPlan.accessYears && pricingPlan.accessYears.length > 0
+      ? new Date(Math.max(...pricingPlan.accessYears), 11, 31, 23, 59, 59, 999).getTime()
       : undefined;
 
     // Check if user already has this product
@@ -143,10 +144,16 @@ export const grantProductAccess = internalMutation({
         checkoutId: args.checkoutId,
         pricingPlanId: args.pricingPlanId,
       });
+      
+      // Set user's active year access flag
+      await ctx.db.patch(args.userId, {
+        hasActiveYearAccess: true,
+      });
+      
       return existingAccess._id;
     } else {
       // Create new access
-      return await ctx.db.insert("userProducts", {
+      const userProductId = await ctx.db.insert("userProducts", {
         userId: args.userId,
         pricingPlanId: args.pricingPlanId,
         productId: args.productId,
@@ -162,6 +169,13 @@ export const grantProductAccess = internalMutation({
         status: "active",
         checkoutId: args.checkoutId,
       });
+      
+      // Set user's active year access flag
+      await ctx.db.patch(args.userId, {
+        hasActiveYearAccess: true,
+      });
+      
+      return userProductId;
     }
   },
 });
