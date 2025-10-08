@@ -127,12 +127,13 @@ export const checkUserAccessToYear = query({
     }
 
     // Check for year-specific access by looking at all user's products
-    const userProducts = await ctx.db
+    // Use index for status, then filter hasAccess in-memory (per Convex guidelines)
+    const allUserProducts = await ctx.db
       .query("userProducts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
-      .filter((q) => q.eq(q.field("status"), "active"))
-      .filter((q) => q.eq(q.field("hasAccess"), true))
+      .withIndex("by_user_status", (q) => q.eq("userId", args.userId).eq("status", "active"))
       .collect();
+    
+    const userProducts = allUserProducts.filter(up => up.hasAccess === true);
 
     for (const userProduct of userProducts) {
       const pricingPlan = await ctx.db.get(userProduct.pricingPlanId);

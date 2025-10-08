@@ -98,12 +98,14 @@ export const manualUpdateYearAccess = internalMutation({
       
       usersChecked++;
 
-      const userProducts = await ctx.db
+      // Fetch active user products using index (no runtime filters)
+      const allUserProducts = await ctx.db
         .query("userProducts")
-        .withIndex("by_user", (q) => q.eq("userId", user._id))
-        .filter((q) => q.eq(q.field("status"), "active"))
-        .filter((q) => q.eq(q.field("hasAccess"), true))
+        .withIndex("by_user_status", (q) => q.eq("userId", user._id).eq("status", "active"))
         .collect();
+      
+      // Filter by hasAccess in-memory (as per Convex guidelines)
+      const userProducts = allUserProducts.filter(up => up.hasAccess === true);
 
       let hasValidAccess = false;
       for (const userProduct of userProducts) {
