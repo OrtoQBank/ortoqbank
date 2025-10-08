@@ -41,10 +41,10 @@ interface AsaasPixQrCode {
   expirationDate: string;
 }
 
-interface AsaasMunicipalService {
+interface AsaasFiscalService {
   id: string;
-  code: string;
   description: string;
+  issTax: number;
 }
 
 interface AsaasInvoice {
@@ -138,29 +138,34 @@ class AsaasClient {
     return this.makeRequest<AsaasPixQrCode>(`/payments/${chargeId}/pixQrCode`);
   }
 
-  async listMunicipalServices(params?: { 
-    code?: string;
+  async listFiscalServices(params?: { 
+    description?: string;
     offset?: number;
     limit?: number;
-  }): Promise<{ data: AsaasMunicipalService[] }> {
+  }): Promise<{ data: AsaasFiscalService[], totalCount: number }> {
     const queryParams = new URLSearchParams();
-    if (params?.code) queryParams.append('code', params.code);
+    if (params?.description) queryParams.append('description', params.description);
     if (params?.offset) queryParams.append('offset', params.offset.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
     
-    const endpoint = `/municipalServices${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    return this.makeRequest<{ data: AsaasMunicipalService[] }>(endpoint);
+    const endpoint = `/fiscalInfo/services${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.makeRequest<{ data: AsaasFiscalService[], totalCount: number }>(endpoint);
   }
 
   async scheduleInvoice(params: {
     payment: string; // Payment ID
     serviceDescription: string;
-    municipalServiceId: string;
+    municipalServiceId: string; // The service ID from fiscalInfo/services (e.g., "306562")
     observations?: string;
   }): Promise<AsaasInvoice> {
     return this.makeRequest<AsaasInvoice>('/invoices', {
       method: 'POST',
-      body: JSON.stringify(params),
+      body: JSON.stringify({
+        payment: params.payment,
+        serviceDescription: params.serviceDescription,
+        municipalServiceId: params.municipalServiceId,
+        observations: params.observations,
+      }),
     });
   }
 
@@ -442,48 +447,64 @@ export const getPaymentStatus = action({
   },
 });
 
+
 /**
- * Get municipal service ID by code (cached result)
- * Service code: 02964 (ISS 1.09)
+ * Get fiscal service ID by searching for the service description
+ * For software services, use: "02964 | 1.09"
  */
-export const getMunicipalServiceId = action({
+export const getFiscalServiceId = action({
   args: {
-    serviceCode: v.string(),
+    serviceDescription: v.string(),
   },
-  returns: v.object({
-    serviceId: v.string(),
-    code: v.string(),
-    description: v.string(),
-  }),
+  returns: v.union(
+    v.object({
+      serviceId: v.string(),
+      description: v.string(),
+      issTax: v.number(),
+    }),
+    v.null()
+  ),
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
     
-    const result = await asaas.listMunicipalServices({ 
-      code: args.serviceCode,
-      limit: 1,
-    });
-    
-    if (!result.data || result.data.length === 0) {
-      throw new Error(`Municipal service not found for code: ${args.serviceCode}`);
+    try {
+      console.log(`🔍 Searching for fiscal service: ${args.serviceDescription}`);
+      
+      const result = await asaas.listFiscalServices({ 
+        description: args.serviceDescription,
+        limit: 1,
+      });
+      
+      if (!result.data || result.data.length === 0) {
+        console.warn(`⚠️ Fiscal service not found for: ${args.serviceDescription}`);
+        return null;
+      }
+      
+      const service = result.data[0];
+      console.log(`✅ Found fiscal service: ${service.id} - ${service.description}`);
+      
+      return {
+        serviceId: service.id,
+        description: service.description,
+        issTax: service.issTax,
+      };
+    } catch (error) {
+      const errorMsg = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Failed to fetch fiscal service:`, errorMsg);
+      return null;
     }
-    
-    const service = result.data[0];
-    return {
-      serviceId: service.id,
-      code: service.code,
-      description: service.description,
-    };
   },
 });
 
 /**
  * Schedule invoice generation for a paid order
+ * Uses the fiscal service ID from /fiscalInfo/services
  */
 export const scheduleInvoice = action({
   args: {
     asaasPaymentId: v.string(),
     serviceDescription: v.string(),
-    municipalServiceId: v.string(),
+    municipalServiceId: v.string(), // Service ID like "306562"
     observations: v.optional(v.string()),
   },
   returns: v.object({
@@ -493,12 +514,16 @@ export const scheduleInvoice = action({
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
     
+    console.log(`📄 Scheduling invoice with municipal service ID: ${args.municipalServiceId}`);
+    
     const invoice = await asaas.scheduleInvoice({
       payment: args.asaasPaymentId,
       serviceDescription: args.serviceDescription,
       municipalServiceId: args.municipalServiceId,
       observations: args.observations,
     });
+    
+    console.log(`✅ Invoice scheduled: ${invoice.id} (status: ${invoice.status})`);
     
     return {
       invoiceId: invoice.id,
