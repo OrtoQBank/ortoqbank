@@ -41,6 +41,23 @@ interface AsaasPixQrCode {
   expirationDate: string;
 }
 
+interface AsaasMunicipalService {
+  id: string;
+  code: string;
+  description: string;
+}
+
+interface AsaasInvoice {
+  id: string;
+  status: string;
+  customer: string;
+  serviceDescription: string;
+  observations?: string;
+  pdfUrl?: string;
+  xmlUrl?: string;
+  effectiveDate?: string;
+}
+
 // AsaaS API Client
 class AsaasClient {
   private baseUrl: string;
@@ -119,6 +136,36 @@ class AsaasClient {
 
   async getPixQrCode(chargeId: string): Promise<AsaasPixQrCode> {
     return this.makeRequest<AsaasPixQrCode>(`/payments/${chargeId}/pixQrCode`);
+  }
+
+  async listMunicipalServices(params?: { 
+    code?: string;
+    offset?: number;
+    limit?: number;
+  }): Promise<{ data: AsaasMunicipalService[] }> {
+    const queryParams = new URLSearchParams();
+    if (params?.code) queryParams.append('code', params.code);
+    if (params?.offset) queryParams.append('offset', params.offset.toString());
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    
+    const endpoint = `/municipalServices${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
+    return this.makeRequest<{ data: AsaasMunicipalService[] }>(endpoint);
+  }
+
+  async scheduleInvoice(params: {
+    payment: string; // Payment ID
+    serviceDescription: string;
+    municipalServiceId: string;
+    observations?: string;
+  }): Promise<AsaasInvoice> {
+    return this.makeRequest<AsaasInvoice>('/invoices', {
+      method: 'POST',
+      body: JSON.stringify(params),
+    });
+  }
+
+  async getInvoice(invoiceId: string): Promise<AsaasInvoice> {
+    return this.makeRequest<AsaasInvoice>(`/invoices/${invoiceId}`);
   }
 }
 
@@ -391,6 +438,71 @@ export const getPaymentStatus = action({
       confirmedDate: payment.confirmedDate,
       dueDate: payment.dueDate,
       asaasStatus: payment.status,
+    };
+  },
+});
+
+/**
+ * Get municipal service ID by code (cached result)
+ * Service code: 02964 (ISS 1.09)
+ */
+export const getMunicipalServiceId = action({
+  args: {
+    serviceCode: v.string(),
+  },
+  returns: v.object({
+    serviceId: v.string(),
+    code: v.string(),
+    description: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const asaas = new AsaasClient();
+    
+    const result = await asaas.listMunicipalServices({ 
+      code: args.serviceCode,
+      limit: 1,
+    });
+    
+    if (!result.data || result.data.length === 0) {
+      throw new Error(`Municipal service not found for code: ${args.serviceCode}`);
+    }
+    
+    const service = result.data[0];
+    return {
+      serviceId: service.id,
+      code: service.code,
+      description: service.description,
+    };
+  },
+});
+
+/**
+ * Schedule invoice generation for a paid order
+ */
+export const scheduleInvoice = action({
+  args: {
+    asaasPaymentId: v.string(),
+    serviceDescription: v.string(),
+    municipalServiceId: v.string(),
+    observations: v.optional(v.string()),
+  },
+  returns: v.object({
+    invoiceId: v.string(),
+    status: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const asaas = new AsaasClient();
+    
+    const invoice = await asaas.scheduleInvoice({
+      payment: args.asaasPaymentId,
+      serviceDescription: args.serviceDescription,
+      municipalServiceId: args.municipalServiceId,
+      observations: args.observations,
+    });
+    
+    return {
+      invoiceId: invoice.id,
+      status: invoice.status,
     };
   },
 });
