@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from 'convex/react';
-import { CheckCircle, Loader2, Mail, Home } from 'lucide-react';
+import { CheckCircle, Home,Loader2, Mail } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -32,10 +32,9 @@ function CheckoutSuccessContent() {
 
   // Send GTM purchase event
   useEffect(() => {
-    if (orderDetails && !gtmEventSent) {
-      // Push purchase event to GTM dataLayer
-      if (typeof window !== 'undefined' && window.dataLayer) {
-        window.dataLayer.push({
+    if (orderDetails && !gtmEventSent && // Push purchase event to GTM dataLayer
+      typeof globalThis !== 'undefined' && globalThis.dataLayer) {
+        globalThis.dataLayer.push({
           event: 'purchase',
           transaction_id: orderId,
           value: orderDetails.finalPrice,
@@ -53,7 +52,6 @@ function CheckoutSuccessContent() {
         });
         setGtmEventSent(true);
       }
-    }
   }, [orderDetails, orderId, gtmEventSent]);
 
   if (!orderId) {
