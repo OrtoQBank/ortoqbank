@@ -736,12 +736,17 @@ export const processInvoiceGeneration = internalAction({
         municipalServiceId: fiscalService.serviceId,
       });
       
+      // Truncate service name to 250 characters (Asaas limit)
+      const municipalServiceName = fiscalService.description.length > 250 
+        ? fiscalService.description.substring(0, 247) + '...'
+        : fiscalService.description;
+      
       // Schedule invoice with Asaas
       const result = await ctx.runAction(api.asaas.scheduleInvoice, {
         asaasPaymentId: invoice.asaasPaymentId,
         serviceDescription: invoice.serviceDescription,
         municipalServiceId: fiscalService.serviceId,
-        municipalServiceName: fiscalService.description,
+        municipalServiceName,
         observations: `Pedido: ${invoice.orderId}`,
       });
       
