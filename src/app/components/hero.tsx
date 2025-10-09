@@ -5,13 +5,15 @@ import Image from 'next/image';
 
 import { Button } from '@/components/ui/button';
 
+const scrollToPricing = () => {
+  const pricingSection = document.querySelector('#pricing');
+  if (pricingSection) {
+    pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+};
+
 export default function HeroSection() {
-  const scrollToPricing = () => {
-    const pricingSection = document.getElementById('pricing');
-    if (pricingSection) {
-      pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-    }
-  };
+  
 
   return (
     <section className="w-full bg-white py-12 md:py-18">
