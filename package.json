@@ -26,7 +26,8 @@
     "test:coverage": "vitest run --coverage --coverage.reporter=text",
     "sentry:sourcemaps": "sentry-cli sourcemaps inject --org ortoqbank --project ortoqbank ./.next && sentry-cli sourcemaps upload --org ortoqbank --project ortoqbank ./.next",
     "migrate:content": "node scripts/migrate-content-to-string.js",
-    "prepare": "husky"
+    "prepare": "husky",
+    "knip": "knip"
   },
   "dependencies": {
     "@clerk/localizations": "^3.20.1",
@@ -86,7 +87,7 @@
     "imagekitio-next": "^1.0.1",
     "lucide-react": "^0.525.0",
     "mercadopago": "^2.8.0",
-    "next": "15.4.1",
+    "next": "^15.5.4",
     "nextjs-toploader": "^3.8.16",
     "posthog-js": "^1.257.0",
     "posthog-node": "^4.18.0",
@@ -114,7 +115,7 @@
     "@testing-library/jest-dom": "^6.6.3",
     "@testing-library/react": "^16.3.0",
     "@testing-library/user-event": "^14.6.1",
-    "@types/node": "^22",
+    "@types/node": "^22.18.8",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@typescript-eslint/parser": "^8.37.0",
@@ -131,11 +132,12 @@
     "eslint-plugin-unicorn": "^56.0.1",
     "happy-dom": "^18.0.1",
     "husky": "^9.1.7",
+    "knip": "^5.64.2",
     "postcss": "^8",
     "prettier": "^3.6.2",
     "prettier-plugin-tailwindcss": "^0.6.14",
     "tailwindcss": "^4.1.11",
-    "typescript": "^5",
+    "typescript": "^5.9.3",
     "vite-tsconfig-paths": "^5.1.4",
     "vitest": "^3.2.4"
   },

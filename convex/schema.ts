@@ -355,15 +355,9 @@ export default defineSchema({
     paidAt: v.optional(v.number()), // When payment was confirmed
     provisionedAt: v.optional(v.number()), // When access was granted
     expiresAt: v.number(), // When this order expires (7 days)
-    
-    // Security (claim system)
-    claimToken: v.string(), // One-time claim token (UUID)
-    claimTokenUsed: v.boolean(), // Whether claim token has been used
-    claimTokenExpiresAt: v.number(), // Claim token expiration (7 days)
   })
     .index("by_email", ["email"])
     .index("by_user_id", ["userId"])
-    .index("by_claim_token", ["claimToken"])
     .index("by_status", ["status"])
     .index("by_asaas_payment", ["asaasPaymentId"])
     .index("by_external_reference", ["externalReference"]),
