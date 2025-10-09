@@ -17,6 +17,8 @@ export default function About() {
             Sobre o OrtoQBank
           </h2>
           <div className="mx-auto mb-6 h-1 w-20 rounded-full bg-[#2196F3]"></div>
+          
+      
           <p className="text-lg leading-relaxed text-gray-700">
             <span className="mb-3 block text-xl font-bold text-[#2196F3]">
               NOSSA METODOLOGIA
@@ -28,6 +30,20 @@ export default function About() {
             Você vai treinar para fazer exatamente o que fará no dia da prova:
           </p>
         </div>
+
+            {/* Video Section */}
+            <div className="mx-auto mb-8 aspect-video max-w-2xl overflow-hidden rounded-lg shadow-lg">
+            <iframe 
+              width="100%" 
+              height="100%" 
+              src="https://imagekit.io/player/embed/4hmtj9yu8/VID-20251008-WA0049-min.mp4?controls=true&autoplay=false&loop=false&background=%23000000&updatedAt=1759967892697&thumbnail=https%3A%2F%2Fik.imagekit.io%2F4hmtj9yu8%2FVID-20251008-WA0049-min.mp4%2Fik-thumbnail.jpg%3FupdatedAt%3D1759967892697&updatedAt=1759967892697" 
+              title="ImageKit video player" 
+              frameBorder="0" 
+              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              className="h-full w-full"
+            />
+          </div>
+
 
         <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
           <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
