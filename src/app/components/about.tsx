@@ -82,7 +82,7 @@ export default function About() {
             </h3>
             <p className="text-center text-gray-600">
               Aprenda enquanto faz questões e alcance o desempenho de 80% na
-              prova do TEOT 2026!
+              prova do TEOT e TEPOT!
             </p>
           </div>
 
