@@ -38,8 +38,10 @@ export default function About() {
               height="100%" 
               src="https://imagekit.io/player/embed/4hmtj9yu8/VID-20251008-WA0049-min.mp4?controls=true&autoplay=false&loop=false&background=%23000000&updatedAt=1759967892697&thumbnail=https%3A%2F%2Fik.imagekit.io%2F4hmtj9yu8%2FVID-20251008-WA0049-min.mp4%2Fik-thumbnail.jpg%3FupdatedAt%3D1759967892697&updatedAt=1759967892697" 
               title="ImageKit video player" 
-              frameBorder="0" 
+              sandbox="allow-scripts allow-same-origin"
               allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+              loading="lazy"
+              style={{ border: 0 }}
               className="h-full w-full"
             />
           </div>

@@ -51,7 +51,7 @@ export function PricingClient({ plans }: PricingClientProps) {
               className="group relative flex w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl transition-all duration-300 hover:scale-105 hover:bg-blue-500 hover:shadow-2xl lg:w-90 lg:max-w-none"
             >
               <div className="py-4 text-center">
-                <div className="inline-block rounded-full bg-blue-100 px-6 py-2 text-md font-bold text-blue-600 transition-all duration-300 group-hover:bg-white group-hover:text-blue-600">
+                <div className="inline-block rounded-full bg-blue-100 px-6 py-2 text-base font-bold text-blue-600 transition-all duration-300 group-hover:bg-white group-hover:text-blue-600">
                   {plan.badge}
                 </div>
               </div>

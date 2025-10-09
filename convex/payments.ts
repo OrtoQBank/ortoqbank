@@ -847,6 +847,23 @@ export const processInvoiceGeneration = internalAction({
           errorMessage: errorMsg,
         });
         
+        // Detailed admin alert for fiscal service configuration error
+        console.error(`🚨 ADMIN ALERT: Invoice generation failed - Fiscal service not found`, {
+          invoiceId: args.invoiceId,
+          orderId: invoice.orderId,
+          serviceDescription,
+          error: errorMsg,
+          severity: 'high',
+          category: 'configuration_error',
+          troubleshooting: {
+            step1: 'Verify ASAAS_FISCAL_SERVICE env var is set correctly (default: "02964 | 1.09")',
+            step2: 'Check fiscal service exists in Asaas: GET /fiscalInfo/services?description=<service>',
+            step3: 'Ensure fiscal info is complete in Asaas dashboard',
+            step4: 'Verify invoice features are enabled in your Asaas account settings',
+            note: 'This is a configuration error - payment processing is working correctly'
+          }
+        });
+        
         return null;
       }
       
