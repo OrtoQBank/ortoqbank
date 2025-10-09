@@ -34,10 +34,10 @@ function PixPaymentContent() {
 
   useEffect(() => {
     if (paymentStatus) {
-      if (paymentStatus.status === 'confirmed' && paymentStatus.claimToken) {
-        // Payment confirmed! Redirect to sign-up with claim token
-        console.log('Payment confirmed, redirecting to sign-up with claim token');
-        router.push(`/sign-up?claim=${paymentStatus.claimToken}`);
+      if (paymentStatus.status === 'confirmed') {
+        // Payment confirmed! Redirect to success page
+        console.log('Payment confirmed, redirecting to success page');
+        router.push(`/checkout/success?order=${pendingOrderId}`);
         return;
       }
 
@@ -55,7 +55,7 @@ function PixPaymentContent() {
     }, 30_000);
 
     return () => clearTimeout(timer);
-  }, [paymentStatus, router]);
+  }, [paymentStatus, router, pendingOrderId]);
 
   const handleCopyPixCode = () => {
     if (paymentStatus?.pixData?.qrPayload) {

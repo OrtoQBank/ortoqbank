@@ -189,7 +189,7 @@ function CheckoutPageContent() {
 
     try {
       // Step 1: Create pending order first (robust pattern)
-      const { pendingOrderId, claimToken, priceBreakdown } = await createPendingOrder({
+      const { pendingOrderId, priceBreakdown } = await createPendingOrder({
         email: data.email,
         cpf: data.cpf.replaceAll(/\D/g, ''),
         name: data.name,

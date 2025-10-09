@@ -24,7 +24,6 @@ export const createPendingOrder = mutation({
   },
   returns: v.object({
     pendingOrderId: v.id('pendingOrders'),
-    claimToken: v.string(),
     priceBreakdown: v.object({
       originalPrice: v.number(),
       couponDiscount: v.number(),
@@ -87,8 +86,6 @@ export const createPendingOrder = mutation({
       throw new Error('Invalid final price');
     }
 
-    // Generate claim token (valid for 7 days)
-    const claimToken = crypto.randomUUID();
     const now = Date.now();
     const sevenDays = 7 * 24 * 60 * 60 * 1000;
 
@@ -98,9 +95,6 @@ export const createPendingOrder = mutation({
       cpf: args.cpf.replace(/\D/g, ''), // Clean CPF
       name: args.name,
       productId: args.productId,
-      claimToken,
-      claimTokenExpiresAt: now + sevenDays,
-      claimTokenUsed: false,
       status: 'pending',
       originalPrice: regularPrice,
       finalPrice,
@@ -112,12 +106,11 @@ export const createPendingOrder = mutation({
       expiresAt: now + sevenDays,
     });
 
-    console.log(`📝 Created pending order ${pendingOrderId} with claim token ${claimToken}`);
+    console.log(`📝 Created pending order ${pendingOrderId}`);
     console.log(`💰 Price breakdown: Method=${args.paymentMethod}, Base R$ ${basePrice}, Coupon R$ ${couponDiscount}, Final R$ ${finalPrice}`);
 
     return {
       pendingOrderId,
-      claimToken,
       priceBreakdown: {
         originalPrice: regularPrice,
         couponDiscount,
@@ -219,12 +212,12 @@ export const processAsaasWebhook = internalAction({
           asaasPaymentId: payment.id,
         });
 
-        // Send Clerk invitation email as backup
+        // Send Clerk invitation email
         if (order) {
           try {
             await ctx.runAction(internal.payments.sendClerkInvitation, {
               email: order.email,
-              claimToken: order.claimToken,
+              orderId: pendingOrderId,
               customerName: order.name,
             });
             console.log(`📧 Sent Clerk invitation to ${order.email}`);
@@ -251,7 +244,6 @@ export const confirmPayment = internalMutation({
   returns: v.union(
     v.object({
       email: v.string(),
-      claimToken: v.string(),
       name: v.string(),
     }),
     v.null()
@@ -269,7 +261,6 @@ export const confirmPayment = internalMutation({
       console.log(`Order ${args.pendingOrderId} already processed, skipping`);
       return {
         email: order.email,
-        claimToken: order.claimToken,
         name: order.name,
       };
     }
@@ -330,80 +321,8 @@ export const confirmPayment = internalMutation({
     // Return order data for email invitation
     return {
       email: order.email,
-      claimToken: order.claimToken,
       name: order.name,
     };
-  },
-});
-
-/**
- * Claim a pending order after user signup
- * This is called right after Clerk signup completes
- */
-export const claimPendingOrder = mutation({
-  args: {
-    claimToken: v.string(),
-    clerkUserId: v.string(),
-    accountEmail: v.optional(v.string()), // Email from Clerk account
-  },
-  returns: v.object({
-    success: v.boolean(),
-    message: v.string(),
-    orderStatus: v.optional(v.string()),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      // Find the order by claim token
-      const order = await ctx.db
-        .query('pendingOrders')
-        .withIndex('by_claim_token', q => q.eq('claimToken', args.claimToken))
-        .unique();
-
-      if (!order) {
-        return {
-          success: false,
-          message: 'Token de acesso inválido ou expirado.',
-        };
-      }
-
-      // Check if token is expired or already used
-      if (order.claimTokenUsed || order.claimTokenExpiresAt < Date.now()) {
-        return {
-          success: false,
-          message: 'Token de acesso expirado ou já utilizado.',
-        };
-      }
-
-      // Mark token as used and link to user
-      await ctx.db.patch(order._id, {
-        userId: args.clerkUserId, // Updated field name
-        accountEmail: args.accountEmail, // Store Clerk account email
-        claimTokenUsed: true,
-      });
-
-      console.log(`🔗 Claimed order ${order._id} for user ${args.clerkUserId}`);
-      console.log(`📧 Contact email: ${order.email}, Account email: ${args.accountEmail}`);
-
-      // Trigger idempotent provisioning
-      await ctx.runMutation(internal.payments.maybeProvisionAccess, {
-        orderId: order._id,
-      });
-
-      return {
-        success: true,
-        message: order.status === 'paid' 
-          ? 'Conta criada e acesso liberado! Bem-vindo ao OrtoQBank.'
-          : 'Conta criada! Aguardando confirmação do pagamento.',
-        orderStatus: order.status,
-      };
-
-    } catch (error) {
-      console.error('Error claiming pending order:', error);
-      return {
-        success: false,
-        message: 'Erro interno. Tente novamente.',
-      };
-    }
   },
 });
 
@@ -430,16 +349,15 @@ export const maybeProvisionAccess = internalMutation({
       return null;
     }
 
-    // Check if we have both payment confirmation and user claim
+    // Check if we have both payment confirmation and user
     const hasPayment = order.status === 'paid';
-    const hasUser = order.userId && order.claimTokenUsed;
+    const hasUser = !!order.userId;
 
     console.log(`🔍 Checking provisioning readiness for order ${args.orderId}:`, {
       status: order.status,
       hasPayment,
       hasUser,
       userId: order.userId,
-      claimTokenUsed: order.claimTokenUsed,
       paidAt: order.paidAt,
     });
 
@@ -449,7 +367,6 @@ export const maybeProvisionAccess = internalMutation({
         hasUser,
         status: order.status,
         userId: order.userId,
-        claimTokenUsed: order.claimTokenUsed,
       });
       return null;
     }
@@ -518,7 +435,6 @@ export const claimOrderByEmail = mutation({
     await ctx.db.patch(paidOrder._id, {
       userId: args.clerkUserId,
       accountEmail: args.email,
-      claimTokenUsed: true,
     });
 
     // Trigger provisioning
@@ -539,7 +455,7 @@ export const claimOrderByEmail = mutation({
 export const sendClerkInvitation = internalAction({
   args: {
     email: v.string(),
-    claimToken: v.string(),
+    orderId: v.string(),
     customerName: v.string(),
   },
   returns: v.null(),
@@ -552,8 +468,6 @@ export const sendClerkInvitation = internalAction({
     }
 
     try {
-      const signupUrl = `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/sign-up?claim=${args.claimToken}`;
-      
       const response = await fetch('https://api.clerk.com/v1/invitations', {
         method: 'POST',
         headers: {
@@ -562,9 +476,9 @@ export const sendClerkInvitation = internalAction({
         },
         body: JSON.stringify({
           email_address: args.email,
-          redirect_url: signupUrl,
           public_metadata: {
-            claimToken: args.claimToken,
+            orderId: args.orderId,
+            customerName: args.customerName,
           },
         }),
       });
@@ -595,7 +509,6 @@ export const checkPaymentStatus = query({
   },
   returns: v.object({
     status: v.union(v.literal('pending'), v.literal('confirmed'), v.literal('failed')),
-    claimToken: v.optional(v.string()),
     orderDetails: v.optional(v.object({
       email: v.string(),
       productId: v.string(),
@@ -619,7 +532,6 @@ export const checkPaymentStatus = query({
       if (order.status === 'paid' || order.status === 'provisioned' || order.status === 'completed') {
         return {
           status: 'confirmed' as const,
-          claimToken: order.claimToken,
           orderDetails: {
             email: order.email,
             productId: order.productId,
@@ -641,57 +553,6 @@ export const checkPaymentStatus = query({
     } catch (error) {
       console.error('Error checking payment status:', error);
       return { status: 'failed' as const };
-    }
-  },
-});
-
-/**
- * Validate a claim token (for signup page)
- */
-export const validateClaimToken = query({
-  args: {
-    claimToken: v.string(),
-  },
-  returns: v.object({
-    isValid: v.boolean(),
-    orderDetails: v.optional(v.object({
-      email: v.string(),
-      name: v.string(),
-      productId: v.string(),
-      finalPrice: v.number(),
-      status: v.string(),
-    })),
-  }),
-  handler: async (ctx, args) => {
-    try {
-      // Find the order by claim token
-      const order = await ctx.db
-        .query('pendingOrders')
-        .withIndex('by_claim_token', q => q.eq('claimToken', args.claimToken))
-        .unique();
-
-      if (!order) {
-        return { isValid: false };
-      }
-
-      // Check if token is expired or used
-      if (order.claimTokenUsed || order.claimTokenExpiresAt < Date.now()) {
-        return { isValid: false };
-      }
-
-      return {
-        isValid: true,
-        orderDetails: {
-          email: order.email,
-          name: order.name,
-          productId: order.productId,
-          finalPrice: order.finalPrice,
-          status: order.status,
-        },
-      };
-    } catch (error) {
-      console.error('Error validating claim token:', error);
-      return { isValid: false };
     }
   },
 });

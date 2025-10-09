@@ -38,7 +38,7 @@ export default function FAQ() {
       answer: (
         <div className="space-y-2">
           <p>
-            O qBank, ou banco de questões, é um sistema diferente do tradicional
+            O OrtoQBank, ou banco de questões, é um sistema diferente do tradicional
             que utiliza as questões da prova e questões inéditas para ensinar
             conceitos fundamentais ao estudante. Com gabaritos diferenciados,
             nosso objetivo é ter um banco de questões diferente dos disponíveis
@@ -78,28 +78,48 @@ export default function FAQ() {
     },
     {
       question: 'Como funciona a garantia?',
-      answer:
-        'É garantido ao consumidor um período de testes. Se por algum motivo você não gostar do curso, envie um e-mail para o suporte (ortoqbank@gmail.com) dentro do período de 7 dias e devolvemos seu investimento.',
+        answer: (
+        <div className="space-y-2">
+          <p>É garantido ao consumidor um período de testes. Se por algum motivo você não gostar do curso, envie um e-mail para o suporte (ortoqbank@gmail.com) dentro do período de 7 dias e devolvemos seu investimento.</p>
+        </div>
+      ),
     },
     {
       question: 'Onde tiro minhas dúvidas?',
-      answer:
-        'Pelo nosso perfil oficial do instagram @ortoqbank Suporte via e-mail ortoqbank@gmail.com',
+      answer: (
+        <div className="space-y-2">
+          <p>Pelo nosso perfil oficial do instagram @ortoqbank Suporte via e-mail ortoqbank@gmail.com</p>
+        </div>
+      ),
     },
     {
       question: 'Qual a duração do acesso?',
-      answer:
-        'A duração do acesso depende do plano adquirido: Plano TEOT 2026: direcionado para R3, acesso até a data da 2a fase do TEOT 2026.   Plano TEOT 2027: direcionado para R2, acesso até a data da 2a fase do TEPOT 2027. Plano TEOT 2028: direcionado para R1, acesso até a data da 2a fase do TEOT 2028.',
+      answer: (
+        <div className="space-y-2">
+          <p>A duração do acesso depende do plano adquirido:</p>
+          <ul className="list-disc space-y-1 pl-5">
+            <li>Plano TEOT 2026: direcionado para R3, acesso até a data da 2a fase do TEPOT 2026.</li>
+            <li>Plano TEOT 2027: direcionado para R2, acesso até a data da 2a fase do TEPOT 2027.</li>
+            <li>Plano TEOT 2028: direcionado para R1, acesso até a data da 2a fase do TEPOT 2028.</li>
+          </ul>
+        </div>
+      ),
     },
     {
-      question: 'Posso dividir meu acesso?',
-      answer:
-        'O OrtoQBank é um curso individual. A plataforma dá feedback baseado no desempenho do aluno, e portanto não é recomendado ou permitido o compartilhamento de acesso.',
+      question: 'Posso dividir meu acesso?',  
+      answer: (
+        <div className="space-y-2">
+          <p>O OrtoQBank é um curso individual. A plataforma dá feedback baseado no desempenho do aluno, e portanto não é recomendado ou permitido o compartilhamento de acesso.</p>
+        </div>
+      ),
     },
     {
       question: 'Grupos de residentes têm desconto?',
-      answer:
-        'Sim, junte seus colegas e entre em contato conosco pelo instagram (@ortoqbank) ou e-mail oficial (ortoqbank@gmail.com) para adquirir condições especiais.',
+      answer: (
+        <div className="space-y-2">
+          <p>Sim, junte seus colegas e entre em contato conosco pelo instagram (@ortoqbank) ou e-mail oficial (ortoqbank@gmail.com) para adquirir condições especiais.</p>
+        </div>
+      ),
     },
   ];
 

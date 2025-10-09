@@ -1,6 +1,7 @@
 'use client';
 
-import { ArrowRight, CheckCircle, Mail } from 'lucide-react';
+import { useQuery } from 'convex/react';
+import { CheckCircle, Loader2, Mail, Home } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { Suspense, useEffect, useState } from 'react';
 
@@ -8,52 +9,66 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 
+import { api } from '../../../../convex/_generated/api';
+
+declare global {
+  interface Window {
+    dataLayer?: Object[];
+  }
+}
+
 function CheckoutSuccessContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const paymentId = searchParams.get('paymentId');
-  const orderId = searchParams.get('orderId');
+  const orderId = searchParams.get('order');
   
-  const [isLoading, setIsLoading] = useState(true);
-  const [paymentStatus, setPaymentStatus] = useState<'confirmed' | 'pending' | 'failed'>('pending');
+  const [gtmEventSent, setGtmEventSent] = useState(false);
 
+  // Get order details
+  const orderDetails = useQuery(
+    api.payments.getPendingOrderById,
+    orderId ? { orderId } : 'skip'
+  );
+
+  // Send GTM purchase event
   useEffect(() => {
-    // Simulate checking payment status
-    // In a real implementation, you would call an API to check the payment status
-    const checkPaymentStatus = async () => {
-      try {
-        // TODO: Implement actual payment status check
-        // const response = await fetch(`/api/payments/status?id=${paymentId}`);
-        // const data = await response.json();
-        
-        // For now, simulate a successful payment
-        setTimeout(() => {
-          setPaymentStatus('confirmed');
-          setIsLoading(false);
-        }, 2000);
-      } catch (error) {
-        console.error('Error checking payment status:', error);
-        setPaymentStatus('failed');
-        setIsLoading(false);
+    if (orderDetails && !gtmEventSent) {
+      // Push purchase event to GTM dataLayer
+      if (typeof window !== 'undefined' && window.dataLayer) {
+        window.dataLayer.push({
+          event: 'purchase',
+          transaction_id: orderId,
+          value: orderDetails.finalPrice,
+          currency: 'BRL',
+          items: [{
+            item_id: orderDetails.productId,
+            item_name: orderDetails.productId,
+            price: orderDetails.finalPrice,
+            quantity: 1,
+          }],
+        });
+        console.log('GTM purchase event sent:', {
+          transaction_id: orderId,
+          value: orderDetails.finalPrice,
+        });
+        setGtmEventSent(true);
       }
-    };
-
-    if (paymentId) {
-      checkPaymentStatus();
-    } else {
-      setIsLoading(false);
     }
-  }, [paymentId]);
+  }, [orderDetails, orderId, gtmEventSent]);
 
-  if (isLoading) {
+  if (!orderId) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="container mx-auto px-4 max-w-2xl">
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-                <p className="text-lg">Verificando status do pagamento...</p>
+                <AlertDescription className="text-red-600 font-medium">
+                  ID do pedido não encontrado
+                </AlertDescription>
+                <Button onClick={() => router.push('/')} className="mt-4">
+                  Voltar ao Início
+                </Button>
               </div>
             </CardContent>
           </Card>
@@ -62,34 +77,15 @@ function CheckoutSuccessContent() {
     );
   }
 
-  if (paymentStatus === 'failed') {
+  if (!orderDetails) {
     return (
       <div className="min-h-screen bg-gray-50 py-8">
         <div className="container mx-auto px-4 max-w-2xl">
           <Card>
-            <CardHeader className="text-center">
-              <CardTitle className="text-2xl text-red-600">
-                Pagamento Não Confirmado
-              </CardTitle>
-              <CardDescription>
-                Não foi possível confirmar seu pagamento
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="space-y-6">
-              <Alert variant="destructive">
-                <AlertDescription>
-                  Houve um problema ao processar seu pagamento. Por favor, verifique se o pagamento foi realizado
-                  ou entre em contato com nosso suporte.
-                </AlertDescription>
-              </Alert>
-
-              <div className="flex gap-4 justify-center">
-                <Button variant="outline" onClick={() => router.push('/')}>
-                  Voltar ao Início
-                </Button>
-                <Button onClick={() => router.push('/suporte')}>
-                  Falar com Suporte
-                </Button>
+            <CardContent className="pt-6">
+              <div className="text-center">
+                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                <p className="text-lg">Carregando detalhes do pedido...</p>
               </div>
             </CardContent>
           </Card>
@@ -103,92 +99,125 @@ function CheckoutSuccessContent() {
       <div className="container mx-auto px-4 max-w-2xl">
         <Card>
           <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-green-600">
-              <CheckCircle className="w-12 h-12 mx-auto mb-4" />
+            <div className="mx-auto mb-4">
+              <CheckCircle className="w-16 h-16 text-green-600 mx-auto" />
+            </div>
+            <CardTitle className="text-3xl text-green-600">
               Pagamento Confirmado!
             </CardTitle>
-            <CardDescription>
+            <CardDescription className="text-lg">
               Seu pagamento foi processado com sucesso
             </CardDescription>
           </CardHeader>
+          
           <CardContent className="space-y-6">
             {/* Success Message */}
             <Alert className="border-green-200 bg-green-50">
               <CheckCircle className="h-4 w-4 text-green-600" />
               <AlertDescription className="text-green-800">
-                <strong>Parabéns!</strong> Seu pagamento foi confirmado e seu acesso está sendo preparado.
+                <strong>Parabéns!</strong> Seu pagamento foi confirmado. Você receberá um email com instruções para criar sua conta e acessar a plataforma.
               </AlertDescription>
             </Alert>
 
-            {/* Next Steps */}
-            <div className="bg-blue-50 p-6 rounded-lg">
+            {/* Email Instructions */}
+            <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
               <h3 className="font-semibold text-blue-900 mb-4 flex items-center">
                 <Mail className="w-5 h-5 mr-2" />
                 Próximos Passos
               </h3>
               <div className="space-y-3 text-blue-800">
                 <div className="flex items-start">
-                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">
+                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
                     1
                   </div>
-                  <p>Você receberá um email de confirmação nos próximos minutos</p>
+                  <p>Verifique seu email <strong>({orderDetails.email})</strong> nos próximos minutos</p>
                 </div>
                 <div className="flex items-start">
-                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">
+                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
                     2
                   </div>
-                  <p>O email conterá um link para criar sua conta na plataforma</p>
+                  <p>O email conterá um link para criar sua conta na plataforma OrtoQBank</p>
                 </div>
                 <div className="flex items-start">
-                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5">
+                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
                     3
                   </div>
-                  <p>Após criar sua conta, você terá acesso completo ao OrtoQBank</p>
+                  <p>Após criar sua conta, você terá acesso completo ao conteúdo</p>
                 </div>
               </div>
             </div>
 
-            {/* Payment Details */}
-            {(paymentId || orderId) && (
-              <div className="bg-gray-50 p-4 rounded-lg">
-                <h3 className="font-semibold mb-2">Detalhes da Compra</h3>
-                <div className="space-y-1 text-sm text-gray-600">
-                  {paymentId && (
-                    <p><strong>ID do Pagamento:</strong> {paymentId}</p>
-                  )}
-                  {orderId && (
-                    <p><strong>ID do Pedido:</strong> {orderId}</p>
-                  )}
-                  <p><strong>Data:</strong> {new Date().toLocaleString('pt-BR')}</p>
+            {/* Quick Email Access Buttons */}
+            <div className="space-y-3">
+              <p className="text-center text-sm font-medium text-gray-700">
+                Acesse seu email rapidamente:
+              </p>
+              <div className="grid grid-cols-2 gap-3">
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open('https://mail.google.com', '_blank')}
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Abrir Gmail
+                </Button>
+                <Button
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => window.open('https://outlook.live.com', '_blank')}
+                >
+                  <Mail className="w-4 h-4 mr-2" />
+                  Abrir Outlook
+                </Button>
+              </div>
+            </div>
+
+            {/* Order Details */}
+            <div className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+              <h3 className="font-semibold mb-3 text-gray-900">Detalhes da Compra</h3>
+              <div className="space-y-2 text-sm text-gray-600">
+                <div className="flex justify-between">
+                  <span className="font-medium">ID do Pedido:</span>
+                  <span className="font-mono text-xs">{orderId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Email:</span>
+                  <span>{orderDetails.email}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Produto:</span>
+                  <span>{orderDetails.productId}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Valor:</span>
+                  <span className="text-green-600 font-semibold">R$ {orderDetails.finalPrice.toFixed(2)}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="font-medium">Data:</span>
+                  <span>{new Date().toLocaleString('pt-BR')}</span>
                 </div>
               </div>
-            )}
+            </div>
 
-            {/* Action Buttons */}
-            <div className="flex flex-col sm:flex-row gap-4 justify-center">
+            {/* Action Button */}
+            <div className="flex flex-col gap-3 pt-4">
               <Button 
-                variant="outline" 
                 onClick={() => router.push('/')}
-                className="flex items-center"
+                className="w-full flex items-center justify-center"
+                size="lg"
               >
+                <Home className="w-4 h-4 mr-2" />
                 Voltar ao Início
               </Button>
-              <Button 
-                onClick={() => router.push('/sign-up')}
-                className="flex items-center"
-              >
-                Criar Minha Conta
-                <ArrowRight className="w-4 h-4 ml-2" />
-              </Button>
             </div>
 
-            {/* Support */}
-            <div className="text-center text-sm text-gray-600">
+            {/* Support Note */}
+            <div className="text-center text-sm text-gray-600 pt-4 border-t">
               <p>
                 Não recebeu o email? Verifique sua caixa de spam ou{' '}
                 <button 
                   onClick={() => router.push('/suporte')}
-                  className="text-blue-600 hover:underline"
+                  className="text-blue-600 hover:underline font-medium"
                 >
                   entre em contato conosco
                 </button>
@@ -203,7 +232,11 @@ function CheckoutSuccessContent() {
 
 export default function CheckoutSuccessPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={
+      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+      </div>
+    }>
       <CheckoutSuccessContent />
     </Suspense>
   );
