@@ -616,12 +616,14 @@ function CheckoutPageContent() {
                       className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                     >
                       {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => {
-                        const installmentValue = regularPrice / num;
+                        // Use the final price after coupon discount if coupon is applied
+                        const priceForInstallments = appliedCoupon ? appliedCoupon.finalPrice : regularPrice;
+                        const installmentValue = priceForInstallments / num;
                         return (
                           <option key={num} value={num}>
                             {num === 1 
-                              ? `À vista - R$ ${regularPrice.toFixed(2)}`
-                              : `${num}x de R$ ${installmentValue.toFixed(2)} - Total: R$ ${regularPrice.toFixed(2)}`
+                              ? `À vista - R$ ${priceForInstallments.toFixed(2)}`
+                              : `${num}x de R$ ${installmentValue.toFixed(2)} - Total: R$ ${priceForInstallments.toFixed(2)}`
                             }
                           </option>
                         );
@@ -689,7 +691,7 @@ function CheckoutPageContent() {
                     {selectedPaymentMethod === 'CREDIT_CARD' && selectedInstallments > 1 && (
                       <div className="flex justify-between items-center text-sm text-blue-600">
                         <span>💳 Parcelamento</span>
-                        <span>{selectedInstallments}x de R$ {(regularPrice / selectedInstallments).toFixed(2)}</span>
+                        <span>{selectedInstallments}x de R$ {((appliedCoupon ? appliedCoupon.finalPrice : regularPrice) / selectedInstallments).toFixed(2)}</span>
                       </div>
                     )}
                     

@@ -802,6 +802,14 @@ export const generateInvoice = internalMutation({
 
 /**
  * Process invoice generation with Asaas (async, non-blocking)
+ * 
+ * NOTE: Invoice generation requires:
+ * 1. Invoice/NF-e features enabled on your Asaas account
+ * 2. Valid municipal service code for your municipality
+ * 3. Proper account configuration with Asaas (certificate, etc.)
+ * 
+ * If these are not available, the invoice will be marked as failed
+ * but payment processing will NOT be affected.
  */
 export const processInvoiceGeneration = internalAction({
   args: {
@@ -820,22 +828,58 @@ export const processInvoiceGeneration = internalAction({
         return null;
       }
       
-      // Get municipal service ID (code: 02964)
-      const serviceInfo = await ctx.runAction(api.asaas.getMunicipalServiceId, {
-        serviceCode: '02964',
+      console.log(`📄 Processing invoice generation for order ${invoice.orderId}`);
+      
+      // Get fiscal service ID from Asaas
+      // For software/digital content services, use: "02964 | 1.09"
+      const serviceDescription = process.env.ASAAS_FISCAL_SERVICE || '02964 | 1.09';
+      
+      const fiscalService = await ctx.runAction(api.asaas.getFiscalServiceId, {
+        serviceDescription,
       });
       
-      // Update invoice with service ID
+      if (!fiscalService) {
+        const errorMsg = `Fiscal service not found for: ${serviceDescription}. Check your Asaas fiscal configuration.`;
+        console.error(`⚠️ ${errorMsg}`);
+        
+        await ctx.runMutation(internal.payments.updateInvoiceError, {
+          invoiceId: args.invoiceId,
+          errorMessage: errorMsg,
+        });
+        
+        // Detailed admin alert for fiscal service configuration error
+        console.error(`🚨 ADMIN ALERT: Invoice generation failed - Fiscal service not found`, {
+          invoiceId: args.invoiceId,
+          orderId: invoice.orderId,
+          serviceDescription,
+          error: errorMsg,
+          severity: 'high',
+          category: 'configuration_error',
+          troubleshooting: {
+            step1: 'Verify ASAAS_FISCAL_SERVICE env var is set correctly (default: "02964 | 1.09")',
+            step2: 'Check fiscal service exists in Asaas: GET /fiscalInfo/services?description=<service>',
+            step3: 'Ensure fiscal info is complete in Asaas dashboard',
+            step4: 'Verify invoice features are enabled in your Asaas account settings',
+            note: 'This is a configuration error - payment processing is working correctly'
+          }
+        });
+        
+        return null;
+      }
+      
+      console.log(`📋 Using fiscal service: ${fiscalService.serviceId} - ${fiscalService.description}`);
+      
+      // Update invoice status to processing
       await ctx.runMutation(internal.payments.updateInvoiceServiceId, {
         invoiceId: args.invoiceId,
-        municipalServiceId: serviceInfo.serviceId,
+        municipalServiceId: fiscalService.serviceId,
       });
       
       // Schedule invoice with Asaas
       const result = await ctx.runAction(api.asaas.scheduleInvoice, {
         asaasPaymentId: invoice.asaasPaymentId,
         serviceDescription: invoice.serviceDescription,
-        municipalServiceId: serviceInfo.serviceId,
+        municipalServiceId: fiscalService.serviceId,
         observations: `Pedido: ${invoice.orderId}`,
       });
       
@@ -848,18 +892,30 @@ export const processInvoiceGeneration = internalAction({
       console.log(`✅ Invoice generated successfully: ${result.invoiceId}`);
       
     } catch (error) {
-      console.error(`❌ Invoice generation failed for ${args.invoiceId}:`, error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Invoice generation failed for ${args.invoiceId}:`, errorMessage);
       
       // Update invoice record with error (non-blocking)
       await ctx.runMutation(internal.payments.updateInvoiceError, {
         invoiceId: args.invoiceId,
-        errorMessage: error instanceof Error ? error.message : String(error),
+        errorMessage,
       });
       
-      // Alert admin via console (can be extended to email/Sentry)
+      // Detailed admin alert
       console.error(`🚨 ADMIN ALERT: Invoice generation failed`, {
         invoiceId: args.invoiceId,
-        error: error instanceof Error ? error.message : String(error),
+        orderId: (await ctx.runQuery(internal.payments.getInvoiceById, {
+          invoiceId: args.invoiceId,
+        }))?.orderId,
+        error: errorMessage,
+        troubleshooting: {
+          step1: 'Verify invoice features are enabled in your Asaas account settings',
+          step2: 'Check fiscal service description in ASAAS_FISCAL_SERVICE env var (default: "02964 | 1.09")',
+          step3: 'Ensure digital certificate is uploaded if required by your municipality',
+          step4: 'Verify fiscal info is complete in Asaas dashboard',
+          step5: 'Test endpoint: GET /fiscalInfo/services?description=02964%20%7C%201.09',
+          note: 'Payment has been processed successfully - only invoice generation failed'
+        }
       });
     }
     

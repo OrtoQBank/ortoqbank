@@ -33,7 +33,7 @@ export function PricingClient({ plans }: PricingClientProps) {
    };
 
   return (
-    <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
+    <div id="pricing" className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
       <div className="container mx-auto mb-16 px-4 text-center">
         <h1 className="mb-3 text-4xl font-bold text-blue-500">
           Orto<span className="text-blue-500">Q</span>Bank
@@ -51,21 +51,25 @@ export function PricingClient({ plans }: PricingClientProps) {
               className="group relative flex w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl transition-all duration-300 hover:scale-105 hover:bg-blue-500 hover:shadow-2xl lg:w-90 lg:max-w-none"
             >
               <div className="py-4 text-center">
-                <div className="inline-block rounded-full bg-blue-100 px-4 py-1 text-xs font-bold text-blue-600 transition-all duration-300 group-hover:bg-white group-hover:text-blue-600">
+                <div className="inline-block rounded-full bg-blue-100 px-6 py-2 text-base font-bold text-blue-600 transition-all duration-300 group-hover:bg-white group-hover:text-blue-600">
                   {plan.badge}
                 </div>
               </div>
 
               <div className="px-6 pb-6 text-center">
-                <div className="mb-2 min-h-[1.75rem] text-lg text-red-500 line-through transition-all duration-300 group-hover:text-white/70">
+                <div className="mb-2 min-h-[2rem] text-xl text-red-500 transition-all duration-300 group-hover:text-white/70">
                   {plan.originalPrice ? (
-                    <span>{plan.originalPrice}</span>
+                    <span>
+                      <span className="font-medium">De: </span>
+                      <span className="line-through">{plan.originalPrice}</span>
+                    </span>
                   ) : (
                     <span className="invisible">placeholder</span>
                   )}
                 </div>
-                <div className="mb-2 text-4xl font-bold text-gray-900 transition-all duration-300 group-hover:text-white">
-                  {plan.price}
+                <div className="mb-2 text-gray-900 transition-all duration-300 group-hover:text-white">
+                  <span className="text-lg font-medium">Para: </span>
+                  <span className="text-4xl font-bold">{plan.price}</span>
                 </div>
                 <div className="text-sm text-gray-600 transition-all duration-300 group-hover:text-white">
                   {plan.installments}

@@ -33,14 +33,14 @@ const sifonn = localFont({
 export const metadata: Metadata = {
   title: 'OrtoQBank - Preparação para TEOT | Banco de Questões de Ortopedia',
   description:
-    'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Trilhas de estudo, simulados completos e testes personalizados. Planos a partir de R$ 97.',
+    'OrtoQBank - Preparatório para o TEOT l Curso TEOT. 1° lugar TEOT. Conheça nossa plataforma e garanta sua aprovação na prova da SBOT! Feito por especialistas da USP.',
   keywords:
     'TEOT, ortopedia, questões, simulados, preparação, residência médica, ortopedista',
   authors: [{ name: 'OrtoQBank' }],
   openGraph: {
     title: 'OrtoQBank - Preparação para TEOT',
     description:
-      'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+      'OrtoQBank - Preparatório para o TEOT l Curso TEOT. 1° lugar TEOT. Conheça nossa plataforma e garanta sua aprovação na prova da SBOT! Feito por especialistas da USP.',
     type: 'website',
     locale: 'pt_BR',
   },
@@ -48,7 +48,7 @@ export const metadata: Metadata = {
     card: 'summary_large_image',
     title: 'OrtoQBank - Preparação para TEOT',
     description:
-      'Banco de questões de ortopedia para estudantes se prepararem para o TEOT. Planos a partir de R$ 97.',
+      'OrtoQBank - Preparatório para o TEOT l Curso TEOT. 1° lugar TEOT. Conheça nossa plataforma e garanta sua aprovação na prova da SBOT! Feito por especialistas da USP.',
   },
   robots: {
     index: true,
@@ -86,36 +86,7 @@ export default function RootLayout({
               <Toaster />
             </ConvexClientProvider>
           </PostHogProvider>
-        </ErrorBoundary>
-
-        {/* Facebook Pixel */}
-        <Script
-          id="facebook-pixel"
-          strategy="afterInteractive"
-          dangerouslySetInnerHTML={{
-            __html: `
-              !function(f,b,e,v,n,t,s)
-              {if(f.fbq)return;n=f.fbq=function(){n.callMethod?
-              n.callMethod.apply(n,arguments):n.queue.push(arguments)};
-              if(!f._fbq)f._fbq=n;n.push=n;n.loaded=!0;n.version='2.0';
-              n.queue=[];t=b.createElement(e);t.async=!0;
-              t.src=v;s=b.getElementsByTagName(e)[0];
-              s.parentNode.insertBefore(t,s)}(window, document,'script',
-              'https://connect.facebook.net/en_US/fbevents.js');
-              fbq('init', '1038461214913312');
-              fbq('track', 'PageView');
-            `,
-          }}
-        />
-        <noscript>
-          <img
-            height="1"
-            width="1"
-            style={{ display: 'none' }}
-            src="https://www.facebook.com/tr?id=1038461214913312&ev=PageView&noscript=1"
-            alt="Facebook Pixel"
-          />
-        </noscript>
+        </ErrorBoundary>  
       </body>
     </html>
   );
