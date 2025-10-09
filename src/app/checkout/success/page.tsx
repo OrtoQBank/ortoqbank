@@ -32,9 +32,10 @@ function CheckoutSuccessContent() {
 
   // Send GTM purchase event
   useEffect(() => {
-    if (orderDetails && !gtmEventSent && // Push purchase event to GTM dataLayer
-      typeof globalThis !== 'undefined' && globalThis.dataLayer) {
-        globalThis.dataLayer.push({
+    if (orderDetails && !gtmEventSent && typeof globalThis !== 'undefined') {
+      const dataLayer = (globalThis as typeof globalThis & { dataLayer?: Object[] }).dataLayer;
+      if (dataLayer) {
+        dataLayer.push({
           event: 'purchase',
           transaction_id: orderId,
           value: orderDetails.finalPrice,
@@ -52,6 +53,7 @@ function CheckoutSuccessContent() {
         });
         setGtmEventSent(true);
       }
+    }
   }, [orderDetails, orderId, gtmEventSent]);
 
   if (!orderId) {
