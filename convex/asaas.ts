@@ -156,6 +156,7 @@ class AsaasClient {
     payment: string; // Payment ID
     serviceDescription: string;
     municipalServiceId: string; // The service ID from fiscalInfo/services (e.g., "306562")
+    municipalServiceName: string; // The service name/description
     observations?: string;
   }): Promise<AsaasInvoice> {
     return this.makeRequest<AsaasInvoice>('/invoices', {
@@ -164,6 +165,7 @@ class AsaasClient {
         payment: params.payment,
         serviceDescription: params.serviceDescription,
         municipalServiceId: params.municipalServiceId,
+        municipalServiceName: params.municipalServiceName,
         observations: params.observations,
       }),
     });
@@ -505,6 +507,7 @@ export const scheduleInvoice = action({
     asaasPaymentId: v.string(),
     serviceDescription: v.string(),
     municipalServiceId: v.string(), // Service ID like "306562"
+    municipalServiceName: v.string(), // Service name/description
     observations: v.optional(v.string()),
   },
   returns: v.object({
@@ -514,12 +517,13 @@ export const scheduleInvoice = action({
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
     
-    console.log(`📄 Scheduling invoice with municipal service ID: ${args.municipalServiceId}`);
+    console.log(`📄 Scheduling invoice with municipal service: ${args.municipalServiceId} - ${args.municipalServiceName}`);
     
     const invoice = await asaas.scheduleInvoice({
       payment: args.asaasPaymentId,
       serviceDescription: args.serviceDescription,
       municipalServiceId: args.municipalServiceId,
+      municipalServiceName: args.municipalServiceName,
       observations: args.observations,
     });
     

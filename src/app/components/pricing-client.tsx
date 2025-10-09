@@ -39,7 +39,7 @@ export function PricingClient({ plans }: PricingClientProps) {
           Orto<span className="text-blue-500">Q</span>Bank
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-gray-600">
-          Escolha o plano ideal para sua preparação e garante sua aprovação no
+          Escolha o plano ideal para sua preparação e garanta sua aprovação no
           TEOT
         </p>
       </div>
@@ -68,7 +68,7 @@ export function PricingClient({ plans }: PricingClientProps) {
                   )}
                 </div>
                 <div className="mb-2 text-gray-900 transition-all duration-300 group-hover:text-white">
-                  <span className="text-lg font-medium">Para: </span>
+                  <span className="text-lg font-medium">Por: </span>
                   <span className="text-4xl font-bold">{plan.price}</span>
                 </div>
                 <div className="text-sm text-gray-600 transition-all duration-300 group-hover:text-white">

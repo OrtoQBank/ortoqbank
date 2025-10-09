@@ -741,6 +741,7 @@ export const processInvoiceGeneration = internalAction({
         asaasPaymentId: invoice.asaasPaymentId,
         serviceDescription: invoice.serviceDescription,
         municipalServiceId: fiscalService.serviceId,
+        municipalServiceName: fiscalService.description,
         observations: `Pedido: ${invoice.orderId}`,
       });
       
