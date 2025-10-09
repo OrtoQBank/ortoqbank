@@ -89,7 +89,7 @@ export default function FAQ() {
     {
       question: 'Qual a duração do acesso?',
       answer:
-        'A duração do acesso depende do plano adquirido: Plano TEOT 2026: direcionado para R3, acesso até a ata da 2a fase do TEOT 2026.   Plano TEOT 2027: direcionado para R2, acesso até a ata da 2a fase do TEPOT 2027. Plano TEOT 2028: direcionado para R1, acesso até a ata da 2a fase do TEOT 2028.',
+        'A duração do acesso depende do plano adquirido: Plano TEOT 2026: direcionado para R3, acesso até a data da 2a fase do TEOT 2026.   Plano TEOT 2027: direcionado para R2, acesso até a data da 2a fase do TEPOT 2027. Plano TEOT 2028: direcionado para R1, acesso até a data da 2a fase do TEOT 2028.',
     },
     {
       question: 'Posso dividir meu acesso?',
