@@ -126,7 +126,7 @@ export default function FAQ() {
   return (
     <section id="faq" className="bg-white py-12 md:py-16">
       <div className="container mx-auto px-4">
-        <h2 className="mb-8 text-center text-3xl font-bold text-[#2196F3] md:text-4xl">
+        <h2 className="mb-8 text-center text-3xl font-bold text-brand-blue md:text-4xl">
           Perguntas Frequentes
         </h2>
         <div className="mx-auto max-w-3xl">
@@ -137,7 +137,7 @@ export default function FAQ() {
                 value={`item-${index}`}
                 className="border-b border-blue-100"
               >
-                <AccordionTrigger className="text-left hover:text-[#2196F3]">
+                <AccordionTrigger className="text-left hover:text-brand-blue">
                   {faq.question}
                 </AccordionTrigger>
                 <AccordionContent className="text-gray-600">

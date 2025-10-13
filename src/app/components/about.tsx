@@ -13,14 +13,14 @@ export default function About() {
     <section id="sobre" className="bg-blue-50 py-8 md:py-12">
       <div className="container mx-auto px-4">
         <div className="mx-auto mb-12 max-w-3xl text-center">
-          <h2 className="mb-4 text-3xl font-bold text-[#2196F3] md:text-4xl lg:text-5xl">
+          <h2 className="mb-4 text-3xl font-bold text-brand-blue md:text-4xl lg:text-5xl">
             Sobre o OrtoQBank
           </h2>
-          <div className="mx-auto mb-6 h-1 w-20 rounded-full bg-[#2196F3]"></div>
+          <div className="mx-auto mb-6 h-1 w-20 rounded-full bg-brand-blue"></div>
           
       
           <p className="text-lg leading-relaxed text-gray-700">
-            <span className="mb-3 block text-xl font-bold text-[#2196F3]">
+            <span className="mb-3 block text-xl font-bold text-brand-blue">
               NOSSA METODOLOGIA
             </span>
             Criamos um método validado nas provas mais concorridas do universo
@@ -51,7 +51,7 @@ export default function About() {
           {/* First row - 3 cards */}
           <div className="grid gap-6 md:grid-cols-3">
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-[#2196F3]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue">
                 <FileText className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -65,7 +65,7 @@ export default function About() {
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-[#2196F3]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue">
                 <Smartphone className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -78,7 +78,7 @@ export default function About() {
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-[#2196F3]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue">
                 <Lightbulb className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -94,7 +94,7 @@ export default function About() {
           {/* Second row - 2 cards centered */}
           <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-[#2196F3]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue">
                 <BarChart3 className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -107,7 +107,7 @@ export default function About() {
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-[#2196F3]">
+              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-blue-50 text-brand-blue">
                 <BookOpen className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
