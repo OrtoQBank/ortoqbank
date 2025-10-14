@@ -54,7 +54,7 @@ export default function QuizCard() {
 
   if (isCompleted) {
     return (
-      <div className="flex min-h-[300px] w-full items-center justify-center rounded-3xl border border-[#2196F3] bg-white p-4 shadow-lg">
+      <div className="flex min-h-[300px] w-full items-center justify-center rounded-3xl border border-brand-blue bg-white p-4 shadow-lg">
         <div className="text-center">
           <h3 className="mb-3 text-xl font-bold text-brand-blue">
             Excelente trabalho! 🎉
