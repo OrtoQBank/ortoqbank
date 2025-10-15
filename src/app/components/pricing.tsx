@@ -5,7 +5,11 @@ import { PricingClient } from './pricing-client';
 
 // Server component that fetches the data
 export default async function Pricing() {
-  const plans = await fetchQuery(api.pricingPlans.getPricingPlans);
-
-  return <PricingClient plans={plans} />;
+  try {
+    const plans = await fetchQuery(api.pricingPlans.getPricingPlans);
+    return <PricingClient plans={plans} />;
+  } catch (error) {
+    console.error('Failed to fetch pricing plans:', error);
+    return <PricingClient plans={[]} />;
+  }
 }
