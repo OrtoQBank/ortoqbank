@@ -88,8 +88,7 @@ export const CreditCardFlipper = ({
   };
 
   return (
-    <CreditCardFlipContext.Provider value={true}>
-      {/* biome-ignore lint/nursery/noStaticElementInteractions: tap to flip for touch devices */}
+    <CreditCardFlipContext.Provider value={true}>     
       <div
         aria-label="Flip credit card"
         className={cn(

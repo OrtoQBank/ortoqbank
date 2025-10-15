@@ -131,7 +131,7 @@
     "eslint-plugin-prettier": "^5.4.0",
     "eslint-plugin-simple-import-sort": "^12.1.1",
     "eslint-plugin-unicorn": "^56.0.1",
-    "happy-dom": "^18.0.1",
+    "happy-dom": "^20.0.2",
     "husky": "^9.1.7",
     "knip": "^5.64.2",
     "postcss": "^8",
