@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+
 import {
   CreditCard,
   CreditCardChip,
@@ -17,7 +18,7 @@ const detectCardType = (cardNumber: string): 'Visa' | 'Mastercard' | 'Amex' | 'D
   const cleanNumber = cardNumber.replaceAll(/\s/g, '');
   
   // Visa: starts with 4
-  if (/^4/.test(cleanNumber)) {
+  if (cleanNumber.startsWith('4')) {
     return 'Visa';
   }
   

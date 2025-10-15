@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { PaymentIcon as OriginalPaymentIcon } from "react-svg-credit-card-payment-icons";
+
 import { cn } from "@/lib/utils";
 
 // Suppress React's "Invalid DOM property clip-path" warning from third-party library (only once)
@@ -43,7 +44,7 @@ const useSupportsHover = () => {
   const [supportsHover, setSupportsHover] = useState(false);
 
   useEffect(() => {
-    const mql = window.matchMedia("(hover: hover)");
+    const mql = globalThis.matchMedia("(hover: hover)");
     const handler = (e: MediaQueryListEvent) => setSupportsHover(e.matches);
 
     setSupportsHover(mql.matches);

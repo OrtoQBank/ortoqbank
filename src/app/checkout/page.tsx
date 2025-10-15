@@ -8,12 +8,12 @@ import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { CreditCardPreview } from '@/components/checkout/CreditCardPreview';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { CreditCardPreview } from '@/components/checkout/CreditCardPreview';
 
 import { api } from '../../../convex/_generated/api';
 
@@ -53,8 +53,8 @@ const checkoutSchema = z.object({
       const [month, year] = val.split('/');
       const currentYear = new Date().getFullYear() % 100; // Get last 2 digits
       const currentMonth = new Date().getMonth() + 1;
-      const expYear = parseInt(year, 10);
-      const expMonth = parseInt(month, 10);
+      const expYear = Number.parseInt(year, 10);
+      const expMonth = Number.parseInt(month, 10);
       
       // Maximum 20 years in the future (e.g., if current is 25, max is 45)
       const maxYear = (currentYear + 20) % 100;
@@ -643,11 +643,11 @@ function CheckoutPageContent() {
                           maxLength={5}
                             className="text-center"
                           onChange={(e) => {
-                            let value = e.target.value.replace(/\D/g, '');
+                            let value = e.target.value.replaceAll(/\D/g, '');
                             
                             // Smart month formatting
-                            if (value.length >= 1) {
-                              const firstDigit = parseInt(value[0], 10);
+                            if (value.length > 0) {
+                              const firstDigit = Number.parseInt(value[0], 10);
                               
                               // If first digit is 2-9, assume it's a single-digit month (02-09)
                               if (firstDigit >= 2 && firstDigit <= 9 && value.length === 1) {
@@ -656,7 +656,7 @@ function CheckoutPageContent() {
                               
                               // If first digit is 1, check second digit for valid month (10-12)
                               if (firstDigit === 1 && value.length >= 2) {
-                                const secondDigit = parseInt(value[1], 10);
+                                const secondDigit = Number.parseInt(value[1], 10);
                                 if (secondDigit > 2) {
                                   // Invalid month like 13-19, reset to just "1"
                                   value = '1';
@@ -665,7 +665,7 @@ function CheckoutPageContent() {
                               
                               // If first digit is 0, second digit must be 1-9
                               if (firstDigit === 0 && value.length >= 2) {
-                                const secondDigit = parseInt(value[1], 10);
+                                const secondDigit = Number.parseInt(value[1], 10);
                                 if (secondDigit === 0) {
                                   // Invalid month "00", reset to just "0"
                                   value = '0';
@@ -698,7 +698,7 @@ function CheckoutPageContent() {
                           maxLength={4}
                             className="text-center"
                           onChange={(e) => {
-                            const value = e.target.value.replace(/\D/g, '');
+                            const value = e.target.value.replaceAll(/\D/g, '');
                             setValue('cardCvv', value);
                           }}
                         />
