@@ -215,12 +215,9 @@ function CheckoutSuccessContent() {
             <div className="text-center text-sm text-gray-600 pt-4 border-t">
               <p>
                 Não recebeu o email? Verifique sua caixa de spam ou{' '}
-                <button 
-                  onClick={() => router.push('/suporte')}
-                  className="text-blue-600 hover:underline font-medium"
-                >
-                  entre em contato conosco
-                </button>
+              <a href="mailto:suporte@ortoqbank.com.br" className="text-blue-500">suporte@ortoqbank.com.br</a>
+              {' '} ou entre em contato conosco no instagram <a href="https://instagram.com/ortoqbank" className="text-blue-500">@ortoqbank</a>
+              <br />
               </p>
             </div>
           </CardContent>

@@ -21,9 +21,14 @@ const suppressClipPathWarning = () => {
 
   const originalError = console.error;
   console.error = (...args: any[]) => {
+    // Check if any argument contains the clip-path warning
+    const messageString = args.map(arg => 
+      typeof arg === 'string' ? arg : JSON.stringify(arg)
+    ).join(' ');
+    
     if (
-      typeof args[0] === 'string' &&
-      args[0].includes('Invalid DOM property `clip-path`')
+      messageString.includes('Invalid DOM property `clip-path`') ||
+      messageString.includes('clip-path') && messageString.includes('clipPath')
     ) {
       return; // Suppress this specific warning
     }
@@ -87,20 +92,33 @@ export const CreditCardFlipper = ({
     }
   };
 
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "Enter" || e.key === " ") {
+      if (e.key === " ") {
+        e.preventDefault();
+      }
+      handleClick();
+    }
+  };
+
   return (
     <CreditCardFlipContext.Provider value={true}>     
       <div
+        role="button"
+        tabIndex={0}
         aria-label="Flip credit card"
+        aria-pressed={isFlipped}
         className={cn(
           "h-full w-full",
           "@xs:rounded-2xl rounded-lg",
           "transform-3d transition duration-700 ease-in-out",
           supportsHover &&
             "group-hover/kibo-credit-card:-rotate-y-180 group-hover/kibo-credit-card:shadow-lg",
-          !supportsHover && isFlipped && "-rotate-y-180 shadow-lg",
+          isFlipped && "-rotate-y-180 shadow-lg",
           className
         )}
         onClick={handleClick}
+        onKeyDown={handleKeyDown}
         {...props}
       >
         {children}
