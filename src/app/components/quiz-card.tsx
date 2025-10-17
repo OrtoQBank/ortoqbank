@@ -23,7 +23,7 @@ const questions = [
 ];
 
 const getButtonStyle = (isActive: boolean, isCorrect: boolean | undefined) => {
-  if (!isActive) return 'bg-white text-[#2196F3] hover:bg-gray-100';
+  if (!isActive) return 'bg-white text-brand-blue hover:bg-gray-100';
   if (isCorrect) return 'bg-green-500 text-white hover:bg-green-600';
   return 'bg-red-500 text-white hover:bg-red-600';
 };
@@ -54,9 +54,9 @@ export default function QuizCard() {
 
   if (isCompleted) {
     return (
-      <div className="flex min-h-[300px] w-full items-center justify-center rounded-3xl border border-[#2196F3] bg-white p-4 shadow-lg">
+      <div className="flex min-h-[300px] w-full items-center justify-center rounded-3xl border border-brand-blue bg-white p-4 shadow-lg">
         <div className="text-center">
-          <h3 className="mb-3 text-xl font-bold text-[#2196F3]">
+          <h3 className="mb-3 text-xl font-bold text-brand-blue">
             Excelente trabalho! 🎉
           </h3>
           <p className="mb-4 text-base text-gray-600">
@@ -70,7 +70,7 @@ export default function QuizCard() {
               <li>✓ Simulados personalizados</li>
               <li>✓ Explicações completas de cada questão</li>
             </ul>
-            <p className="text-[#2196F3]">
+            <p className="text-brand-blue">
               Cadastre-se agora para elevar seus estudos ao próximo nível!
             </p>
           </div>
@@ -85,7 +85,7 @@ export default function QuizCard() {
         return (
           <div
             key={questions.indexOf(question)}
-            className={`absolute inset-0 w-full rounded-3xl border border-[#2196F3] bg-white p-4 shadow-lg transition-all duration-300 ${
+            className={`absolute inset-0 w-full rounded-3xl border border-brand-blue bg-white p-4 shadow-lg transition-all duration-300 ${
               {
                 0: 'z-20',
                 1: 'z-10 translate-y-2',
@@ -93,7 +93,7 @@ export default function QuizCard() {
               }[index] || ''
             }`}
           >
-            <h3 className="mb-3 text-xl font-semibold text-[#2196F3]">
+            <h3 className="mb-3 text-xl font-semibold text-brand-blue">
               {question.question}
             </h3>
             <div className="space-y-1.5">
@@ -103,7 +103,7 @@ export default function QuizCard() {
                   className={`w-full justify-start ${getButtonStyle(
                     index === 0 && selectedAnswer === alternativeIndex,
                     isCorrect,
-                  )} border border-[#2196F3]`}
+                  )} border border-brand-blue`}
                   onClick={() => index === 0 && handleAnswer(alternativeIndex)}
                   disabled={
                     index !== 0 ||

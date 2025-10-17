@@ -21,7 +21,7 @@ export default function Home() {
         <Pricing />
         <FAQ />
       </main>
-      <footer className="mt-auto bg-[#2196F3] py-4 text-white">
+      <footer className="mt-auto bg-brand-blue py-4 text-white">
         <div className="container mx-auto px-4 text-center">
           <p>&copy; 2025 OrtoQBank. Todos os direitos reservados.</p>
         </div>

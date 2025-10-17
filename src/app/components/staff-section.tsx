@@ -31,7 +31,7 @@ export default function StaffSection() {
   return (
     <section className="bg-white py-12 md:py-16">
       <div className="container mx-auto px-4">
-        <h2 className="mb-8 text-center text-3xl font-bold text-[#2196F3] md:text-4xl">
+        <h2 className="mb-8 text-center text-3xl font-bold text-brand-blue md:text-4xl">
           Nossa Equipe
         </h2>
         <div className="mx-auto grid max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
@@ -51,7 +51,7 @@ export default function StaffSection() {
                 />
               </div>
               <div className="p-4">
-                <h3 className="mb-1 text-xl font-semibold text-[#2196F3]">
+                <h3 className="mb-1 text-xl font-semibold text-brand-blue">
                   {member.name}
                 </h3>
 

@@ -39,7 +39,7 @@ export function FeedbackModal({
         <div className="flex flex-col items-center justify-center space-y-4 py-6">
           {state === 'loading' && (
             <>
-              <Loader2 className="h-12 w-12 animate-spin text-[#2096f4]" />
+              <Loader2 className="h-12 w-12 animate-spin text-brand-blue" />
               <DialogTitle>Criando seu quiz...</DialogTitle>
               <DialogDescription>
                 Estamos preparando seu teste personalizado. Você será
