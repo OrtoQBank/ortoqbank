@@ -1,4 +1,5 @@
 import { v } from "convex/values";
+
 import { api } from "./_generated/api";
 import { action } from "./_generated/server";
 
@@ -73,7 +74,7 @@ class AsaasClient {
     
     console.log('AsaaS Environment:', isProduction ? 'production' : 'sandbox');
     console.log('AsaaS Base URL:', this.baseUrl);
-    console.log('AsaaS API Key prefix:', this.apiKey?.substring(0, 10) + '...');
+    console.log('AsaaS API Key prefix:', this.apiKey?.slice(0, 10) + '...');
   }
 
   async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
@@ -100,6 +101,11 @@ class AsaasClient {
     name: string;
     email: string;
     cpfCnpj: string;
+    phone?: string;
+    mobilePhone?: string;
+    postalCode?: string;
+    address?: string;
+    addressNumber?: string;
   }): Promise<AsaasCustomer> {
     return this.makeRequest<AsaasCustomer>('/customers', {
       method: 'POST',
@@ -185,6 +191,11 @@ export const createAsaasCustomer = action({
     name: v.string(),
     email: v.string(),
     cpf: v.string(),
+    phone: v.optional(v.string()),
+    mobilePhone: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    address: v.optional(v.string()),
+    addressNumber: v.optional(v.string()),
   },
   returns: v.object({
     customerId: v.string(),
@@ -195,7 +206,12 @@ export const createAsaasCustomer = action({
     const customer = await asaas.createCustomer({
       name: args.name,
       email: args.email,
-      cpfCnpj: args.cpf.replace(/\D/g, ''),
+      cpfCnpj: args.cpf.replaceAll(/\D/g, ''),
+      phone: args.phone,
+      mobilePhone: args.mobilePhone,
+      postalCode: args.postalCode,
+      address: args.address,
+      addressNumber: args.addressNumber || 'SN', // Default to "SN" if not provided
     });
 
     return {
@@ -414,15 +430,18 @@ export const getPaymentStatus = action({
     let status = 'pending';
     switch (payment.status) {
       case 'CONFIRMED':
-      case 'RECEIVED':
+      case 'RECEIVED': {
         status = 'confirmed';
         break;
-      case 'PENDING':
+      }
+      case 'PENDING': {
         status = 'pending';
         break;
-      case 'OVERDUE':
+      }
+      case 'OVERDUE': {
         status = 'expired';
         break;
+      }
       case 'REFUNDED':
       case 'RECEIVED_IN_CASH_UNDONE':
       case 'CHARGEBACK_REQUESTED':
@@ -430,11 +449,13 @@ export const getPaymentStatus = action({
       case 'AWAITING_CHARGEBACK_REVERSAL':
       case 'DUNNING_REQUESTED':
       case 'DUNNING_RECEIVED':
-      case 'AWAITING_RISK_ANALYSIS':
+      case 'AWAITING_RISK_ANALYSIS': {
         status = 'failed';
         break;
-      default:
+      }
+      default: {
         status = 'pending';
+      }
     }
 
     return {

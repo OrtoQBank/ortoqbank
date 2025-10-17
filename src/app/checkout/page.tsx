@@ -249,6 +249,12 @@ function CheckoutPageContent() {
         productId: planId,
         paymentMethod: data.paymentMethod,
         couponCode: appliedCoupon ? couponCode : undefined,
+        // Address fields (required for invoice generation)
+        phone: data.phone,
+        mobilePhone: data.phone,
+        postalCode: data.postalCode,
+        address: data.address,
+        addressNumber: addressNumber,
       });
 
       // Step 2: Create customer using Convex action
@@ -256,6 +262,12 @@ function CheckoutPageContent() {
         name: data.name,
         email: data.email,
         cpf: data.cpf.replaceAll(/\D/g, ''),
+        // Address fields (required for invoice generation)
+        phone: data.phone,
+        mobilePhone: data.phone,
+        postalCode: data.postalCode,
+        address: data.address,
+        addressNumber: addressNumber,
       });
 
       let payment: any;

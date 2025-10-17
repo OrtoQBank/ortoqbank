@@ -318,6 +318,13 @@ export default defineSchema({
     name: v.string(),
     productId: v.string(), // Product identifier (e.g., "ortoqbank_2025")
     
+    // Address info (required for invoice generation - optional for migration)
+    phone: v.optional(v.string()),
+    mobilePhone: v.optional(v.string()),
+    postalCode: v.optional(v.string()), // CEP
+    address: v.optional(v.string()), // Street address
+    addressNumber: v.optional(v.string()), // Address number (defaults to "SN" if not provided)
+    
     // Account info (from Clerk after signup)
     userId: v.optional(v.string()), // Clerk user ID (set when claimed)
     accountEmail: v.optional(v.string()), // Account email from Clerk (may differ from contact email)
@@ -380,6 +387,12 @@ export default defineSchema({
     customerName: v.string(),
     customerEmail: v.string(),
     customerCpfCnpj: v.string(),
+    // Customer address (required for invoice generation - optional for migration)
+    customerPhone: v.optional(v.string()),
+    customerMobilePhone: v.optional(v.string()),
+    customerPostalCode: v.optional(v.string()), // CEP
+    customerAddress: v.optional(v.string()),
+    customerAddressNumber: v.optional(v.string()), // Defaults to "SN" if not provided
     invoiceUrl: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
     createdAt: v.number(),
