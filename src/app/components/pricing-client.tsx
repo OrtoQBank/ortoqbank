@@ -74,7 +74,7 @@ export function PricingClient({ plans }: PricingClientProps) {
                   <span className="text-4xl font-bold">{plan.price}</span>
                 </div>
                 <div className="text-sm text-gray-600 transition-all duration-300 group-hover:text-white">
-                  {plan.installments}
+                  {plan.installments?.replace(/R\$(\d+),(\d+)/g, 'R$$1')}
                 </div>
               </div>
 
