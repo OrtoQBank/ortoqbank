@@ -56,19 +56,21 @@ export function PricingClient({ plans }: PricingClientProps) {
                 </div>
               </div>
 
-              <div className="px-6 pb-6 text-center">
-                <div className="mb-2 min-h-[2rem] text-xl text-red-500 transition-all duration-300 group-hover:text-white/70">
+              <div className="px-6 pb-4 text-center">
+                <div className="mb-2 min-h-[2rem] text-xl text-red-500 line-through transition-all duration-300 group-hover:text-white/70">
                   {plan.originalPrice ? (
                     <span>
                       <span className="font-medium">De: </span>
-                      <span className="line-through">{plan.originalPrice}</span>
+                      <span>{plan.originalPrice}</span>
                     </span>
                   ) : (
                     <span className="invisible">placeholder</span>
                   )}
                 </div>
-                <div className="mb-2 text-gray-900 transition-all duration-300 group-hover:text-white">
-                  <span className="text-lg font-medium">Por: </span>
+                <div className="mb-1 text-gray-600 transition-all duration-300 group-hover:text-white">
+                  <span className="text-sm font-medium">Por 12x de:</span>
+                </div>
+                <div className="mb-3 text-gray-900 transition-all duration-300 group-hover:text-white">
                   <span className="text-4xl font-bold">{plan.price}</span>
                 </div>
                 <div className="text-sm text-gray-600 transition-all duration-300 group-hover:text-white">
