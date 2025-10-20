@@ -74,7 +74,7 @@ function PaymentFailedContent() {
         <div className="space-y-3">
           <Button 
             onClick={handleRetryPayment}
-            className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+            className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white"
             size="lg"
           >
             <RefreshCw className="mr-2 h-5 w-5" />
@@ -93,12 +93,12 @@ function PaymentFailedContent() {
         </div>
 
         {/* Security Message */}
-        <div className="bg-blue-50 border border-blue-200 rounded-lg p-4">
+        <div className="bg-brand-blue/10 border border-brand-blue/20 rounded-lg p-4">
           <div className="text-sm">
-            <p className="font-medium text-blue-800 mb-1">
+            <p className="font-medium text-brand-blue mb-1">
               🔒 Dados Protegidos
             </p>
-            <p className="text-blue-700">
+            <p className="text-brand-blue">
               Nenhuma conta foi criada. Seus dados estão seguros.
               Tente novamente quando resolver o problema do pagamento.
             </p>

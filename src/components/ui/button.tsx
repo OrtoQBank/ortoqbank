@@ -19,7 +19,7 @@ const buttonVariants = cva(
           'bg-secondary text-secondary-foreground shadow-xs hover:bg-secondary/80',
         ghost: 'hover:bg-accent hover:text-accent-foreground',
         link: 'text-primary underline-offset-4 hover:underline',
-        duolingo: 'bg-blue-500 text-white hover:bg-blue-600',
+        duolingo: 'bg-brand-blue text-white hover:bg-brand-blue/90',
         'duolingo-secondary': 'bg-green-500 text-white hover:bg-green-600',
       },
       size: {

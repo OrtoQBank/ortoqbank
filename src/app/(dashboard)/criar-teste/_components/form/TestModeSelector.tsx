@@ -44,13 +44,13 @@ export const TestModeSelector = memo(function TestModeSelector({
           <TabsList className="grid grid-cols-2">
             <TabsTrigger
               value="exam"
-              className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              className="data-[state=active]:bg-brand-blue data-[state=active]:text-white"
             >
               Simulado
             </TabsTrigger>
             <TabsTrigger
               value="study"
-              className="data-[state=active]:bg-blue-500 data-[state=active]:text-white"
+              className="data-[state=active]:bg-brand-blue data-[state=active]:text-white"
             >
               Estudo
             </TabsTrigger>

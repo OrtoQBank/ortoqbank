@@ -110,10 +110,10 @@ function PaymentProcessingContent() {
       <Card className="max-w-md w-full">
         <CardHeader className="text-center">
           <div className="relative">
-            <Loader2 className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-spin" />
-            <Clock className="w-6 h-6 text-blue-300 absolute top-3 left-1/2 transform -translate-x-1/2" />
+            <Loader2 className="w-12 h-12 text-brand-blue mx-auto mb-4 animate-spin" />
+            <Clock className="w-6 h-6 text-brand-blue/30 absolute top-3 left-1/2 transform -translate-x-1/2" />
           </div>
-          <CardTitle className="text-blue-600">Processando Pagamento</CardTitle>
+          <CardTitle className="text-brand-blue">Processando Pagamento</CardTitle>
           <CardDescription>
             Aguarde enquanto confirmamos seu pagamento...
           </CardDescription>
@@ -122,9 +122,9 @@ function PaymentProcessingContent() {
         <CardContent className="space-y-6">
           {/* Payment Info */}
           {paymentStatus?.orderDetails && (
-            <div className="bg-blue-50 p-4 rounded-lg">
-              <h3 className="font-semibold text-blue-900 mb-2">Detalhes do Pedido</h3>
-              <div className="space-y-1 text-sm text-blue-800">
+            <div className="bg-brand-blue/10 p-4 rounded-lg">
+              <h3 className="font-semibold text-brand-blue mb-2">Detalhes do Pedido</h3>
+              <div className="space-y-1 text-sm text-brand-blue/90">
                 <p><strong>Email:</strong> {paymentStatus.orderDetails.email}</p>
                 <p><strong>Produto:</strong> {paymentStatus.orderDetails.productId}</p>
                 <p><strong>Valor:</strong> R$ {paymentStatus.orderDetails.finalPrice.toFixed(2)}</p>
@@ -136,7 +136,7 @@ function PaymentProcessingContent() {
           {/* Status Messages */}
           <div className="space-y-3">
             <div className="flex items-center space-x-3 text-sm">
-              <div className="w-2 h-2 bg-blue-500 rounded-full animate-pulse"></div>
+              <div className="w-2 h-2 bg-brand-blue/100 rounded-full animate-pulse"></div>
               <span>Aguardando confirmação do pagamento...</span>
             </div>
             

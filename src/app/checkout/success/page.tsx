@@ -84,7 +84,7 @@ function CheckoutSuccessContent() {
           <Card>
             <CardContent className="pt-6">
               <div className="text-center">
-                <Loader2 className="w-8 h-8 animate-spin text-blue-600 mx-auto mb-4" />
+                <Loader2 className="w-8 h-8 animate-spin text-brand-blue mx-auto mb-4" />
                 <p className="text-lg">Carregando detalhes do pedido...</p>
               </div>
             </CardContent>
@@ -120,26 +120,26 @@ function CheckoutSuccessContent() {
             </Alert>
 
             {/* Email Instructions */}
-            <div className="bg-blue-50 p-6 rounded-lg border border-blue-200">
-              <h3 className="font-semibold text-blue-900 mb-4 flex items-center">
+            <div className="bg-brand-blue/10 p-6 rounded-lg border border-brand-blue/20">
+              <h3 className="font-semibold text-brand-blue mb-4 flex items-center">
                 <Mail className="w-5 h-5 mr-2" />
                 Próximos Passos
               </h3>
-              <div className="space-y-3 text-blue-800">
+              <div className="space-y-3 text-brand-blue/90">
                 <div className="flex items-start">
-                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
+                  <div className="bg-brand-blue/20 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
                     1
                   </div>
                   <p>Verifique seu email <strong>({orderDetails.email})</strong> nos próximos minutos</p>
                 </div>
                 <div className="flex items-start">
-                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
+                  <div className="bg-brand-blue/20 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
                     2
                   </div>
                   <p>O email conterá um link para criar sua conta na plataforma OrtoQBank</p>
                 </div>
                 <div className="flex items-start">
-                  <div className="bg-blue-200 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
+                  <div className="bg-brand-blue/20 rounded-full w-6 h-6 flex items-center justify-center text-sm font-bold mr-3 mt-0.5 flex-shrink-0">
                     3
                   </div>
                   <p>Após criar sua conta, você terá acesso completo ao conteúdo</p>
@@ -217,7 +217,7 @@ function CheckoutSuccessContent() {
                 Não recebeu o email? Verifique sua caixa de spam ou{' '}
                 <button 
                   onClick={() => router.push('/suporte')}
-                  className="text-blue-600 hover:underline font-medium"
+                  className="text-brand-blue hover:underline font-medium"
                 >
                   entre em contato conosco
                 </button>
@@ -234,7 +234,7 @@ export default function CheckoutSuccessPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gray-50 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
       </div>
     }>
       <CheckoutSuccessContent />

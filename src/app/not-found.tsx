@@ -10,7 +10,7 @@ export default function NotFound() {
       </p>
       <Link
         href="/"
-        className="rounded-md bg-brand-blue px-6 py-3 text-white transition-colors hover:bg-blue-600"
+        className="rounded-md bg-brand-blue px-6 py-3 text-white transition-colors hover:bg-brand-blue/90"
       >
         Voltar para a página inicial
       </Link>

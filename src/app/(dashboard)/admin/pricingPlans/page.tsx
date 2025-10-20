@@ -196,10 +196,10 @@ export default function PricingPlansAdminPage() {
         </Button>
       </div>
 
-      <div className="bg-gradient-to-br from-slate-50 to-blue-50 py-8 rounded-2xl">
+      <div className="bg-gradient-to-br from-slate-50 to-brand-blue/10 py-8 rounded-2xl">
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 max-w-7xl mx-auto px-4">
           {isCreating && (
-            <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden w-full border-2 border-dashed border-blue-300">
+            <div className="relative bg-white rounded-2xl shadow-xl overflow-hidden w-full border-2 border-dashed border-brand-blue/30">
               <div className="p-6 space-y-6 max-h-[80vh] overflow-y-auto">
                 {/* Internal/Admin Fields Section */}
                 <div className="space-y-3">
@@ -697,7 +697,7 @@ export default function PricingPlansAdminPage() {
 
                   {/* Customer-Facing Display */}
                   <div className="text-center py-4">
-                    <div className="inline-block px-4 py-1 rounded-full text-xs font-bold bg-blue-100 text-blue-600">
+                    <div className="inline-block px-4 py-1 rounded-full text-xs font-bold bg-brand-blue/10 text-brand-blue">
                       {plan.badge}
                     </div>
                   </div>
@@ -726,8 +726,8 @@ export default function PricingPlansAdminPage() {
                     <ul className="space-y-3">
                       {plan.features.map((feature: string, featureIndex: number) => (
                         <li key={featureIndex} className="flex items-center gap-3">
-                          <div className="w-5 h-5 rounded-full flex items-center justify-center bg-blue-100">
-                            <Check className="w-3 h-3 text-blue-600" />
+                          <div className="w-5 h-5 rounded-full flex items-center justify-center bg-brand-blue/10">
+                            <Check className="w-3 h-3 text-brand-blue" />
                           </div>
                           <span className="text-sm text-gray-700">
                             {feature}
@@ -740,7 +740,7 @@ export default function PricingPlansAdminPage() {
                   <div className="p-6 flex-shrink-0">
                     <div className={`w-full py-3 px-6 rounded-xl font-semibold text-sm text-center ${
                       plan.isActive 
-                        ? 'bg-blue-500 text-white' 
+                        ? 'bg-brand-blue text-white' 
                         : 'bg-gray-300 text-gray-600'
                     } shadow-lg`}>
                       {plan.buttonText}

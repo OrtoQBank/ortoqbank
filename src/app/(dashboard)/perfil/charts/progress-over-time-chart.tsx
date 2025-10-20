@@ -98,7 +98,7 @@ export function ProgressOverTimeChart() {
               <LabelList
                 dataKey="totalAnswered"
                 position="top"
-                className="fill-blue-600 font-semibold"
+                className="fill-brand-blue font-semibold"
                 fontSize={12}
                 offset={5}
                 dx={8}

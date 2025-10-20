@@ -81,7 +81,7 @@ function getStatusBadge(status: 'not_started' | 'in_progress' | 'completed') {
     }
     case 'not_started': {
       return (
-        <Badge className="bg-blue-100 text-blue-800 hover:bg-blue-100 hover:text-blue-800 dark:bg-blue-900/30 dark:text-blue-400 dark:hover:bg-blue-900/30 dark:hover:text-blue-400">
+        <Badge className="bg-brand-blue/10 text-brand-blue/90 hover:bg-brand-blue/10 hover:text-brand-blue/90 dark:bg-brand-blue/30 dark:text-brand-blue/40 dark:hover:bg-brand-blue/30 dark:hover:text-brand-blue/40">
           <BookOpen className="mr-1 h-3 w-3" />
           Não iniciado
         </Badge>
@@ -208,7 +208,7 @@ export default function SimuladoPage() {
           Simulados
         </h1>
         <div className="p-8 text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500"></div>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
           <p className="text-gray-600">Carregando simulados...</p>
         </div>
       </div>

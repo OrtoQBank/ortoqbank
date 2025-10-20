@@ -33,7 +33,7 @@ export function PricingClient({ plans }: PricingClientProps) {
    };
 
   return (
-    <div id="pricing" className="bg-gradient-to-br from-slate-50 to-blue-50 py-8">
+    <div id="pricing" className="bg-gradient-to-br from-slate-50 to-brand-blue/10 py-8">
       <div className="container mx-auto mb-16 px-4 text-center">
           <h1 className="mb-3 text-4xl font-bold text-brand-blue">
           OrtoQBank
@@ -48,10 +48,10 @@ export function PricingClient({ plans }: PricingClientProps) {
           {plans?.map((plan, index) => (
             <div
               key={plan._id}
-              className="group relative flex w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl transition-all duration-300 hover:scale-105 hover:bg-blue-500 hover:shadow-2xl lg:w-90 lg:max-w-none"
+              className="group relative flex w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl transition-all duration-300 hover:scale-105 hover:bg-brand-blue hover:shadow-2xl lg:w-90 lg:max-w-none"
             >
               <div className="py-4 text-center">
-                <div className="inline-block rounded-full bg-blue-100 px-6 py-2 text-base font-bold text-blue-600 transition-all duration-300 group-hover:bg-white group-hover:text-blue-600">
+                <div className="inline-block rounded-full bg-brand-blue/10 px-6 py-2 text-base font-bold text-brand-blue transition-all duration-300 group-hover:bg-white group-hover:text-brand-blue">
                   {plan.badge}
                 </div>
               </div>
@@ -86,8 +86,8 @@ export function PricingClient({ plans }: PricingClientProps) {
                 <ul className="space-y-3">
                   {plan.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-center gap-3">
-                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-blue-100 transition-all duration-300 group-hover:bg-white/20">
-                        <Check className="h-3 w-3 text-blue-600 transition-all duration-300 group-hover:text-white" />
+                      <div className="flex h-5 w-5 items-center justify-center rounded-full bg-brand-blue/10 transition-all duration-300 group-hover:bg-white/20">
+                        <Check className="h-3 w-3 text-brand-blue transition-all duration-300 group-hover:text-white" />
                       </div>
                       <span className="text-sm text-gray-700 transition-all duration-300 group-hover:text-white">
                         {feature}

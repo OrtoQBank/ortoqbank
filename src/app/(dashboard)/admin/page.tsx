@@ -105,7 +105,7 @@ export default function AdminDashboard() {
                   <span
                     className={`ml-2 inline-flex rounded-full px-2 py-1 text-xs font-medium ${
                       role === 'admin'
-                        ? 'bg-blue-100 text-blue-800 dark:bg-blue-800/30 dark:text-blue-400'
+                        ? 'bg-brand-blue/10 text-brand-blue/90 dark:bg-brand-blue/30 dark:text-brand-blue/40'
                         : role === 'moderator'
                           ? 'bg-green-100 text-green-800 dark:bg-green-800/30 dark:text-green-400'
                           : 'bg-gray-100 text-gray-800 dark:bg-gray-800/30 dark:text-gray-400'
@@ -118,7 +118,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handleSetRole(user._id, 'admin')}
-                    className="inline-flex h-8 items-center rounded-md border border-transparent bg-blue-600 px-3 text-xs font-medium text-white hover:bg-blue-700 focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:outline-none disabled:opacity-50"
+                    className="inline-flex h-8 items-center rounded-md border border-transparent bg-brand-blue px-3 text-xs font-medium text-white hover:bg-brand-blue/90 focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 focus:outline-none disabled:opacity-50"
                     disabled={role === 'admin' || loadingUsers.has(user._id)}
                   >
                     {loadingUsers.has(user._id)

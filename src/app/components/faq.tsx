@@ -135,7 +135,7 @@ export default function FAQ() {
               <AccordionItem
                 key={index}
                 value={`item-${index}`}
-                className="border-b border-blue-100"
+                className="border-b border-brand-blue/10"
               >
                 <AccordionTrigger className="text-left hover:text-brand-blue">
                   {faq.question}

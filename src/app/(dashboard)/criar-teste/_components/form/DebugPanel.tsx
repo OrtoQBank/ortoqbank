@@ -318,7 +318,7 @@ export function DebugPanel({
                 <Button
                   onClick={runDebugQuestions}
                   disabled={isDebugging}
-                  className="h-8 bg-blue-600 hover:bg-blue-700"
+                  className="h-8 bg-brand-blue hover:bg-brand-blue/90"
                 >
                   <Play className="mr-1 h-3 w-3" />
                   {isDebugging ? 'Running...' : 'Debug Questions'}

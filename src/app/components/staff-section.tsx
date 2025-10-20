@@ -38,7 +38,7 @@ export default function StaffSection() {
           {staffMembers.map((member, index) => (
             <div
               key={index}
-              className="mx-auto w-full max-w-[330px] overflow-hidden rounded-lg border border-blue-200 bg-white shadow-lg"
+              className="mx-auto w-full max-w-[330px] overflow-hidden rounded-lg border border-brand-blue/20 bg-white shadow-lg"
             >
               <div className="overflow-hidden">
                 <Image

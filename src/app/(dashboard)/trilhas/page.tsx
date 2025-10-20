@@ -179,7 +179,7 @@ export default function TrilhasPage() {
                       ? 'bg-amber-100 text-amber-800'
                       : hasCompletedSession
                         ? 'bg-green-100 text-green-800'
-                        : 'bg-blue-100 text-blue-800'
+                        : 'bg-brand-blue/10 text-brand-blue/90'
                   }
                 >
                   {hasIncompleteSession && <Clock className="mr-1 h-3 w-3" />}
@@ -240,7 +240,7 @@ export default function TrilhasPage() {
           Trilhas
         </h1>
         <div className="p-8 text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500"></div>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
           <p className="text-gray-600">Carregando trilhas...</p>
         </div>
       </div>
