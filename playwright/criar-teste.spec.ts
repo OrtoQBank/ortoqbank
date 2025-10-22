@@ -13,7 +13,7 @@ test.describe('Custom Quiz Creation - Complete Flow', () => {
     await page.goto('/criar-teste', { timeout: 30_000 });
 
     // Wait for page to be fully loaded
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
   });
 
   test('should load quiz creation page with all required elements', async ({ page }) => {
@@ -194,7 +194,7 @@ test.describe('Custom Quiz Creation - Complete Flow', () => {
 
     // Reload page
     await page.reload();
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify main elements are still visible
     await expect(page.getByText('Modo')).toBeVisible();
@@ -244,7 +244,7 @@ test.describe('Custom Quiz Creation - Complete Flow', () => {
 test.describe('Custom Quiz Creation - Error Handling', () => {
   test('should handle no questions available scenario', async ({ page }) => {
     await page.goto('/criar-teste', { timeout: 30_000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Select a question mode that might have 0 questions (e.g., bookmarked when none exist)
     await page.waitForTimeout(1000);
@@ -254,7 +254,7 @@ test.describe('Custom Quiz Creation - Error Handling', () => {
       await bookmarkedRadio.click();
 
       // Wait for count to update
-      await page.waitForTimeout(500);
+      await page.waitForTimeout(500); 
 
       // Try to submit
       const submitButton = page.getByRole('button', { name: /gerar teste/i });
@@ -279,7 +279,7 @@ test.describe('Custom Quiz Creation - Error Handling', () => {
 
     // Retry navigation
     await page.goto('/criar-teste', { timeout: 30_000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Verify page loads correctly after reconnection
     await expect(page.getByRole('button', { name: /gerar teste/i })).toBeVisible();
@@ -289,7 +289,7 @@ test.describe('Custom Quiz Creation - Error Handling', () => {
 test.describe('Custom Quiz Creation - Accessibility', () => {
   test('should be keyboard navigable', async ({ page }) => {
     await page.goto('/criar-teste', { timeout: 30_000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
     await page.waitForTimeout(1000);
 
     // Tab through elements
@@ -324,7 +324,7 @@ test.describe('Custom Quiz Creation - Accessibility', () => {
 
   test('should have proper ARIA labels', async ({ page }) => {
     await page.goto('/criar-teste', { timeout: 30_000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // Check for radio groups (test mode, question mode)
     const radios = page.getByRole('radio');
@@ -342,7 +342,7 @@ test.describe('Custom Quiz Creation - Accessibility', () => {
 
   test('should have readable text contrast', async ({ page }) => {
     await page.goto('/criar-teste', { timeout: 30_000 });
-    await page.waitForLoadState('networkidle');
+    await page.waitForLoadState('load');
 
     // This is a visual check - in a real scenario, you'd use accessibility testing tools
     // For now, we just verify text elements are visible

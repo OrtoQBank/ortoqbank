@@ -9,6 +9,38 @@ import { describe, expect, it } from 'vitest';
  * For integration tests with mocked providers, see form.integration.test.tsx
  */
 
+/* eslint-disable playwright/no-standalone-expect */
+
+// Helper functions moved to outer scope to satisfy ESLint
+const mapQuestionMode = (mode: string): 'all' | 'unanswered' | 'incorrect' | 'bookmarked' => {
+  switch (mode) {
+    case 'bookmarked': {
+      return 'bookmarked';
+    }
+    case 'unanswered': {
+      return 'unanswered';
+    }
+    case 'incorrect': {
+      return 'incorrect';
+    }
+    default: {
+      return 'all';
+    }
+  }
+};
+
+const validateName = (name: string) => {
+  return name.length >= 3;
+};
+
+const validateQuestionCount = (count: number, min: number = 1, max: number = 120) => {
+  return count >= min && count <= max;
+};
+
+const hasAvailableQuestions = (availableCount: number) => {
+  return availableCount > 0;
+};
+
 describe('TestForm - Business Logic', () => {
   describe('Question Count Calculations', () => {
     it('calculates available questions correctly', () => {
@@ -46,7 +78,7 @@ describe('TestForm - Business Logic', () => {
       // Calculate total incorrect across selected themes
       const selectedThemes = ['theme1', 'theme2'];
       const totalIncorrect = selectedThemes.reduce((sum, themeId) => {
-        return sum + (mockUserCounts.byTheme[themeId]?.incorrect || 0);
+        return sum + (mockUserCounts.byTheme[themeId as keyof typeof mockUserCounts.byTheme]?.incorrect || 0);
       }, 0);
 
       expect(totalIncorrect).toBe(20);
@@ -55,15 +87,6 @@ describe('TestForm - Business Logic', () => {
 
   describe('Question Mode Mapping', () => {
     it('maps question modes correctly', () => {
-      const mapQuestionMode = (mode: string): 'all' | 'unanswered' | 'incorrect' | 'bookmarked' => {
-        switch (mode) {
-          case 'bookmarked': return 'bookmarked';
-          case 'unanswered': return 'unanswered';
-          case 'incorrect': return 'incorrect';
-          default: return 'all';
-        }
-      };
-
       expect(mapQuestionMode('bookmarked')).toBe('bookmarked');
       expect(mapQuestionMode('unanswered')).toBe('unanswered');
       expect(mapQuestionMode('incorrect')).toBe('incorrect');
@@ -74,20 +97,12 @@ describe('TestForm - Business Logic', () => {
 
   describe('Form Validation Logic', () => {
     it('validates name input length', () => {
-      const validateName = (name: string) => {
-        return name.length >= 3;
-      };
-
       expect(validateName('ab')).toBe(false);
       expect(validateName('abc')).toBe(true);
       expect(validateName('Test Quiz Name')).toBe(true);
     });
 
     it('validates number of questions range', () => {
-      const validateQuestionCount = (count: number, min: number = 1, max: number = 120) => {
-        return count >= min && count <= max;
-      };
-
       expect(validateQuestionCount(0)).toBe(false);
       expect(validateQuestionCount(1)).toBe(true);
       expect(validateQuestionCount(30)).toBe(true);
@@ -96,10 +111,6 @@ describe('TestForm - Business Logic', () => {
     });
 
     it('checks if questions are available for quiz creation', () => {
-      const hasAvailableQuestions = (availableCount: number) => {
-        return availableCount > 0;
-      };
-
       expect(hasAvailableQuestions(0)).toBe(false);
       expect(hasAvailableQuestions(1)).toBe(true);
       expect(hasAvailableQuestions(100)).toBe(true);
@@ -111,11 +122,9 @@ describe('TestForm - Business Logic', () => {
       let selectedThemes: string[] = [];
 
       const toggleTheme = (themeId: string) => {
-        if (selectedThemes.includes(themeId)) {
-          selectedThemes = selectedThemes.filter(id => id !== themeId);
-        } else {
-          selectedThemes = [...selectedThemes, themeId];
-        }
+        selectedThemes = selectedThemes.includes(themeId)
+          ? selectedThemes.filter(id => id !== themeId)
+          : [...selectedThemes, themeId];
       };
 
       // Add theme
@@ -191,15 +200,6 @@ describe('TestForm - Business Logic', () => {
         selectedThemes: ['theme1', 'theme2'],
         selectedSubthemes: ['sub1'],
         selectedGroups: ['group1'],
-      };
-
-      const mapQuestionMode = (mode: string) => {
-        switch (mode) {
-          case 'bookmarked': return 'bookmarked' as const;
-          case 'unanswered': return 'unanswered' as const;
-          case 'incorrect': return 'incorrect' as const;
-          default: return 'all' as const;
-        }
       };
 
       const formattedData = {
