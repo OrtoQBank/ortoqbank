@@ -1,3 +1,4 @@
+import { FunctionReturnType } from 'convex/server';
 import { v } from 'convex/values';
 
 import { api, internal } from './_generated/api';
@@ -84,7 +85,7 @@ export const processInvoiceGeneration = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     // Get invoice record (outside try block so we can reference it in catch)
-    const invoice: any = await ctx.runQuery(internal.invoices.getInvoiceById, {
+    const invoice: FunctionReturnType<typeof internal.invoices.getInvoiceById> = await ctx.runQuery(internal.invoices.getInvoiceById, {
       invoiceId: args.invoiceId,
     });
     
