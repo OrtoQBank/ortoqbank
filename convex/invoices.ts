@@ -109,8 +109,6 @@ export const processInvoiceGeneration = internalAction({
         return null;
       }
       
-      console.log(`📋 Using fiscal service: ${fiscalService.serviceId} - ${fiscalService.description}`);
-      
       // Update invoice status to processing
       await ctx.runMutation(internal.invoices.updateInvoiceServiceId, {
         invoiceId: args.invoiceId,
@@ -124,8 +122,6 @@ export const processInvoiceGeneration = internalAction({
       
       // Get ISS rate - hard coded to 2% according to business needs
       const issRate = 2;
-      
-      console.log(`💰 Using ISS rate: ${issRate}% (hard coded according to business needs)`);
       
       // Build taxes object (flat structure per Asaas API)
       const taxes = {
@@ -154,31 +150,13 @@ export const processInvoiceGeneration = internalAction({
         asaasInvoiceId: result.invoiceId,
       });
       
-      console.log(`✅ Invoice generated successfully: ${result.invoiceId}`);
-      
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`❌ Invoice generation failed for ${args.invoiceId}:`, errorMessage);
       
       // Update invoice record with error (non-blocking)
       await ctx.runMutation(internal.invoices.updateInvoiceError, {
         invoiceId: args.invoiceId,
         errorMessage,
-      });
-      
-      // Detailed admin alert
-      console.error(`🚨 ADMIN ALERT: Invoice generation failed`, {
-        invoiceId: args.invoiceId,
-        orderId: invoice.orderId,
-        error: errorMessage,
-        troubleshooting: {
-          step1: 'Verify invoice features are enabled in your Asaas account settings',
-          step2: 'Using hard coded fiscal service "02964" and ISS rate 2% according to business needs',
-          step3: 'Ensure digital certificate is uploaded if required by your municipality',
-          step4: 'Verify fiscal info is complete in Asaas dashboard',
-          step5: 'Test endpoint: GET /fiscalInfo/services?description=02964',
-          note: 'Payment has been processed successfully - only invoice generation failed'
-        }
       });
     }
     
