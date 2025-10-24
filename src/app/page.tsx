@@ -2,20 +2,20 @@ import About from './components/about';
 import FAQ from './components/faq';
 import Header from './components/header';
 import Hero from './components/hero';
-import PaymentErrorAlert from './components/payment-error-alert';
 import Pricing from './components/pricing';
 import StaffSection from './components/staff-section';
+
+// Force static generation with revalidation every 1 hour
+export const dynamic = 'force-static';
+export const revalidate = 3600;
 
 export default function Home() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
       <main>
-        <Hero />
-        
-        {/* Payment Required Error Alert */}
-        <PaymentErrorAlert />
-        
+        <Hero />       
+   
         <About />
         <StaffSection />
         <Pricing />

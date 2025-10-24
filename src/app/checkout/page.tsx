@@ -8,6 +8,7 @@ import { Suspense, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
+import { CreditCardPreview } from '@/components/checkout/CreditCardPreview';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
@@ -32,18 +33,56 @@ const checkoutSchema = z.object({
   name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
   email: z.string().email('Email inválido'),
   cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
+  // Required address fields for all payment methods
+  phone: z.string().min(10, 'Telefone deve ter pelo menos 10 dígitos'),
+  postalCode: z.string().min(8, 'CEP deve ter 8 dígitos'),
+  address: z.string().min(5, 'Endereço deve ter pelo menos 5 caracteres'),
+  addressNumber: z.string().optional(), // Optional, will default to "SN"
   paymentMethod: z.enum(['PIX', 'CREDIT_CARD']),
   // Credit card fields (conditional)
-  cardHolderName: z.string().optional(),
-  cardNumber: z.string().optional(),
-  cardExpiryMonth: z.string().optional(),
-  cardExpiryYear: z.string().optional(),
-  cardCvv: z.string().optional(),
-  // Required by Asaas for credit card payments
-  phone: z.string().optional(),
-  postalCode: z.string().optional(),
-  address: z.string().optional(),
-  addressNumber: z.string().optional(),
+  cardNumber: z
+    .string()
+    .min(13, 'Número do cartão inválido')
+    .max(19, 'Número do cartão inválido')
+    .optional(),
+  cardExpiry: z
+    .string()
+    .regex(/^(0[1-9]|1[0-2])\/\d{2}$/, 'Use formato MM/AA')
+    .refine((val) => {
+      if (!val) return true;
+      const [month, year] = val.split('/');
+      const currentYear = new Date().getFullYear() % 100; // Get last 2 digits
+      const currentMonth = new Date().getMonth() + 1;
+      const expYear = Number.parseInt(year, 10);
+      const expMonth = Number.parseInt(month, 10);
+      
+      // Maximum 20 years in the future (e.g., if current is 25, max is 45)
+      const maxYear = (currentYear + 20) % 100;
+      
+      // Don't allow years before current year
+      if (expYear < currentYear) return false;
+      
+      // Don't allow years too far in the future (handles 99, 98, etc.)
+      // If maxYear wrapped around (e.g., 25+20=45 is ok, but if it was 90+20=10, we need special logic)
+      if (maxYear < currentYear) {
+        // Wrapped around, so accept currentYear to 99, and 00 to maxYear
+        if (expYear > maxYear && expYear < currentYear) return false;
+      } else {
+        // No wrap, simple range check
+        if (expYear > maxYear) return false;
+      }
+      
+      // Check if card is expired (same year)
+      if (expYear === currentYear && expMonth < currentMonth) return false;
+      
+      return true;
+    }, 'Data de validade inválida')
+    .optional(),
+  cardCvv: z
+    .string()
+    .min(3, 'CVV deve ter 3 ou 4 dígitos')
+    .max(4, 'CVV deve ter 3 ou 4 dígitos')
+    .optional(),
   // Installments
   installments: z.number().min(1).max(12).optional(),
 });
@@ -78,6 +117,7 @@ function CheckoutPageContent() {
     register,
     handleSubmit,
     setValue,
+    watch,
     formState: { errors },
   } = useForm<CheckoutForm>({
     resolver: zodResolver(checkoutSchema),
@@ -85,6 +125,16 @@ function CheckoutPageContent() {
       paymentMethod: 'PIX',
     },
   });
+
+  // Watch credit card fields for live preview
+  const name = watch('name') || ''; // Use main name field for card
+  const cardNumber = watch('cardNumber') || '';
+  const cardExpiry = watch('cardExpiry') || '';
+  const cardCvv = watch('cardCvv') || '';
+  
+  // Extract month and year from cardExpiry for preview
+  const [cardExpiryMonth, cardExpiryYear] = cardExpiry.split('/').map(part => part || '');
+  const fullYear = cardExpiryYear ? `20${cardExpiryYear}` : '';
 
   // ViaCEP integration
   const handleCepChange = async (cep: string) => {
@@ -188,6 +238,9 @@ function CheckoutPageContent() {
     setError(null);
 
     try {
+      // Default to "SN" if address number is not provided
+      const addressNumber = data.addressNumber?.trim() || 'SN';
+
       // Step 1: Create pending order first (robust pattern)
       const { pendingOrderId, priceBreakdown } = await createPendingOrder({
         email: data.email,
@@ -196,6 +249,12 @@ function CheckoutPageContent() {
         productId: planId,
         paymentMethod: data.paymentMethod,
         couponCode: appliedCoupon ? couponCode : undefined,
+        // Address fields (required for invoice generation)
+        phone: data.phone,
+        mobilePhone: data.phone,
+        postalCode: data.postalCode,
+        address: data.address,
+        addressNumber: addressNumber,
       });
 
       // Step 2: Create customer using Convex action
@@ -203,6 +262,12 @@ function CheckoutPageContent() {
         name: data.name,
         email: data.email,
         cpf: data.cpf.replaceAll(/\D/g, ''),
+        // Address fields (required for invoice generation)
+        phone: data.phone,
+        mobilePhone: data.phone,
+        postalCode: data.postalCode,
+        address: data.address,
+        addressNumber: addressNumber,
       });
 
       let payment: any;
@@ -231,19 +296,23 @@ function CheckoutPageContent() {
         return; // Exit early for PIX
       } else {
         // Validate credit card fields
-        if (!data.cardHolderName || !data.cardNumber || !data.cardExpiryMonth || !data.cardExpiryYear || !data.cardCvv || !data.phone || !data.postalCode || !data.address || !data.addressNumber) {
+        if (!data.cardNumber || !data.cardExpiry || !data.cardCvv) {
           throw new Error('Todos os campos do cartão são obrigatórios');
         }
+
+        // Extract month and year from cardExpiry (MM/YY format)
+        const [expMonth, expYear] = data.cardExpiry.split('/');
+        const fullYear = `20${expYear}`; // Convert YY to 20YY
 
         payment = await createCreditCardPayment({
           customerId,
           productId: planId,
           pendingOrderId,
           creditCard: {
-            holderName: data.cardHolderName,
+            holderName: data.name, // Use main name field
             number: data.cardNumber.replaceAll(/\s/g, ''),
-            expiryMonth: data.cardExpiryMonth,
-            expiryYear: data.cardExpiryYear,
+            expiryMonth: expMonth,
+            expiryYear: fullYear,
             ccv: data.cardCvv,
           },
           creditCardHolderInfo: {
@@ -254,7 +323,7 @@ function CheckoutPageContent() {
             mobilePhone: data.phone,
             postalCode: data.postalCode,
             address: data.address,
-            addressNumber: data.addressNumber,
+            addressNumber: addressNumber, // Use the default "SN" if not provided
           },
           installments: selectedInstallments > 1 ? selectedInstallments : undefined,
         });
@@ -296,7 +365,7 @@ function CheckoutPageContent() {
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 {/* Name */}
                 <div className="space-y-2">
-                  <Label htmlFor="name">Nome Completo</Label>
+                  <Label htmlFor="name">Nome Completo *</Label>
                   <Input
                     id="name"
                     type="text"
@@ -311,7 +380,7 @@ function CheckoutPageContent() {
 
                 {/* CPF */}
                 <div className="space-y-2">
-                  <Label htmlFor="cpf">CPF</Label>
+                  <Label htmlFor="cpf">CPF *</Label>
                   <Input
                     id="cpf"
                     type="text"
@@ -329,7 +398,7 @@ function CheckoutPageContent() {
 
               {/* Email */}
               <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
+                <Label htmlFor="email">Email *</Label>
                 <Input
                   id="email"
                   type="email"
@@ -340,6 +409,92 @@ function CheckoutPageContent() {
                 {errors.email && (
                   <p className="text-sm text-red-600">{errors.email.message}</p>
                 )}
+              </div>
+
+              {/* Address Information - Required for all payment methods */}
+              <div className="space-y-4 border-t pt-4">
+                <h3 className="font-semibold text-gray-900">Endereço</h3>
+                
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* CEP */}
+                  <div className="space-y-2">
+                    <Label htmlFor="postalCode">CEP *</Label>
+                    <div className="relative">
+                      <Input
+                        id="postalCode"
+                        type="text"
+                        placeholder="00000-000"
+                        {...register('postalCode')}
+                        disabled={isLoading || isLoadingCep}
+                        maxLength={9}
+                        onChange={(e) => {
+                          const value = e.target.value.replaceAll(/\D/g, '');
+                          const formatted = value.replace(/(\d{5})(\d{3})/, '$1-$2');
+                          e.target.value = formatted;
+                          handleCepChange(formatted);
+                        }}
+                      />
+                      {isLoadingCep && (
+                        <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
+                          <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
+                        </div>
+                      )}
+                    </div>
+                    {errors.postalCode && (
+                      <p className="text-sm text-red-600">{errors.postalCode.message}</p>
+                    )}
+                  </div>
+
+                  {/* Phone */}
+                  <div className="space-y-2">
+                    <Label htmlFor="phone">Telefone com DDD *</Label>
+                    <Input
+                      id="phone"
+                      type="text"
+                      placeholder="(11) 99999-9999"
+                      {...register('phone')}
+                      disabled={isLoading}
+                      maxLength={15}
+                      onChange={(e) => {
+                        const value = e.target.value.replaceAll(/\D/g, '');
+                        const formatted = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
+                        e.target.value = formatted;
+                      }}
+                    />
+                    {errors.phone && (
+                      <p className="text-sm text-red-600">{errors.phone.message}</p>
+                    )}
+                  </div>
+
+                  {/* Address and Number */}
+                  <div className="space-y-2 md:col-span-2">
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+                      <div className="md:col-span-3 space-y-2">
+                        <Label htmlFor="address">Endereço *</Label>
+                        <Input
+                          id="address"
+                          type="text"
+                          placeholder="Rua, Avenida, etc"
+                          {...register('address')}
+                          disabled={isLoading}
+                        />
+                        {errors.address && (
+                          <p className="text-sm text-red-600">{errors.address.message}</p>
+                        )}
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="addressNumber">Número</Label>
+                        <Input
+                          id="addressNumber"
+                          type="text"
+                          placeholder="123"
+                          {...register('addressNumber')}
+                          disabled={isLoading}
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
               {/* Payment Method Selection */}
@@ -455,21 +610,20 @@ function CheckoutPageContent() {
                 <div className="space-y-4 border-t pt-4">
                   <h3 className="font-semibold text-gray-900">Dados do Cartão</h3>
 
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    {/* Card Holder Name */}
-                    <div className="space-y-2 md:col-span-2">
-                      <Label htmlFor="cardHolderName">Nome no Cartão</Label>
-                      <Input
-                        id="cardHolderName"
-                        type="text"
-                        placeholder="Nome como está no cartão"
-                        {...register('cardHolderName')}
-                        disabled={isLoading}
-                      />
-                    </div>
+                  {/* Visual Credit Card Preview */}
+                  <CreditCardPreview
+                    cardNumber={cardNumber}
+                    cardHolderName={name}
+                    cardExpiryMonth={cardExpiryMonth}
+                    cardExpiryYear={fullYear}
+                    cardCvv={cardCvv}
+                  />
 
+                  <div className="space-y-4">
+                    {/* Card Number, Expiry, and CVV - responsive layout */}
+                    <div className="grid grid-cols-2 md:grid-cols-12 gap-3">
                     {/* Card Number */}
-                    <div className="space-y-2 md:col-span-2">
+                      <div className="space-y-2 col-span-2 md:col-span-6">
                       <Label htmlFor="cardNumber">Número do Cartão</Label>
                       <Input
                         id="cardNumber"
@@ -481,126 +635,88 @@ function CheckoutPageContent() {
                         onChange={(e) => {
                           const value = e.target.value.replaceAll(/\D/g, '');
                           const formatted = value.replaceAll(/(\d{4})(?=\d)/g, '$1 ');
-                          e.target.value = formatted;
+                            setValue('cardNumber', formatted);
                         }}
                       />
+                        {errors.cardNumber && (
+                          <p className="text-sm text-red-600">{errors.cardNumber.message}</p>
+                        )}
                     </div>
 
-                    {/* Expiry and CVV in one row */}
-                    <div className="space-y-2 md:col-span-2">
-                      <Label>Mês / Ano / CVV </Label>
-                      <div className="grid grid-cols-3 gap-3">
-                        <div>
+                      {/* Expiry Date */}
+                      <div className="space-y-2 col-span-1 md:col-span-3">
+                        <Label htmlFor="cardExpiry">Validade</Label>
                           <Input
-                            id="cardExpiryMonth"
+                          id="cardExpiry"
                             type="text"
-                            placeholder="MM"
-                            {...register('cardExpiryMonth')}
+                          placeholder="MM/AA"
+                          {...register('cardExpiry')}
                             disabled={isLoading}
-                            maxLength={2}
+                          maxLength={5}
                             className="text-center"
-                          />
+                          onChange={(e) => {
+                            let value = e.target.value.replaceAll(/\D/g, '');
+                            
+                            // Smart month formatting
+                            if (value.length > 0) {
+                              const firstDigit = Number.parseInt(value[0], 10);
+                              
+                              // If first digit is 2-9, assume it's a single-digit month (02-09)
+                              if (firstDigit >= 2 && firstDigit <= 9 && value.length === 1) {
+                                value = '0' + value;
+                              }
+                              
+                              // If first digit is 1, check second digit for valid month (10-12)
+                              if (firstDigit === 1 && value.length >= 2) {
+                                const secondDigit = Number.parseInt(value[1], 10);
+                                if (secondDigit > 2) {
+                                  // Invalid month like 13-19, reset to just "1"
+                                  value = '1';
+                                }
+                              }
+                              
+                              // If first digit is 0, second digit must be 1-9
+                              if (firstDigit === 0 && value.length >= 2) {
+                                const secondDigit = Number.parseInt(value[1], 10);
+                                if (secondDigit === 0) {
+                                  // Invalid month "00", reset to just "0"
+                                  value = '0';
+                                }
+                              }
+                            }
+                            
+                            // Auto-format as MM/YY
+                            if (value.length >= 2) {
+                              value = value.slice(0, 2) + '/' + value.slice(2, 4);
+                            }
+                            
+                            setValue('cardExpiry', value);
+                          }}
+                        />
+                        {errors.cardExpiry && (
+                          <p className="text-xs text-red-600">{errors.cardExpiry.message}</p>
+                        )}
                         </div>
-                        <div>
-                          <Input
-                            id="cardExpiryYear"
-                            type="text"
-                            placeholder="AAAA"
-                            {...register('cardExpiryYear')}
-                            disabled={isLoading}
-                            maxLength={4}
-                            className="text-center"
-                          />
-                        </div>
-                        <div>
+
+                      {/* CVV */}
+                      <div className="space-y-2 col-span-1 md:col-span-3">
+                        <Label htmlFor="cardCvv">CVV</Label>
                           <Input
                             id="cardCvv"
                             type="text"
                             placeholder="CVV"
                             {...register('cardCvv')}
                             disabled={isLoading}
-                            maxLength={3}
+                          maxLength={4}
                             className="text-center"
-                          />
-                        </div>
-                      </div>
-                  
-                    </div>
-                  </div>
-
-                  {/* Required fields for Asaas credit card */}
-                  <div className="space-y-4 border-t pt-4">
-                    <h4 className="font-medium text-gray-900">Dados de Faturamento</h4>
-                                     
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                      {/* CEP */}
-                      <div className="space-y-2">
-                        <Label htmlFor="postalCode">CEP *</Label>
-                        <div className="relative">
-                          <Input
-                            id="postalCode"
-                            type="text"
-                            placeholder="00000-000"
-                            {...register('postalCode')}
-                            disabled={isLoading || isLoadingCep}
-                            maxLength={9}
-                            onChange={(e) => {
-                              const value = e.target.value.replaceAll(/\D/g, '');
-                              const formatted = value.replace(/(\d{5})(\d{3})/, '$1-$2');
-                              e.target.value = formatted;
-                              handleCepChange(formatted);
-                            }}
-                          />
-                          {isLoadingCep && (
-                            <div className="absolute right-3 top-1/2 transform -translate-y-1/2">
-                              <Loader2 className="w-4 h-4 animate-spin text-gray-400" />
-                            </div>
-                          )}
-                        </div>
-                      </div>
-
-                      {/* Phone */}
-                      <div className="space-y-2">
-                        <Label htmlFor="phone">Telefone com DDD *</Label>
-                        <Input
-                          id="phone"
-                          type="text"
-                          placeholder="(11) 99999-9999"
-                          {...register('phone')}
-                          disabled={isLoading}
-                          maxLength={15}
                           onChange={(e) => {
                             const value = e.target.value.replaceAll(/\D/g, '');
-                            const formatted = value.replace(/(\d{2})(\d{5})(\d{4})/, '($1) $2-$3');
-                            e.target.value = formatted;
+                            setValue('cardCvv', value);
                           }}
                         />
-                      </div>
-
-                      {/* Address - Takes more space */}
-                      <div className="space-y-2 md:col-span-2">
-                        <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                          <div className="md:col-span-3 space-y-2">
-                            <Label htmlFor="address">Endereço *</Label>
-                            <Input
-                              id="address"
-                              type="text"
-                              placeholder="Rua das Flores"
-                              {...register('address')}
-                              disabled={isLoading}
-                            />
-                          </div>
-                          <div className="space-y-2">
-                            <Label htmlFor="addressNumber">Número *</Label>
-                            <Input
-                              id="addressNumber"
-                              type="text"
-                              placeholder="123"
-                              {...register('addressNumber')}
-                              disabled={isLoading}
-                            />
-                          </div>
-                        </div>
+                        {errors.cardCvv && (
+                          <p className="text-xs text-red-600">{errors.cardCvv.message}</p>
+                        )}
                       </div>
                     </div>
                   </div>

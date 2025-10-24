@@ -101,7 +101,7 @@ export const grantProductAccess = internalMutation({
     pricingPlanId: v.id("pricingPlans"),
     productId: v.string(),
     paymentId: v.string(),
-    paymentGateway: v.union(v.literal("mercadopago"), v.literal("asaas")),
+    paymentGateway: v.literal("asaas"),
     purchasePrice: v.number(),
     couponUsed: v.optional(v.string()),
     discountAmount: v.optional(v.number()),

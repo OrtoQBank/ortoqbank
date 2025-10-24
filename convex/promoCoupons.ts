@@ -19,6 +19,10 @@ export const list = query({
       active: v.boolean(),
       validFrom: v.optional(v.number()),
       validUntil: v.optional(v.number()),
+      maxUses: v.optional(v.number()),
+      maxUsesPerUser: v.optional(v.number()),
+      currentUses: v.optional(v.number()),
+      minimumPrice: v.optional(v.number()),
     }),
   ),
   handler: async ctx => {
@@ -43,6 +47,10 @@ export const getByCode = query({
       active: v.boolean(),
       validFrom: v.optional(v.number()),
       validUntil: v.optional(v.number()),
+      maxUses: v.optional(v.number()),
+      maxUsesPerUser: v.optional(v.number()),
+      currentUses: v.optional(v.number()),
+      minimumPrice: v.optional(v.number()),
     }),
     v.null(),
   ),
@@ -217,11 +225,8 @@ export const validateAndApplyCoupon = query({
 
     // Check per-user usage limit (if CPF provided)
     if (coupon.maxUsesPerUser !== undefined) {
-      if (!args.userCpf) {
-        // If per-user limit is set but no CPF provided, show warning
-        console.warn(`Coupon ${code} has per-user limit but no CPF provided for validation`);
-      } else {
-        const cleanCpf = args.userCpf.replace(/\D/g, '');
+      if (args.userCpf) {
+        const cleanCpf = args.userCpf.replaceAll(/\D/g, '');
         const userUsageCount = await ctx.db
           .query('couponUsage')
           .withIndex('by_coupon_user', q => 
@@ -235,6 +240,9 @@ export const validateAndApplyCoupon = query({
             errorMessage: 'Você já utilizou este cupom o número máximo de vezes',
           };
         }
+      } else {
+        // If per-user limit is set but no CPF provided, show warning
+        console.warn(`Coupon ${code} has per-user limit but no CPF provided for validation`);
       }
     }
 

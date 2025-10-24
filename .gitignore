@@ -59,6 +59,3 @@ node_modules/
 
 # Sentry Config File
 .sentryclirc
-
-# Mercado Pago
-notes.txt

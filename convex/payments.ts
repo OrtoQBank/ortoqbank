@@ -21,6 +21,12 @@ export const createPendingOrder = mutation({
     productId: v.string(),
     paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
     couponCode: v.optional(v.string()), // Optional coupon code
+    // Address fields (required for new orders, enforced at application level)
+    phone: v.optional(v.string()),
+    mobilePhone: v.optional(v.string()),
+    postalCode: v.optional(v.string()),
+    address: v.optional(v.string()),
+    addressNumber: v.optional(v.string()), // Defaults to "SN" if not provided
   },
   returns: v.object({
     pendingOrderId: v.id('pendingOrders'),
@@ -102,6 +108,12 @@ export const createPendingOrder = mutation({
       couponDiscount,
       pixDiscount,
       paymentMethod: args.paymentMethod,
+      // Address info (for invoice generation)
+      phone: args.phone,
+      mobilePhone: args.mobilePhone,
+      postalCode: args.postalCode?.replace(/\D/g, ''), // Clean CEP
+      address: args.address,
+      addressNumber: args.addressNumber || 'SN', // Default to "SN" (Sem Número) if not provided
       createdAt: now,
       expiresAt: now + sevenDays,
     });
@@ -647,6 +659,12 @@ export const generateInvoice = internalMutation({
       customerName: order.name,
       customerEmail: order.email,
       customerCpfCnpj: order.cpf,
+      // Customer address (required for invoice generation)
+      customerPhone: order.phone,
+      customerMobilePhone: order.mobilePhone,
+      customerPostalCode: order.postalCode,
+      customerAddress: order.address,
+      customerAddressNumber: order.addressNumber,
       createdAt: Date.now(),
     });
     
