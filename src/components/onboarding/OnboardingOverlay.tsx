@@ -108,7 +108,7 @@ export default function OnboardingOverlay({ onComplete }: OnboardingOverlayProps
     if (currentStepData.position === 'right') {
       return (
         <ArrowRight 
-          className="absolute -left-6 top-1/2 transform -translate-y-1/2 text-blue-500" 
+          className="absolute -left-6 top-1/2 transform -translate-y-1/2 text-brand-blue" 
           size={24}
         />
       );
@@ -122,7 +122,7 @@ export default function OnboardingOverlay({ onComplete }: OnboardingOverlayProps
       {/* Highlight target element */}
       {currentStepData.target && (
         <div 
-          className="absolute border-4 border-blue-500 rounded-lg pointer-events-none transition-all duration-300"
+          className="absolute border-4 border-brand-blue rounded-lg pointer-events-none transition-all duration-300"
           style={{
             ...(() => {
               const target = document.querySelector(currentStepData.target!);
@@ -181,7 +181,7 @@ export default function OnboardingOverlay({ onComplete }: OnboardingOverlayProps
                 <div
                   key={index}
                   className={`w-2 h-2 rounded-full transition-colors ${
-                    index <= currentStep ? 'bg-blue-500' : 'bg-gray-300'
+                    index <= currentStep ? 'bg-brand-blue' : 'bg-gray-300'
                   }`}
                 />
               ))}
@@ -198,7 +198,7 @@ export default function OnboardingOverlay({ onComplete }: OnboardingOverlayProps
               )}
               <button
                 onClick={handleNext}
-                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+                className="px-4 py-2 bg-brand-blue text-white text-sm rounded-lg hover:bg-brand-blue/90 transition-colors"
               >
                 {currentStep === steps.length - 1 ? 'Finalizar' : 'Próximo'}
               </button>

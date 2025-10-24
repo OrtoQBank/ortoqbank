@@ -25,7 +25,7 @@ export default function OnboardingPage() {
         <Card className="w-full max-w-md">
           <CardContent className="p-6">
             <div className="flex flex-col items-center space-y-4">
-              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-600" />
+              <div className="h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue" />
               <h2 className="text-xl font-semibold">Carregando...</h2>
             </div>
           </CardContent>
@@ -35,7 +35,7 @@ export default function OnboardingPage() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-blue-50 to-indigo-100">
+    <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-brand-blue/10 to-indigo-100">
       <Card className="w-full max-w-2xl">
         <CardHeader className="text-center">
           <div className="flex justify-center mb-4">
@@ -52,8 +52,8 @@ export default function OnboardingPage() {
           <div className="space-y-4">
             <h3 className="font-semibold">O que você pode fazer agora:</h3>
             <div className="grid gap-3">
-              <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
-                <div className="h-2 w-2 bg-blue-600 rounded-full mt-2"></div>
+              <div className="flex items-start gap-3 p-3 bg-brand-blue/10 rounded-lg">
+                <div className="h-2 w-2 bg-brand-blue rounded-full mt-2"></div>
                 <div>
                   <h4 className="font-medium">Acessar questões</h4>
                   <p className="text-sm text-muted-foreground">
@@ -61,8 +61,8 @@ export default function OnboardingPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
-                <div className="h-2 w-2 bg-blue-600 rounded-full mt-2"></div>
+              <div className="flex items-start gap-3 p-3 bg-brand-blue/10 rounded-lg">
+                <div className="h-2 w-2 bg-brand-blue rounded-full mt-2"></div>
                 <div>
                   <h4 className="font-medium">Criar simulados</h4>
                   <p className="text-sm text-muted-foreground">
@@ -70,8 +70,8 @@ export default function OnboardingPage() {
                   </p>
                 </div>
               </div>
-              <div className="flex items-start gap-3 p-3 bg-blue-50 rounded-lg">
-                <div className="h-2 w-2 bg-blue-600 rounded-full mt-2"></div>
+              <div className="flex items-start gap-3 p-3 bg-brand-blue/10 rounded-lg">
+                <div className="h-2 w-2 bg-brand-blue rounded-full mt-2"></div>
                 <div>
                   <h4 className="font-medium">Acompanhar progresso</h4>
                   <p className="text-sm text-muted-foreground">

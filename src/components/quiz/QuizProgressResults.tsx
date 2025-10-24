@@ -86,13 +86,13 @@ export default function QuizProgressResults({
             // Determine button appearance
             let bgColor =
               currentIndex === questionIndex
-                ? 'ring-2 ring-offset-1 ring-blue-500 bg-blue-100'
+                ? 'ring-2 ring-offset-1 ring-brand-blue bg-brand-blue/10'
                 : 'bg-gray-100';
 
             if (feedback) {
               bgColor =
                 currentIndex === questionIndex
-                  ? 'ring-2 ring-offset-1 ring-blue-500 ' +
+                  ? 'ring-2 ring-offset-1 ring-brand-blue ' +
                     (feedback.isCorrect ? 'bg-green-100' : 'bg-red-100')
                   : feedback.isCorrect
                     ? 'bg-green-100 text-green-800'

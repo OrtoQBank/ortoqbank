@@ -222,7 +222,7 @@ function CheckoutPageContent() {
   if (!pricingPlan) {
     return (
       <div className="min-h-screen bg-gray-50 py-8 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
       </div>
     );
   }
@@ -504,7 +504,7 @@ function CheckoutPageContent() {
                   <div
                     className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                       selectedPaymentMethod === 'PIX'
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-brand-blue bg-brand-blue/10'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                     onClick={() => {
@@ -524,7 +524,7 @@ function CheckoutPageContent() {
                   <div
                     className={`border-2 rounded-lg p-4 cursor-pointer transition-all ${
                       selectedPaymentMethod === 'CREDIT_CARD'
-                        ? 'border-blue-500 bg-blue-50'
+                        ? 'border-brand-blue bg-brand-blue/10'
                         : 'border-gray-200 hover:border-gray-300'
                     }`}
                     onClick={() => {
@@ -729,7 +729,7 @@ function CheckoutPageContent() {
                       value={selectedInstallments}
                       onChange={(e) => setSelectedInstallments(Number(e.target.value))}
                       disabled={isLoading}
-                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                      className="w-full p-2 border border-gray-300 rounded-md focus:ring-2 focus:ring-brand-blue focus:border-brand-blue"
                     >
                       {Array.from({ length: 12 }, (_, i) => i + 1).map((num) => {
                         // Use the final price after coupon discount if coupon is applied
@@ -805,14 +805,14 @@ function CheckoutPageContent() {
                     </div>
                     
                     {selectedPaymentMethod === 'CREDIT_CARD' && selectedInstallments > 1 && (
-                      <div className="flex justify-between items-center text-sm text-blue-600">
+                      <div className="flex justify-between items-center text-sm text-brand-blue">
                         <span>💳 Parcelamento</span>
                         <span>{selectedInstallments}x de R$ {((appliedCoupon ? appliedCoupon.finalPrice : regularPrice) / selectedInstallments).toFixed(2)}</span>
                       </div>
                     )}
                     
                     {selectedPaymentMethod === 'PIX' && pixSavings > 0 && !appliedCoupon && (
-                      <div className="flex justify-between items-center text-sm text-blue-600">
+                      <div className="flex justify-between items-center text-sm text-brand-blue">
                         <span>💰 Desconto PIX</span>
                         <span>- R$ {pixSavings.toFixed(2)}</span>
                       </div>
@@ -820,7 +820,7 @@ function CheckoutPageContent() {
                     
                     {selectedPaymentMethod === 'PIX' && appliedCoupon && (
                       <>
-                        <div className="flex justify-between items-center text-sm text-blue-600">
+                        <div className="flex justify-between items-center text-sm text-brand-blue">
                           <span>💰 Desconto PIX</span>
                           <span>- R$ {pixSavings.toFixed(2)}</span>
                         </div>
@@ -887,7 +887,7 @@ export default function CheckoutPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen bg-gray-50 py-8 flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
       </div>
     }>
       <CheckoutPageContent />

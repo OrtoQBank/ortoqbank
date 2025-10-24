@@ -66,7 +66,7 @@ export function QuestionDisplay({
 
           <div>
             <h2 className="mb-4 font-semibold">Explicação:</h2>
-            <div className="mt-6 rounded-lg border border-blue-200 bg-blue-50 p-4">
+            <div className="mt-6 rounded-lg border border-brand-blue/20 bg-brand-blue/10 p-4">
               <div className="prose mt-2 max-w-none">
                 <QuestionContent
                   stringContent={question.explanationTextString}

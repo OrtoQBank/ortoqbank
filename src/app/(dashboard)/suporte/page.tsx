@@ -23,7 +23,7 @@ export default function SupportPage() {
       <div className="space-y-6">
         <div className="rounded-lg border bg-white p-6 shadow-sm">
           <div className="mb-4 flex items-start gap-3">
-            <HelpCircle className="mt-1 h-6 w-6 flex-shrink-0 text-[#2096f4]" />
+            <HelpCircle className="mt-1 h-6 w-6 flex-shrink-0 text-brand-blue" />
             <div>
               <h2 className="text-lg font-medium">
                 Como usar o OrtoQBank da melhor forma
@@ -41,7 +41,7 @@ export default function SupportPage() {
           <Card>
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center gap-2 text-base">
-                <Map className="h-5 w-5 text-[#2096f4]" />
+                <Map className="h-5 w-5 text-brand-blue" />
                 <span>Trilhas de Estudo</span>
               </CardTitle>
             </CardHeader>

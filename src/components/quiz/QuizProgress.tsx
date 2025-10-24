@@ -101,26 +101,26 @@ export default function QuizProgress({
                 // Answered question - darker grey
                 buttonColorClass =
                   currentIndex === questionIndex
-                    ? 'ring-2 ring-offset-1 ring-blue-500 bg-gray-300 text-gray-800'
+                    ? 'ring-2 ring-offset-1 ring-brand-blue bg-gray-300 text-gray-800'
                     : 'bg-gray-300 text-gray-800';
               } else {
                 // Unanswered question - lighter grey
                 buttonColorClass =
                   currentIndex === questionIndex
-                    ? 'ring-2 ring-offset-1 ring-blue-500 bg-gray-100'
+                    ? 'ring-2 ring-offset-1 ring-brand-blue bg-gray-100'
                     : 'bg-gray-100 text-gray-700';
               }
             } else {
               // In study mode, show colors based on answer feedback
               buttonColorClass =
                 currentIndex === questionIndex
-                  ? 'ring-2 ring-offset-1 ring-blue-500 bg-blue-100'
+                  ? 'ring-2 ring-offset-1 ring-brand-blue bg-brand-blue/10'
                   : 'bg-gray-100';
 
               if (answerFeedback[questionIndex]) {
                 buttonColorClass =
                   currentIndex === questionIndex
-                    ? 'ring-2 ring-offset-1 ring-blue-500 ' +
+                    ? 'ring-2 ring-offset-1 ring-brand-blue ' +
                       (answerFeedback[questionIndex]?.isCorrect
                         ? 'bg-green-100'
                         : 'bg-red-100')

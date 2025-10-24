@@ -17,7 +17,7 @@ interface StatCardProps {
 }
 
 const colorMap = {
-  blue: 'bg-blue-50 text-blue-800 border-blue-200',
+  blue: 'bg-brand-blue/10 text-brand-blue/90 border-brand-blue/20',
   green: 'bg-green-50 text-green-800 border-green-200',
   red: 'bg-red-50 text-red-800 border-red-200',
   purple: 'bg-purple-50 text-purple-800 border-purple-200',

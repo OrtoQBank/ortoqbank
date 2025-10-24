@@ -123,8 +123,8 @@ function PixPaymentContent() {
       <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
         <Card className="max-w-md w-full">
           <CardHeader className="text-center">
-            <Loader2 className="w-12 h-12 text-blue-500 mx-auto mb-4 animate-spin" />
-            <CardTitle className="text-blue-600">Gerando QR Code PIX</CardTitle>
+            <Loader2 className="w-12 h-12 text-brand-blue mx-auto mb-4 animate-spin" />
+            <CardTitle className="text-brand-blue">Gerando QR Code PIX</CardTitle>
             <CardDescription>
               Aguarde enquanto geramos seu código PIX...
             </CardDescription>
@@ -140,9 +140,9 @@ function PixPaymentContent() {
         <Card>
           <CardHeader className="text-center">
             <div className="flex justify-center mb-4">
-              <QrCode className="w-12 h-12 text-blue-600" />
+              <QrCode className="w-12 h-12 text-brand-blue" />
             </div>
-            <CardTitle className="text-2xl text-blue-600">Pagamento via PIX</CardTitle>
+            <CardTitle className="text-2xl text-brand-blue">Pagamento via PIX</CardTitle>
             <CardDescription>
               Escaneie o QR Code ou copie o código para realizar o pagamento
             </CardDescription>
@@ -151,9 +151,9 @@ function PixPaymentContent() {
           <CardContent className="space-y-6">
             {/* Payment Info */}
             {paymentStatus.orderDetails && (
-              <div className="bg-blue-50 p-4 rounded-lg">
-                <h3 className="font-semibold text-blue-900 mb-2">Detalhes do Pedido</h3>
-                <div className="space-y-1 text-sm text-blue-800">
+              <div className="bg-brand-blue/10 p-4 rounded-lg">
+                <h3 className="font-semibold text-brand-blue mb-2">Detalhes do Pedido</h3>
+                <div className="space-y-1 text-sm text-brand-blue/90">
                   <p><strong>Email:</strong> {paymentStatus.orderDetails.email}</p>
                   <p><strong>Produto:</strong> {paymentStatus.orderDetails.productId}</p>
                   <p><strong>Valor:</strong> R$ {paymentStatus.orderDetails.finalPrice.toFixed(2)}</p>
@@ -287,7 +287,7 @@ export default function PixPaymentPage() {
   return (
     <Suspense fallback={
       <div className="min-h-screen flex items-center justify-center">
-        <Loader2 className="w-8 h-8 animate-spin text-blue-600" />
+        <Loader2 className="w-8 h-8 animate-spin text-brand-blue" />
       </div>
     }>
       <PixPaymentContent />

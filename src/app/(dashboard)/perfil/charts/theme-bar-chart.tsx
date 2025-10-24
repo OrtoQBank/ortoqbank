@@ -27,7 +27,7 @@ const getFillColor = (percentage: number): string => {
     return '#22c55e'; // green-500
   }
   if (percentage >= 60) {
-    return '#3b82f6'; // blue-500 (medium performance)
+    return 'hsl(208 77% 51%)'; // brand-blue (medium performance)
   }
   return '#ef4444'; // red-500
 };

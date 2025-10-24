@@ -13,7 +13,7 @@ export function QuestionIdDisplay({ generatedId }: QuestionIdDisplayProps) {
           <div
             className={`rounded-md border px-3 py-1 ${
               generatedId
-                ? 'border-blue-200 bg-blue-50 dark:border-blue-800 dark:bg-blue-900/20'
+                ? 'border-brand-blue/20 bg-brand-blue/10 dark:border-brand-blue/80 dark:bg-brand-blue/20'
                 : 'bg-muted'
             }`}
           >

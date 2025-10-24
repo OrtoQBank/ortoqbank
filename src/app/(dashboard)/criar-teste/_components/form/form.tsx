@@ -249,7 +249,7 @@ export default function TestForm() {
     return (
       <div className="flex min-h-[400px] items-center justify-center p-6">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-blue-500"></div>
+          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
           <p className="text-gray-600">Carregando...</p>
         </div>
       </div>
@@ -349,7 +349,7 @@ export default function TestForm() {
 
         <Button
           type="submit"
-          className="w-full cursor-pointer bg-blue-500 hover:bg-blue-600"
+          className="w-full cursor-pointer bg-brand-blue hover:bg-brand-blue/90"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Gerando seu teste...' : 'Gerar Teste'}

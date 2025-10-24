@@ -145,7 +145,7 @@ export default function QuizAlternatives({
             }
           } else if (selectedAlternative === i) {
             // Default selected style when not showing feedback
-            borderClass = 'border-blue-500 bg-blue-50';
+            borderClass = 'border-brand-blue bg-brand-blue/10';
           }
 
           return (
