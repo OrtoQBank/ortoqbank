@@ -2,10 +2,10 @@ import { v } from 'convex/values';
 
 import { api, internal } from './_generated/api';
 import {
-    internalAction,
-    internalMutation,
-    internalQuery,
-    query,
+  internalAction,
+  internalMutation,
+  internalQuery,
+  query,
 } from './_generated/server';
 
 /**
