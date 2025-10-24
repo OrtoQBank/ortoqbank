@@ -4,8 +4,7 @@ import { api, internal } from './_generated/api';
 import {
   internalAction,
   internalMutation,
-  internalQuery,
-  query,
+  internalQuery
 } from './_generated/server';
 
 /**
@@ -148,23 +147,12 @@ export const processInvoiceGeneration = internalAction({
         ? fiscalService.description.slice(0, 247) + '...'
         : fiscalService.description;
       
-      // Get ISS rate - use environment variable override if set, otherwise use dashboard rate (2%)
+      // Get ISS rate - hard coded to 2% (matching dashboard configuration)
       // Note: The Asaas API returns issTax: 0, but the dashboard shows 2% for service "02964"
       // The ISS rate is configured in the Asaas account settings, not in the service list API
-      const issRateOverride = process.env.ASAAS_ISS_RATE 
-        ? Number.parseFloat(process.env.ASAAS_ISS_RATE) 
-        : undefined;
+      const issRate = 2;
       
-      const issRate = issRateOverride ?? (fiscalService.issTax > 0 ? fiscalService.issTax : 2);
-      
-      // Log ISS rate source
-      let issRateSource = '(from env var ASAAS_ISS_RATE)';
-      if (issRateOverride === undefined) {
-        issRateSource = fiscalService.issTax === 0 
-          ? '(matching dashboard configuration)' 
-          : '(from fiscal service API)';
-      }
-      console.log(`💰 Using ISS rate: ${issRate}% ${issRateSource}`);
+      console.log(`💰 Using ISS rate: ${issRate}% (hard coded value)`);
       
       // Build taxes object (flat structure per Asaas API)
       const taxes = {
@@ -279,45 +267,3 @@ export const updateInvoiceError = internalMutation({
     return null;
   },
 });
-
-/**
- * Get invoice status for an order (for admin dashboard)
- */
-export const getInvoiceForOrder = query({
-  args: {
-    orderId: v.id('pendingOrders'),
-  },
-  returns: v.union(
-    v.object({
-      _id: v.id('invoices'),
-      status: v.string(),
-      asaasInvoiceId: v.optional(v.string()),
-      invoiceUrl: v.optional(v.string()),
-      errorMessage: v.optional(v.string()),
-      createdAt: v.number(),
-      issuedAt: v.optional(v.number()),
-    }),
-    v.null()
-  ),
-  handler: async (ctx, args) => {
-    const invoice = await ctx.db
-      .query('invoices')
-      .withIndex('by_order', q => q.eq('orderId', args.orderId))
-      .first();
-    
-    if (!invoice) {
-      return null;
-    }
-    
-    return {
-      _id: invoice._id,
-      status: invoice.status,
-      asaasInvoiceId: invoice.asaasInvoiceId,
-      invoiceUrl: invoice.invoiceUrl,
-      errorMessage: invoice.errorMessage,
-      createdAt: invoice.createdAt,
-      issuedAt: invoice.issuedAt,
-    };
-  },
-});
-
