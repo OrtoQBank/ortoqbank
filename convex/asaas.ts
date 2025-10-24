@@ -565,7 +565,15 @@ export const scheduleInvoice = action({
     municipalServiceCode: v.optional(v.string()), // Manual code (e.g., "02964" or "1.01")
     municipalServiceName: v.string(), // Service name/description
     observations: v.optional(v.string()),
-    issRate: v.optional(v.number()), // ISS tax rate (e.g., 2 for 2%)
+    taxes: v.optional(v.object({
+      retainIss: v.boolean(),
+      iss: v.optional(v.number()),
+      cofins: v.optional(v.number()),
+      csll: v.optional(v.number()),
+      inss: v.optional(v.number()),
+      ir: v.optional(v.number()),
+      pis: v.optional(v.number()),
+    })),
   },
   returns: v.object({
     invoiceId: v.string(),
@@ -580,17 +588,6 @@ export const scheduleInvoice = action({
     
     console.log(`📄 Scheduling invoice with municipal service ${serviceIdentifier} - ${args.municipalServiceName}`);
     
-    // Build taxes object if issRate is provided (flat structure per Asaas API)
-    const taxes = args.issRate ? {
-      retainIss: true, // Retain ISS (common for service providers)
-      iss: args.issRate, // ISS rate as a direct number (e.g., 2 for 2%)
-      cofins: 0,
-      csll: 0,
-      inss: 0,
-      ir: 0,
-      pis: 0,
-    } : undefined;
-    
     const invoice = await asaas.scheduleInvoice({
       payment: args.asaasPaymentId,
       serviceDescription: args.serviceDescription,
@@ -598,7 +595,7 @@ export const scheduleInvoice = action({
       municipalServiceCode: args.municipalServiceCode,
       municipalServiceName: args.municipalServiceName,
       observations: args.observations,
-      taxes,
+      taxes: args.taxes,
     });
     
     console.log(`✅ Invoice scheduled: ${invoice.id} (status: ${invoice.status})`);

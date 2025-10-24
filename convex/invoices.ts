@@ -166,6 +166,17 @@ export const processInvoiceGeneration = internalAction({
       }
       console.log(`💰 Using ISS rate: ${issRate}% ${issRateSource}`);
       
+      // Build taxes object (flat structure per Asaas API)
+      const taxes = {
+        retainIss: true, // Retain ISS (common for service providers)
+        iss: issRate,    // ISS rate as a direct number (e.g., 2 for 2%)
+        cofins: 0,
+        csll: 0,
+        inss: 0,
+        ir: 0,
+        pis: 0,
+      };
+      
       // Schedule invoice with Asaas
       const result = await ctx.runAction(api.asaas.scheduleInvoice, {
         asaasPaymentId: invoice.asaasPaymentId,
@@ -173,7 +184,7 @@ export const processInvoiceGeneration = internalAction({
         municipalServiceId: fiscalService.serviceId,
         municipalServiceName,
         observations: `Pedido: ${invoice.orderId}`,
-        issRate, // Pass calculated ISS tax rate
+        taxes, // Pass complete taxes object
       });
       
       // Update invoice record with success
