@@ -25,14 +25,12 @@ export const generateInvoice = internalMutation({
       .first();
     
     if (existingInvoice) {
-      console.log(`Invoice already exists for order ${args.orderId}`);
       return existingInvoice._id;
     }
     
     // Get order details
     const order = await ctx.db.get(args.orderId);
     if (!order) {
-      console.error(`Order not found: ${args.orderId}`);
       return null;
     }
     
@@ -55,8 +53,6 @@ export const generateInvoice = internalMutation({
       customerAddressNumber: order.addressNumber,
       createdAt: Date.now(),
     });
-    
-    console.log(`📄 Created invoice record ${invoiceId} for order ${args.orderId}`);
     
     // Schedule async invoice generation
     await ctx.scheduler.runAfter(0, internal.invoices.processInvoiceGeneration, {
@@ -90,17 +86,13 @@ export const processInvoiceGeneration = internalAction({
     });
     
     if (!invoice) {
-      console.error(`Invoice not found: ${args.invoiceId}`);
       return null;
     }
     
     try {
-      console.log(`📄 Processing invoice generation for order ${invoice.orderId}`);
-      
       // Get fiscal service ID from Asaas
-      // For software/digital content services, use: "02964"
-      // Note: Multiple service IDs exist - we skip expired ones (e.g., 306562)
-      const serviceDescription = process.env.ASAAS_FISCAL_SERVICE || '02964';
+      // Hard coded to "02964" according to business needs
+      const serviceDescription = '02964';
       
       const fiscalService = await ctx.runAction(api.asaas.getFiscalServiceId, {
         serviceDescription,
@@ -108,28 +100,10 @@ export const processInvoiceGeneration = internalAction({
       
       if (!fiscalService) {
         const errorMsg = `Fiscal service not found for: ${serviceDescription}. Check your Asaas fiscal configuration.`;
-        console.error(`⚠️ ${errorMsg}`);
         
         await ctx.runMutation(internal.invoices.updateInvoiceError, {
           invoiceId: args.invoiceId,
           errorMessage: errorMsg,
-        });
-        
-        // Detailed admin alert for fiscal service configuration error
-        console.error(`🚨 ADMIN ALERT: Invoice generation failed - Fiscal service not found`, {
-          invoiceId: args.invoiceId,
-          orderId: invoice.orderId,
-          serviceDescription,
-          error: errorMsg,
-          severity: 'high',
-          category: 'configuration_error',
-          troubleshooting: {
-            step1: 'Verify ASAAS_FISCAL_SERVICE env var is set correctly (default: "02964")',
-            step2: 'Check fiscal service exists in Asaas: GET /fiscalInfo/services?description=02964',
-            step3: 'Ensure fiscal info is complete in Asaas dashboard',
-            step4: 'Verify invoice features are enabled in your Asaas account settings',
-            note: 'This is a configuration error - payment processing is working correctly'
-          }
         });
         
         return null;
@@ -148,12 +122,10 @@ export const processInvoiceGeneration = internalAction({
         ? fiscalService.description.slice(0, 247) + '...'
         : fiscalService.description;
       
-      // Get ISS rate - hard coded to 2% (matching dashboard configuration)
-      // Note: The Asaas API returns issTax: 0, but the dashboard shows 2% for service "02964"
-      // The ISS rate is configured in the Asaas account settings, not in the service list API
+      // Get ISS rate - hard coded to 2% according to business needs
       const issRate = 2;
       
-      console.log(`💰 Using ISS rate: ${issRate}% (hard coded value)`);
+      console.log(`💰 Using ISS rate: ${issRate}% (hard coded according to business needs)`);
       
       // Build taxes object (flat structure per Asaas API)
       const taxes = {
@@ -201,7 +173,7 @@ export const processInvoiceGeneration = internalAction({
         error: errorMessage,
         troubleshooting: {
           step1: 'Verify invoice features are enabled in your Asaas account settings',
-          step2: 'Check fiscal service in ASAAS_FISCAL_SERVICE env var (default: "02964")',
+          step2: 'Using hard coded fiscal service "02964" and ISS rate 2% according to business needs',
           step3: 'Ensure digital certificate is uploaded if required by your municipality',
           step4: 'Verify fiscal info is complete in Asaas dashboard',
           step5: 'Test endpoint: GET /fiscalInfo/services?description=02964',
