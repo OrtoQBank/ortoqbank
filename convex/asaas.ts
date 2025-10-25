@@ -161,18 +161,31 @@ class AsaasClient {
   async scheduleInvoice(params: {
     payment: string; // Payment ID
     serviceDescription: string;
-    municipalServiceId: string; // The service ID from fiscalInfo/services (e.g., "306562")
+    municipalServiceId?: string; // The service ID from fiscalInfo/services (e.g., "306615")
+    municipalServiceCode?: string; // Manual service code (e.g., "1.01" or "02964")
     municipalServiceName: string; // The service name/description
     observations?: string;
+    // Tax structure as per Asaas API (flat properties, not nested)
+    taxes?: {
+      retainIss?: boolean; // Whether ISS is retained
+      iss?: number;        // ISS rate (e.g., 2 for 2%)
+      cofins?: number;     // COFINS rate
+      csll?: number;       // CSLL rate
+      inss?: number;       // INSS rate
+      ir?: number;         // IR rate
+      pis?: number;        // PIS rate
+    };
   }): Promise<AsaasInvoice> {
     return this.makeRequest<AsaasInvoice>('/invoices', {
       method: 'POST',
       body: JSON.stringify({
         payment: params.payment,
         serviceDescription: params.serviceDescription,
-        municipalServiceId: params.municipalServiceId,
+        municipalServiceId: params.municipalServiceId || null,
+        municipalServiceCode: params.municipalServiceCode || null,
         municipalServiceName: params.municipalServiceName,
         observations: params.observations,
+        ...(params.taxes && { taxes: params.taxes }),
       }),
     });
   }
@@ -495,21 +508,42 @@ export const getFiscalServiceId = action({
       
       const result = await asaas.listFiscalServices({ 
         description: args.serviceDescription,
-        limit: 1,
+        limit: 10, // Get more results to find the best one
       });
       
       if (!result.data || result.data.length === 0) {
         console.warn(`⚠️ Fiscal service not found for: ${args.serviceDescription}`);
+        console.warn(`💡 TIP: Check if the service is registered in your Asaas account`);
         return null;
       }
       
-      const service = result.data[0];
-      console.log(`✅ Found fiscal service: ${service.id} - ${service.description}`);
+      // Log all found services to help with debugging
+      console.log(`📋 Found ${result.data.length} fiscal service(s):`);
+      for (const svc of result.data) {
+        console.log(`  - ID: ${svc.id} | ISS: ${svc.issTax}% | Desc: ${svc.description}`);
+      }
       
+      // Service ID 306562 is EXPIRED (valid until 31/03/2024)
+      // We need to use 306615 which has the same format "02964 - 1.09"
+      // Skip expired service IDs and use the first valid one
+      const EXPIRED_SERVICE_IDS = new Set(['306562']);
+      
+      const service = result.data.find(svc => !EXPIRED_SERVICE_IDS.has(svc.id)) || result.data[0];
+      
+      if (EXPIRED_SERVICE_IDS.has(service.id)) {
+        console.warn(`⚠️ WARNING: Using expired service ID ${service.id}. All available services are expired!`);
+      }
+      
+      console.log(`✅ Using fiscal service: ${service.id} - ${service.description}`);
+      console.log(`   API ISS rate: ${service.issTax}%`);
+      
+      // IMPORTANT: The API returns issTax: 0, but the dashboard shows 2%
+      // This is because the ISS rate is configured in your Asaas account settings, not in the service list
+      // We'll use the dashboard rate (2%) as the default, which can be overridden via env var
       return {
         serviceId: service.id,
         description: service.description,
-        issTax: service.issTax,
+        issTax: service.issTax, // Return 0, will be overridden in payments.ts with dashboard rate
       };
     } catch (error) {
       const errorMsg = error instanceof Error ? error.message : String(error);
@@ -521,15 +555,25 @@ export const getFiscalServiceId = action({
 
 /**
  * Schedule invoice generation for a paid order
- * Uses the fiscal service ID from /fiscalInfo/services
+ * Supports both municipalServiceId (from API) and municipalServiceCode (manual)
  */
 export const scheduleInvoice = action({
   args: {
     asaasPaymentId: v.string(),
     serviceDescription: v.string(),
-    municipalServiceId: v.string(), // Service ID like "306562"
+    municipalServiceId: v.optional(v.string()), // Service ID from API (e.g., "306562")
+    municipalServiceCode: v.optional(v.string()), // Manual code (e.g., "02964" or "1.01")
     municipalServiceName: v.string(), // Service name/description
     observations: v.optional(v.string()),
+    taxes: v.optional(v.object({
+      retainIss: v.boolean(),
+      iss: v.optional(v.number()),
+      cofins: v.optional(v.number()),
+      csll: v.optional(v.number()),
+      inss: v.optional(v.number()),
+      ir: v.optional(v.number()),
+      pis: v.optional(v.number()),
+    })),
   },
   returns: v.object({
     invoiceId: v.string(),
@@ -538,14 +582,20 @@ export const scheduleInvoice = action({
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
     
-    console.log(`📄 Scheduling invoice with municipal service: ${args.municipalServiceId} - ${args.municipalServiceName}`);
+    const serviceIdentifier = args.municipalServiceId 
+      ? `ID: ${args.municipalServiceId}` 
+      : `Code: ${args.municipalServiceCode}`;
+    
+    console.log(`📄 Scheduling invoice with municipal service ${serviceIdentifier} - ${args.municipalServiceName}`);
     
     const invoice = await asaas.scheduleInvoice({
       payment: args.asaasPaymentId,
       serviceDescription: args.serviceDescription,
       municipalServiceId: args.municipalServiceId,
+      municipalServiceCode: args.municipalServiceCode,
       municipalServiceName: args.municipalServiceName,
       observations: args.observations,
+      taxes: args.taxes,
     });
     
     console.log(`✅ Invoice scheduled: ${invoice.id} (status: ${invoice.status})`);
