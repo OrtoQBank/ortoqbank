@@ -1,6 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
+import cardValidator from 'card-validator';
 import { useAction, useMutation, useQuery } from 'convex/react';
 import { Loader2, Tag } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
@@ -56,21 +57,9 @@ const checkoutSchema = z
   .superRefine((data, ctx) => {
     // Only validate credit card fields when payment method is CREDIT_CARD
     if (data.paymentMethod === 'CREDIT_CARD') {
-      // Validate card number
-      if (
-        !data.cardNumber ||
-        data.cardNumber.replaceAll(/\s/g, '').length < 13
-      ) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Número do cartão inválido',
-          path: ['cardNumber'],
-        });
-      }
-      if (
-        data.cardNumber &&
-        data.cardNumber.replaceAll(/\s/g, '').length > 19
-      ) {
+      // Validate card number using card-validator
+      const cardNumberValidation = cardValidator.number(data.cardNumber || '');
+      if (!cardNumberValidation.isValid) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'Número do cartão inválido',
@@ -78,67 +67,23 @@ const checkoutSchema = z
         });
       }
 
-      // Validate card expiry
-      if (!data.cardExpiry) {
+      // Validate card expiry using card-validator
+      const expiryValidation = cardValidator.expirationDate(
+        data.cardExpiry || '',
+      );
+      if (!expiryValidation.isValid) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
-          message: 'Use formato MM/AA',
-          path: ['cardExpiry'],
-        });
-      } else if (/^(0[1-9]|1[0-2])\/\d{2}$/.test(data.cardExpiry)) {
-        // Validate expiry date is not in the past
-        const [month, year] = data.cardExpiry.split('/');
-        const currentYear = new Date().getFullYear() % 100;
-        const currentMonth = new Date().getMonth() + 1;
-        const expYear = Number.parseInt(year, 10);
-        const expMonth = Number.parseInt(month, 10);
-
-        // Maximum 20 years in the future
-        const maxYear = (currentYear + 20) % 100;
-
-        let isValid = true;
-
-        // Check if expired
-        if (expYear < currentYear) {
-          isValid = false;
-        } else if (maxYear < currentYear) {
-          // Wrapped around
-          if (expYear > maxYear && expYear < currentYear) {
-            isValid = false;
-          }
-        } else if (expYear > maxYear) {
-          isValid = false;
-        }
-
-        // Check if card is expired (same year)
-        if (expYear === currentYear && expMonth < currentMonth) {
-          isValid = false;
-        }
-
-        if (!isValid) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Data de validade inválida',
-            path: ['cardExpiry'],
-          });
-        }
-      } else {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'Use formato MM/AA',
+          message: expiryValidation.isPotentiallyValid
+            ? 'Use formato MM/AA'
+            : 'Data de validade inválida',
           path: ['cardExpiry'],
         });
       }
 
-      // Validate CVV
-      if (!data.cardCvv || data.cardCvv.length < 3) {
-        ctx.addIssue({
-          code: z.ZodIssueCode.custom,
-          message: 'CVV deve ter 3 ou 4 dígitos',
-          path: ['cardCvv'],
-        });
-      }
-      if (data.cardCvv && data.cardCvv.length > 4) {
+      // Validate CVV using card-validator
+      const cvvValidation = cardValidator.cvv(data.cardCvv || '');
+      if (!cvvValidation.isValid) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
           message: 'CVV deve ter 3 ou 4 dígitos',
@@ -744,7 +689,7 @@ function CheckoutPageContent() {
                               placeholder="0000 0000 0000 0000"
                               {...register('cardNumber')}
                               disabled={isLoading}
-                              maxLength={19}
+                              maxLength={23}
                               onChange={e => {
                                 const value = e.target.value.replaceAll(
                                   /\D/g,
