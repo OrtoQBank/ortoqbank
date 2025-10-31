@@ -23,6 +23,54 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 
 import { api } from '../../../convex/_generated/api';
+import { Id } from '../../../convex/_generated/dataModel';
+
+// Type definitions based on Convex return types
+type CouponValidationSuccess = {
+  isValid: true;
+  finalPrice: number;
+  discountAmount: number;
+  couponDescription: string;
+  coupon: {
+    _id: Id<'coupons'>;
+    code: string;
+    type: 'percentage' | 'fixed' | 'fixed_price';
+    value: number;
+    description: string;
+  };
+};
+
+type CouponValidationError = {
+  isValid: false;
+  errorMessage: string;
+};
+
+type CouponValidationResult = CouponValidationSuccess | CouponValidationError;
+
+// Type guard for coupon validation
+function isCouponValidationSuccess(
+  result: CouponValidationResult,
+): result is CouponValidationSuccess {
+  return result.isValid === true && 'finalPrice' in result;
+}
+
+type PixPaymentResult = {
+  paymentId: string;
+  value: number;
+  qrPayload?: string;
+  qrCodeBase64?: string;
+  expirationDate?: string;
+};
+
+type CreditCardPaymentResult = {
+  paymentId: string;
+  value: number;
+  status: string;
+  creditCardToken?: string;
+  invoiceUrl?: string;
+};
+
+type PaymentResult = PixPaymentResult | CreditCardPaymentResult;
 
 // Utility functions
 const formatCPF = (value: string) => {
@@ -105,7 +153,8 @@ function CheckoutPageContent() {
     'PIX' | 'CREDIT_CARD'
   >('PIX');
   const [couponCode, setCouponCode] = useState('');
-  const [appliedCoupon, setAppliedCoupon] = useState<any>(null);
+  const [appliedCoupon, setAppliedCoupon] =
+    useState<CouponValidationSuccess | null>(null);
   const [couponError, setCouponError] = useState<string | null>(null);
   const [isValidatingCoupon, setIsValidatingCoupon] = useState(false);
   const [selectedInstallments, setSelectedInstallments] = useState<number>(1);
@@ -204,15 +253,15 @@ function CheckoutPageContent() {
       const { ConvexHttpClient } = await import('convex/browser');
       const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
 
-      const validateResult: any = await client.query(
+      const validateResult = (await client.query(
         api.promoCoupons.validateAndApplyCoupon,
         {
           code: couponCode,
           originalPrice,
         },
-      );
+      )) as CouponValidationResult;
 
-      if (validateResult.isValid) {
+      if (isCouponValidationSuccess(validateResult)) {
         setAppliedCoupon(validateResult);
         setCouponError(null);
       } else {
@@ -289,7 +338,7 @@ function CheckoutPageContent() {
         addressNumber: addressNumber,
       });
 
-      let payment: any;
+      let payment: PaymentResult;
 
       // Step 3: Create payment based on selected method
       if (data.paymentMethod === 'PIX') {
