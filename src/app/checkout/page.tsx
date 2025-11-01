@@ -249,6 +249,10 @@ function CheckoutPageContent() {
       const originalPrice =
         selectedPaymentMethod === 'PIX' ? pixPrice : regularPrice;
 
+      // Get CPF from form for per-user coupon limit checks
+      const cpfValue = watch('cpf');
+      const cleanCpf = cpfValue ? cpfValue.replaceAll(/\D/g, '') : undefined;
+
       // Import convex client to make the query
       const { ConvexHttpClient } = await import('convex/browser');
       const client = new ConvexHttpClient(process.env.NEXT_PUBLIC_CONVEX_URL!);
@@ -258,6 +262,7 @@ function CheckoutPageContent() {
         {
           code: couponCode,
           originalPrice,
+          userCpf: cleanCpf, // Pass CPF for per-user limit checks
         },
       )) as CouponValidationResult;
 

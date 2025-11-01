@@ -212,38 +212,24 @@ export const validateAndApplyCoupon = query({
       };
     }
 
-    // Check maximum total uses
+    // Track usage limits for analytics (but don't block)
+    // Log usage stats for monitoring
     if (coupon.maxUses !== undefined) {
       const currentUses = coupon.currentUses || 0;
-      if (currentUses >= coupon.maxUses) {
-        return {
-          isValid: false,
-          errorMessage: 'Cupom esgotado',
-        };
-      }
+      console.log(`Coupon ${code} usage: ${currentUses}/${coupon.maxUses} (tracking only)`);
     }
 
-    // Check per-user usage limit (if CPF provided)
-    if (coupon.maxUsesPerUser !== undefined) {
-      if (args.userCpf) {
-        const cleanCpf = args.userCpf.replaceAll(/\D/g, '');
-        const userUsageCount = await ctx.db
-          .query('couponUsage')
-          .withIndex('by_coupon_user', q => 
-            q.eq('couponCode', code).eq('userCpf', cleanCpf)
-          )
-          .collect();
-        
-        if (userUsageCount.length >= coupon.maxUsesPerUser) {
-          return {
-            isValid: false,
-            errorMessage: 'Você já utilizou este cupom o número máximo de vezes',
-          };
-        }
-      } else {
-        // If per-user limit is set but no CPF provided, show warning
-        console.warn(`Coupon ${code} has per-user limit but no CPF provided for validation`);
-      }
+    // Track per-user usage for analytics (but don't block)
+    if (coupon.maxUsesPerUser !== undefined && args.userCpf) {
+      const cleanCpf = args.userCpf.replaceAll(/\D/g, '');
+      const userUsageCount = await ctx.db
+        .query('couponUsage')
+        .withIndex('by_coupon_user', q => 
+          q.eq('couponCode', code).eq('userCpf', cleanCpf)
+        )
+        .collect();
+      
+      console.log(`Coupon ${code} user usage (CPF: ${cleanCpf}): ${userUsageCount.length}/${coupon.maxUsesPerUser} (tracking only)`);
     }
 
     // Calculate discount
