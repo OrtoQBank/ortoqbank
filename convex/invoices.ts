@@ -116,8 +116,8 @@ export const processInvoiceGeneration = internalAction({
       });
       
       // Truncate service name to 350 characters (Asaas limit)
-      const municipalServiceName = fiscalService.description.length > 350 
-        ? fiscalService.description.slice(0, 347) + '...'
+      const municipalServiceName = fiscalService.description.length > 250 
+        ? fiscalService.description.slice(0, 247) + '...'
         : fiscalService.description;
       
       // Get ISS rate - hard coded to 2% according to business needs
