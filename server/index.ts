@@ -21,6 +21,7 @@ const appRouter = router({
   tags: tagRouter,
   users: userRouter,
 });
+
 export type AppRouter = typeof appRouter;
 
 const app = express();
