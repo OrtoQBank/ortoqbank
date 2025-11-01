@@ -78,6 +78,49 @@ const formatCPF = (value: string) => {
   return numbers.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
 };
 
+const validateCPF = (cpf: string): boolean => {
+  // Remove non-digits
+  const cleanCPF = cpf.replaceAll(/\D/g, '');
+
+  // Check if has 11 digits
+  if (cleanCPF.length !== 11) {
+    return false;
+  }
+
+  // Check for known invalid CPFs (all same digits)
+  if (/^(\d)\1{10}$/.test(cleanCPF)) {
+    return false;
+  }
+
+  // Validate first check digit
+  let sum = 0;
+  for (let i = 0; i < 9; i++) {
+    sum += Number.parseInt(cleanCPF.charAt(i)) * (10 - i);
+  }
+  let checkDigit = 11 - (sum % 11);
+  if (checkDigit === 10 || checkDigit === 11) {
+    checkDigit = 0;
+  }
+  if (checkDigit !== Number.parseInt(cleanCPF.charAt(9))) {
+    return false;
+  }
+
+  // Validate second check digit
+  sum = 0;
+  for (let i = 0; i < 10; i++) {
+    sum += Number.parseInt(cleanCPF.charAt(i)) * (11 - i);
+  }
+  checkDigit = 11 - (sum % 11);
+  if (checkDigit === 10 || checkDigit === 11) {
+    checkDigit = 0;
+  }
+  if (checkDigit !== Number.parseInt(cleanCPF.charAt(10))) {
+    return false;
+  }
+
+  return true;
+};
+
 const handleCPFChange = (e: React.ChangeEvent<HTMLInputElement>) => {
   const formatted = formatCPF(e.target.value);
   e.target.value = formatted;
@@ -88,7 +131,13 @@ const checkoutSchema = z
   .object({
     name: z.string().min(2, 'Nome deve ter pelo menos 2 caracteres'),
     email: z.string().email('Email inválido'),
-    cpf: z.string().min(11, 'CPF deve ter 11 dígitos').max(14, 'CPF inválido'),
+    cpf: z
+      .string()
+      .min(11, 'CPF deve ter 11 dígitos')
+      .max(14, 'CPF inválido')
+      .refine(validateCPF, {
+        message: 'CPF inválido. Verifique os dígitos.',
+      }),
     // Required address fields for all payment methods
     phone: z.string().min(10, 'Telefone deve ter pelo menos 10 dígitos'),
     postalCode: z.string().min(8, 'CEP deve ter 8 dígitos'),
@@ -464,9 +513,11 @@ function CheckoutPageContent() {
                         disabled={isLoading}
                         maxLength={14}
                         onChange={handleCPFChange}
+                        aria-invalid={errors.cpf ? 'true' : 'false'}
+                        className={errors.cpf ? 'border-red-500' : ''}
                       />
                       {errors.cpf && (
-                        <p className="text-sm text-red-600">
+                        <p className="text-sm text-red-600" role="alert">
                           {errors.cpf.message}
                         </p>
                       )}
