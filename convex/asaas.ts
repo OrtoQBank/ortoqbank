@@ -251,6 +251,7 @@ export const createPixPayment = action({
   }),
   handler: async (ctx, args) => {
     // Get the pending order to get the final price (with coupons already applied)
+    //@ts-ignore-next-line TS2589
     const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
       orderId: args.pendingOrderId,
     });

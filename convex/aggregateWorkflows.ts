@@ -94,6 +94,7 @@ export const initiateSection1Repair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
+      //@ts-ignore-next-line TS2589
       internal.aggregateWorkflows.section1RepairInternalWorkflow,
       {},
     );
@@ -138,6 +139,7 @@ export const section1RepairInternalWorkflow = workflow.define({
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
+        //@ts-ignore-next-line TS2589
         internal.aggregateRepairs.internalRepairProcessQuestionsBatchGlobal,
         { cursor, batchSize: 25 },
         { name: `processQuestionsBatch_${batchCount}` },
@@ -157,6 +159,7 @@ export const section1RepairInternalWorkflow = workflow.define({
     // Step 3: Get taxonomy IDs
     const [themeIds, subthemeIds, groupIds] = await Promise.all([
       step.runMutation(
+        //@ts-ignore-next-line TS2589
         internal.aggregateRepairs.internalRepairGetAllThemeIds,
         {},
       ),
@@ -243,6 +246,7 @@ export const initiateSection2Repair = internalMutation({
 
     const workflowId: any = await workflow.start(
       ctx,
+      //@ts-ignore-next-line TS2589
       internal.aggregateWorkflows.section2RepairInternalWorkflow,
       {},
     );
@@ -287,6 +291,7 @@ export const section2RepairInternalWorkflow = workflow.define({
         nextCursor: string | null;
         isDone: boolean;
       } = await step.runMutation(
+        //@ts-ignore-next-line TS2589
         internal.aggregateRepairs.internalRepairProcessQuestionsBatchRandom,
         { cursor, batchSize: 25 },
         { name: `processRandomQuestionsBatch_${batchCount}` },
@@ -321,8 +326,8 @@ export const section2RepairInternalWorkflow = workflow.define({
 
     // Step 4: Process themes (paginated per theme)
     let themeCount = 0;
-    for (let i = 0; i < themeIds.length; i += 1) {
-      const themeId = themeIds[i];
+    //@eslint-disable unicorn/no-for-loop
+    for (const [i, themeId] of themeIds.entries()) {
       await step.runMutation(
         internal.aggregateRepairs.internalRepairClearThemeRandomAggregate,
         { themeId },
@@ -349,8 +354,7 @@ export const section2RepairInternalWorkflow = workflow.define({
 
     // Step 5: Process subthemes (paginated per subtheme)
     let subthemeCount = 0;
-    for (let i = 0; i < subthemeIds.length; i += 1) {
-      const subthemeId = subthemeIds[i];
+    for (const [i, subthemeId] of subthemeIds.entries()) {
       await step.runMutation(
         internal.aggregateRepairs.internalRepairClearSubthemeRandomAggregate,
         { subthemeId },
@@ -377,8 +381,7 @@ export const section2RepairInternalWorkflow = workflow.define({
 
     // Step 6: Process groups (paginated per group)
     let groupCount = 0;
-    for (let i = 0; i < groupIds.length; i += 1) {
-      const groupId = groupIds[i];
+    for (const [i, groupId] of groupIds.entries()) {
       await step.runMutation(
         internal.aggregateRepairs.internalRepairClearGroupRandomAggregate,
         { groupId },
