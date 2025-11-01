@@ -168,7 +168,18 @@ export const submitAnswerAndProgress = mutation({
       isComplete: isQuizComplete,
     });
 
-    // 5. Schedule user stats update asynchronously (non-blocking)
+    // 5. If quiz is complete, write to lightweight quizCompletions table
+    if (isQuizComplete) {
+      await ctx.db.insert('quizCompletions', {
+        userId: userId._id,
+        quizId: args.quizId,
+        sessionId: session._id,
+        completedAt: Date.now(),
+        mode: session.mode,
+      });
+    }
+
+    // 6. Schedule user stats update asynchronously (non-blocking)
     ctx.scheduler.runAfter(0, internal.userStats._updateQuestionStats, {
       userId: userId._id,
       questionId: currentQuestion._id,
@@ -213,6 +224,15 @@ export const completeQuizSession = mutation({
 
     await ctx.db.patch(session._id, { isComplete: true });
 
+    // Write to lightweight quizCompletions table
+    await ctx.db.insert('quizCompletions', {
+      userId: userId._id,
+      quizId: args.quizId,
+      sessionId: session._id,
+      completedAt: Date.now(),
+      mode: session.mode,
+    });
+
     return { success: true };
   },
 });
@@ -220,14 +240,37 @@ export const completeQuizSession = mutation({
 // Add this new query function to list incomplete sessions for current user
 export const listIncompleteSessions = query({
   args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id('quizSessions'),
+      _creationTime: v.number(),
+      userId: v.id('users'),
+      quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+      mode: v.union(v.literal('exam'), v.literal('study')),
+      currentQuestionIndex: v.number(),
+      answers: v.array(v.number()),
+      answerFeedback: v.array(
+        v.object({
+          isCorrect: v.boolean(),
+          explanation: v.union(
+            v.string(),
+            v.object({ type: v.string(), content: v.array(v.any()) }),
+          ),
+          correctAlternative: v.optional(v.number()),
+        }),
+      ),
+      isComplete: v.boolean(),
+    }),
+  ),
   handler: async ctx => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // Query for all incomplete sessions for this user
+    // Use optimized index to query incomplete sessions without .filter()
     const sessions = await ctx.db
       .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-      .filter(q => q.eq(q.field('isComplete'), false))
+      .withIndex('by_user_complete', q =>
+        q.eq('userId', userId._id).eq('isComplete', false),
+      )
       .collect();
 
     return sessions;
@@ -237,16 +280,38 @@ export const listIncompleteSessions = query({
 // Add this function to get completed sessions for a quiz
 export const getCompletedSessions = query({
   args: { quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')) },
+  returns: v.array(
+    v.object({
+      _id: v.id('quizSessions'),
+      _creationTime: v.number(),
+      userId: v.id('users'),
+      quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+      mode: v.union(v.literal('exam'), v.literal('study')),
+      currentQuestionIndex: v.number(),
+      answers: v.array(v.number()),
+      answerFeedback: v.array(
+        v.object({
+          isCorrect: v.boolean(),
+          explanation: v.union(
+            v.string(),
+            v.object({ type: v.string(), content: v.array(v.any()) }),
+          ),
+          correctAlternative: v.optional(v.number()),
+        }),
+      ),
+      isComplete: v.boolean(),
+    }),
+  ),
   handler: async (ctx, { quizId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // Get completed sessions for this user and quiz, ordered by newest first
+    // Use the full index efficiently - no need for .filter()
+    // The index is ['userId', 'quizId', 'isComplete'], so we can query all three fields
     const sessions = await ctx.db
       .query('quizSessions')
       .withIndex('by_user_quiz', q =>
-        q.eq('userId', userId._id).eq('quizId', quizId),
+        q.eq('userId', userId._id).eq('quizId', quizId).eq('isComplete', true),
       )
-      .filter(q => q.eq(q.field('isComplete'), true))
       .order('desc')
       .collect();
 
@@ -255,19 +320,54 @@ export const getCompletedSessions = query({
 });
 
 // Get all completed sessions for the current user
+// Note: This returns full session data including heavy answerFeedback arrays.
+// For checking quiz completion status only, use getCompletedQuizIds instead.
 export const getAllCompletedSessions = query({
   args: {},
+  returns: v.array(
+    v.object({
+      _id: v.id('quizSessions'),
+      _creationTime: v.number(),
+      userId: v.id('users'),
+      quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+      mode: v.union(v.literal('exam'), v.literal('study')),
+      currentQuestionIndex: v.number(),
+      answers: v.array(v.number()),
+      answerFeedback: v.array(
+        v.object({
+          isCorrect: v.boolean(),
+          explanation: v.union(
+            v.string(),
+            v.object({ type: v.string(), content: v.array(v.any()) }),
+          ),
+          correctAlternative: v.optional(v.number()),
+        }),
+      ),
+      isComplete: v.boolean(),
+    }),
+  ),
   handler: async ctx => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // Get all completed sessions for this user, ordered by newest first
+    // Use optimized index to query completed sessions without .filter()
+    // This avoids scanning incomplete sessions and is much more efficient
     const sessions = await ctx.db
       .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-      .filter(q => q.eq(q.field('isComplete'), true))
+      .withIndex('by_user_complete', q =>
+        q.eq('userId', userId._id).eq('isComplete', true),
+      )
       .order('desc')
       .collect();
 
     return sessions;
   },
 });
+
+// ⚠️ DEPRECATED: Quiz completion queries have been moved to convex/quizCompletions.ts
+// For checking quiz completion status, use:
+//   - api.quizCompletions.getCompletedQuizIds() - Get all completed quiz IDs
+//   - api.quizCompletions.hasCompletedQuiz() - Check if specific quiz is completed
+//   - api.quizCompletions.getQuizCompletions() - Get all completions for a quiz
+//
+// These queries use the lightweight quizCompletions table and avoid loading
+// heavy answerFeedback data from the database.
