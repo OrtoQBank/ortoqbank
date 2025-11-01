@@ -115,9 +115,9 @@ export const processInvoiceGeneration = internalAction({
         municipalServiceId: fiscalService.serviceId,
       });
       
-      // Truncate service name to 250 characters (Asaas limit)
-      const municipalServiceName = fiscalService.description.length > 250 
-        ? fiscalService.description.slice(0, 247) + '...'
+      // Truncate service name to 350 characters (Asaas limit)
+      const municipalServiceName = fiscalService.description.length > 350 
+        ? fiscalService.description.slice(0, 347) + '...'
         : fiscalService.description;
       
       // Get ISS rate - hard coded to 2% according to business needs
@@ -125,7 +125,7 @@ export const processInvoiceGeneration = internalAction({
       
       // Build taxes object (flat structure per Asaas API)
       const taxes = {
-        retainIss: true, // Retain ISS (common for service providers)
+        retainIss: false, // Do not retain ISS 
         iss: issRate,    // ISS rate as a direct number (e.g., 2 for 2%)
         cofins: 0,
         csll: 0,
