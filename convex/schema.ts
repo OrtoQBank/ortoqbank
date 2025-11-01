@@ -149,7 +149,22 @@ export default defineSchema({
       }),
     ),
     isComplete: v.boolean(),
-  }).index('by_user_quiz', ['userId', 'quizId', 'isComplete']),
+  })
+    .index('by_user_quiz', ['userId', 'quizId', 'isComplete'])
+    .index('by_user_complete', ['userId', 'isComplete']),
+
+  // Lightweight completion tracking table (performance optimization)
+  // Stores only minimal data needed for checking which quizzes a user has completed.
+  // This avoids loading heavy answerFeedback data when just checking completion status.
+  quizCompletions: defineTable({
+    userId: v.id('users'),
+    quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+    sessionId: v.id('quizSessions'), // Reference to full session with answers/feedback
+    completedAt: v.number(),
+    mode: v.union(v.literal('exam'), v.literal('study')),
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_quiz', ['userId', 'quizId']),
 
   userBookmarks: defineTable({
     userId: v.id('users'),

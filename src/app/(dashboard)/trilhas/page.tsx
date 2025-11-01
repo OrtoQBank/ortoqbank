@@ -69,7 +69,7 @@ export default function TrilhasPage() {
     api.quizSessions.listIncompleteSessions,
   );
   const completedSessionsQuery = useQuery(
-    api.quizSessions.getAllCompletedSessions,
+    api.quizCompletions.getCompletedQuizIds,
   );
 
   const isLoading =
