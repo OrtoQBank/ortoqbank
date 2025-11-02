@@ -116,7 +116,14 @@ class AsaasClient {
   async createCharge(charge: {
     customer: string;
     billingType: 'PIX' | 'CREDIT_CARD';
-    value: number;
+    // For single payments
+    value?: number;
+    // For installment payments (Option 1: Asaas calculates installmentValue)
+    totalValue?: number;
+    installmentCount?: number;
+    // For installment payments (Option 2: Manual installmentValue - alternative to totalValue)
+    installmentValue?: number;
+    // Common fields
     dueDate: string;
     description?: string;
     externalReference?: string;
@@ -132,7 +139,6 @@ class AsaasClient {
       mobilePhone?: string;
     };
     remoteIp?: string;
-    installments?: number;
   }): Promise<AsaasPayment> {
     return this.makeRequest<AsaasPayment>('/payments', {
       method: 'POST',
@@ -389,24 +395,83 @@ export const createCreditCardPayment = action({
       description += ` (Cupom: ${pendingOrder.couponCode})`;
     }
     
-    // Add installment info to description if applicable
+    // CRITICAL: Validate and prepare installment parameters
+    // Installments are a core business requirement and must be handled correctly
+    let installmentCount: number | undefined;
+    let isInstallmentPayment = false;
+    
     if (args.installments && args.installments > 1) {
-      description += ` (${args.installments}x)`;
+      // Validate installment count
+      if (args.installments < 1 || args.installments > 21) {
+        throw new Error(`Invalid installment count: ${args.installments}. Must be between 1 and 21.`);
+      }
+      
+      installmentCount = args.installments;
+      isInstallmentPayment = true;
+      
+      // Add installment info to description
+      description += ` (${installmentCount}x)`;
+      
+      // Calculate estimated installment value for logging (Asaas will calculate the actual value)
+      const estimatedInstallmentValue = Math.round((finalPrice / installmentCount) * 100) / 100;
+      
+      console.log(`💳 INSTALLMENT PAYMENT - CRITICAL PARAMETERS:`, {
+        installmentCount,
+        totalValue: finalPrice,
+        estimatedInstallmentValue: estimatedInstallmentValue.toFixed(2),
+        note: 'Asaas will calculate exact installmentValue automatically',
+      });
+    } else {
+      console.log(`💳 Single payment (no installments)`);
     }
     
-    // Create Credit Card payment with immediate processing
-    const payment = await asaas.createCharge({
+    // Build payment request object
+    // IMPORTANT: For installments, use 'totalValue' instead of 'value'
+    // For single payments, use 'value'
+    const paymentRequest: any = {
       customer: args.customerId,
       billingType: 'CREDIT_CARD',
-      value: finalPrice,
       dueDate: new Date().toISOString().split('T')[0], // Today (immediate processing)
       description,
       externalReference: args.pendingOrderId, // This is the key for webhook correlation
       creditCard: args.creditCard,
       creditCardHolderInfo: args.creditCardHolderInfo,
-      ...(args.remoteIp && { remoteIp: args.remoteIp }),
-      ...(args.installments && { installments: args.installments }),
+    };
+    
+    // CRITICAL: Use different field based on payment type
+    if (isInstallmentPayment && installmentCount !== undefined) {
+      // For installment payments: use totalValue + installmentCount
+      // Asaas will automatically calculate the installmentValue
+      paymentRequest.totalValue = finalPrice;
+      paymentRequest.installmentCount = installmentCount;
+      
+      console.log(`✅ INSTALLMENT PARAMETERS ADDED TO REQUEST:`, {
+        totalValue: paymentRequest.totalValue,
+        installmentCount: paymentRequest.installmentCount,
+        calculation: 'Automatic by Asaas',
+      });
+    } else {
+      // For single payments: use value only
+      paymentRequest.value = finalPrice;
+      
+      console.log(`✅ SINGLE PAYMENT PARAMETERS ADDED TO REQUEST:`, {
+        value: paymentRequest.value,
+      });
+    }
+    
+    // Add optional fields
+    if (args.remoteIp) {
+      paymentRequest.remoteIp = args.remoteIp;
+    }
+    
+    // Log the full request (mask sensitive data in production)
+    console.log(`📤 Asaas payment request:`, {
+      ...paymentRequest,
+      creditCard: '***MASKED***',
     });
+    
+    // Create Credit Card payment with immediate processing
+    const payment = await asaas.createCharge(paymentRequest);
 
     return {
       paymentId: payment.id,
