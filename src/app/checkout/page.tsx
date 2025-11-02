@@ -427,20 +427,26 @@ function CheckoutPageContent() {
         const fullYear = `20${expYear}`; // Convert YY to 20YY
 
         // CRITICAL: Validate installments before sending
-        const installmentsToSend = selectedInstallments > 1 ? selectedInstallments : undefined;
-        
-        console.log('💳 Frontend: Creating credit card payment with installments:', {
-          selectedInstallments,
-          installmentsToSend,
-          willBeInstallmentPayment: installmentsToSend !== undefined,
-        });
-        
-        if (installmentsToSend !== undefined) {
-          console.log(`✅ Frontend: Installment payment confirmed - ${installmentsToSend}x parcelas`);
+        const installmentsToSend =
+          selectedInstallments > 1 ? selectedInstallments : undefined;
+
+        console.log(
+          '💳 Frontend: Creating credit card payment with installments:',
+          {
+            selectedInstallments,
+            installmentsToSend,
+            willBeInstallmentPayment: !!installmentsToSend,
+          },
+        );
+
+        if (installmentsToSend) {
+          console.log(
+            `✅ Frontend: Installment payment confirmed - ${installmentsToSend}x parcelas`,
+          );
         } else {
           console.log(`✅ Frontend: Single payment (à vista)`);
         }
-        
+
         payment = await createCreditCardPayment({
           customerId,
           productId: planId,
