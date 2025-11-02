@@ -1,5 +1,19 @@
 # 🔧 Critical Installment Payment Fix
 
+## 🎯 TL;DR - What Was Fixed
+
+**Problem**: Asaas was processing 12x installment payments as single charges.
+
+**Root Cause**: Using wrong API parameters (`value` + `installments` instead of `totalValue` + `installmentCount`).
+
+**Solution**: Conditionally use different fields based on payment type:
+- **Single Payment**: Send `value: 2029.44`
+- **Installment Payment**: Send `totalValue: 2029.44` + `installmentCount: 12`
+
+**Status**: ✅ FIXED - Asaas will now properly process installments
+
+---
+
 ## Problem Identified
 Asaas was not receiving installment parameters correctly. Payments with 12 installments were being processed as single charges.
 
@@ -58,19 +72,20 @@ According to [Asaas API Documentation](https://docs.asaas.com/reference/criar-co
 ```typescript
 // ❌ BEFORE (Wrong):
 async createCharge(charge: {
-  // ...
-  installments?: number;
+  value: number;        // Single field for all payments
+  installments?: number; // Wrong parameter name
 })
 
-// ✅ AFTER (Correct):
+// ✅ AFTER (Correct - supports both single and installment):
 async createCharge(charge: {
-  // ...
-  installmentCount?: number;
-  installmentValue?: number;
+  value?: number;              // For single payments
+  totalValue?: number;         // For installment payments (total)
+  installmentCount?: number;   // Number of installments
+  installmentValue?: number;   // Alternative to totalValue (manual calculation)
 })
 ```
 
-#### Added Validation & Calculation
+#### Smart Payment Type Detection
 ```typescript
 if (args.installments && args.installments > 1) {
   // Validate range (1-21 for Visa/Master, 1-12 for others)
@@ -79,34 +94,27 @@ if (args.installments && args.installments > 1) {
   }
   
   installmentCount = args.installments;
-  installmentValue = Math.round((finalPrice / installmentCount) * 100) / 100;
-  
-  // Validate calculated value
-  if (installmentValue <= 0 || !Number.isFinite(installmentValue)) {
-    throw new Error(`Invalid installment value: ${installmentValue}`);
-  }
+  isInstallmentPayment = true;
 }
 ```
 
-#### Explicit Parameter Passing
+#### Conditional Field Assignment (Key Fix!)
 ```typescript
-// Build request object explicitly (no conditional spread operators)
 const paymentRequest: any = {
   customer: args.customerId,
   billingType: 'CREDIT_CARD',
-  value: finalPrice,
-  // ... other fields
+  // ... common fields
 };
 
-// CRITICAL: Add installment parameters explicitly
-if (installmentCount !== undefined && installmentValue !== undefined) {
+// CRITICAL: Use different field based on payment type
+if (isInstallmentPayment && installmentCount !== undefined) {
+  // For installments: use totalValue + installmentCount
+  paymentRequest.totalValue = finalPrice;
   paymentRequest.installmentCount = installmentCount;
-  paymentRequest.installmentValue = installmentValue;
-  
-  console.log(`✅ INSTALLMENT PARAMETERS ADDED TO REQUEST:`, {
-    installmentCount,
-    installmentValue,
-  });
+  // Asaas calculates installmentValue automatically
+} else {
+  // For single payment: use value only
+  paymentRequest.value = finalPrice;
 }
 ```
 
@@ -127,14 +135,13 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 
 ### For 12x R$ 2029.44:
 
-#### Request to Asaas (NEW):
+#### Request to Asaas (CORRECTED):
 ```json
 {
   "customer": "cus_000145260957",
   "billingType": "CREDIT_CARD",
-  "installmentCount": 12,
-  "installmentValue": 169.12,
-  "value": 2029.44,
+  "totalValue": 2029.44,         // ✅ Total value (not 'value')
+  "installmentCount": 12,        // ✅ Number of installments
   "dueDate": "2025-11-02",
   "description": "Plano TEOT 2027 (R2) - Cartão de Crédito (Cupom: BLACK) (12x)",
   "creditCard": { /* ... */ },
@@ -142,17 +149,35 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
   "externalReference": "order_id_here"
 }
 ```
+**Note**: No `installmentValue` sent - Asaas calculates it automatically from `totalValue ÷ installmentCount`
 
 #### Expected Response:
 ```json
 {
   "id": "pay_xxxxx",
-  "installmentNumber": 1,        // ✅ Should be 1 (first installment)
-  "installmentCount": 12,        // ✅ Total installments
-  "value": 169.12,               // ✅ Installment value (not total)
+  "installmentNumber": 1,        // ✅ First installment
+  "value": 169.12,               // ✅ Per-installment value (calculated by Asaas)
+  "totalValue": 2029.44,         // ✅ Total across all installments
   "status": "CONFIRMED"
 }
 ```
+
+### For Single Payment (À vista):
+
+#### Request to Asaas:
+```json
+{
+  "customer": "cus_000145260957",
+  "billingType": "CREDIT_CARD",
+  "value": 2029.44,              // ✅ Use 'value' for single payments
+  "dueDate": "2025-11-02",
+  "description": "Plano TEOT 2027 (R2) - Cartão de Crédito",
+  "creditCard": { /* ... */ },
+  "creditCardHolderInfo": { /* ... */ },
+  "externalReference": "order_id_here"
+}
+```
+**Note**: No `totalValue`, no `installmentCount` - this is a single payment
 
 ## Validation Checklist
 
@@ -176,11 +201,11 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 - Expected Request:
   ```json
   {
-    "installmentCount": 2,
-    "installmentValue": 1014.72
+    "totalValue": 2029.44,
+    "installmentCount": 2
   }
   ```
-- Expected Response: `installmentNumber: 1`, `installmentCount: 2`
+- Expected Response: `installmentNumber: 1`, `value: 1014.72` (calculated by Asaas)
 
 #### Test Case 3: 12x Installments (Your Original Issue)
 - Select 12x parcelas
@@ -188,11 +213,11 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 - Expected Request:
   ```json
   {
-    "installmentCount": 12,
-    "installmentValue": 169.12
+    "totalValue": 2029.44,
+    "installmentCount": 12
   }
   ```
-- Expected Response: `installmentNumber: 1`, `installmentCount: 12`
+- Expected Response: `installmentNumber: 1`, `value: 169.12` (calculated by Asaas)
 
 #### Test Case 4: With Coupon
 - Apply a coupon discount
@@ -213,16 +238,20 @@ Check these logs in your Convex dashboard:
    ```
    💳 INSTALLMENT PAYMENT - CRITICAL PARAMETERS: {
      installmentCount: 12,
-     installmentValue: 169.12,
-     finalPrice: 2029.44,
-     totalFromInstallments: "2029.44",
-     rounding_diff: "0.00"
+     totalValue: 2029.44,
+     estimatedInstallmentValue: "169.12",
+     note: "Asaas will calculate exact installmentValue automatically"
    }
    ✅ INSTALLMENT PARAMETERS ADDED TO REQUEST: {
+     totalValue: 2029.44,
      installmentCount: 12,
-     installmentValue: 169.12
+     calculation: "Automatic by Asaas"
    }
-   📤 Asaas payment request: {...}
+   📤 Asaas payment request: {
+     totalValue: 2029.44,
+     installmentCount: 12,
+     // NOTE: No 'value' field for installments!
+   }
    ```
 
 3. **Asaas Response**:
