@@ -23,12 +23,25 @@ export function Alternatives({ form }: AlternativesProps) {
 
   // Ensure field array is initialized with default values
   useEffect(() => {
-    if (fields.length === 0) {
+    if (fields.length < 2) {
       replace(['', '', '', '']);
     }
   }, [fields.length, replace]);
 
   const handleAddAlternative = () => {
+    // Check if the last alternative is empty
+    const alternatives = form.getValues('alternatives');
+    const lastAlternative = alternatives.at(-1);
+
+    if (lastAlternative !== undefined && lastAlternative.trim() === '') {
+      toast({
+        title: 'Preencha a última alternativa',
+        description: 'A última alternativa não pode estar vazia',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     if (fields.length < 6) {
       append('');
     } else {
