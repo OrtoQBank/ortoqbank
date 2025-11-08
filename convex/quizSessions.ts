@@ -107,7 +107,9 @@ export const submitAnswerAndProgress = mutation({
       v.literal(0),
       v.literal(1),
       v.literal(2),
-      v.literal(3),
+      v.literal(3),  
+      v.literal(4),
+      v.literal(5),
     ),
   },
   handler: async (ctx, args) => {
