@@ -33,14 +33,15 @@ export function useQuestionForm({
   // Initialize form with default values or empty state
   const form = useForm<QuestionFormData>({
     resolver: zodResolver(questionSchema),
-    defaultValues: defaultValues || {
+    mode: 'onSubmit',
+    defaultValues: {
       title: '',
       questionTextString: JSON.stringify({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }],
       }),
-      alternatives: Array.from({ length: NUMBER_OF_ALTERNATIVES }).fill(''),
-      correctAlternativeIndex: 0,
+      alternatives: ['', '', '', ''],
+      correctAlternativeIndex: undefined,
       explanationTextString: JSON.stringify({
         type: 'doc',
         content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }],
@@ -48,6 +49,7 @@ export function useQuestionForm({
       themeId: '',
       subthemeId: undefined,
       groupId: undefined,
+      ...defaultValues,
     },
   });
 
@@ -63,7 +65,22 @@ export function useQuestionForm({
     // Clear editors if form resets
     const clearEditors = () => {
       if (mode === 'create') {
-        form.reset();
+        form.reset({
+          title: '',
+          questionTextString: JSON.stringify({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }],
+          }),
+          alternatives: ['', '', '', ''],
+          correctAlternativeIndex: undefined,
+          explanationTextString: JSON.stringify({
+            type: 'doc',
+            content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }],
+          }),
+          themeId: '',
+          subthemeId: undefined,
+          groupId: undefined,
+        });
         questionEditor?.commands.setContent('');
         explanationEditor?.commands.setContent('');
       }
@@ -105,6 +122,5 @@ export function useQuestionForm({
       }
       return mode === 'edit' ? 'Salvar Alterações' : 'Criar Questão';
     },
-    NUMBER_OF_ALTERNATIVES,
   };
 }

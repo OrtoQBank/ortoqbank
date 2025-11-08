@@ -38,7 +38,6 @@ export function QuestionForm({
     setQuestionEditor,
     setExplanationEditor,
     getButtonText,
-    NUMBER_OF_ALTERNATIVES,
   } = useQuestionForm({ mode, defaultValues, onSuccess });
 
   return (
@@ -68,10 +67,7 @@ export function QuestionForm({
           />
 
           {/* Multiple-choice Alternatives */}
-          <Alternatives
-            form={form}
-            numberOfAlternatives={NUMBER_OF_ALTERNATIVES}
-          />
+          <Alternatives form={form} />
 
           {/* Explanation with Rich Text Editor */}
           <Explanation
