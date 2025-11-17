@@ -115,7 +115,7 @@ export const processInvoiceGeneration = internalAction({
         municipalServiceId: fiscalService.serviceId,
       });
       
-      // Truncate service name to 350 characters (Asaas limit)
+      // Truncate service name to 250 characters (Asaas limit)
       const municipalServiceName = fiscalService.description.length > 250 
         ? fiscalService.description.slice(0, 247) + '...'
         : fiscalService.description;
