@@ -403,4 +403,28 @@ export default defineSchema({
     .index("by_status", ["status"])
     .index("by_asaas_invoice", ["asaasInvoiceId"]),
 
+  // Email invitations - tracks Clerk invitation emails sent after payment
+  emailInvitations: defineTable({
+    orderId: v.id('pendingOrders'),
+    email: v.string(),
+    customerName: v.string(),
+    status: v.union(
+      v.literal("pending"),     // About to send
+      v.literal("sent"),        // Successfully sent
+      v.literal("failed"),      // Failed after all retries
+      v.literal("accepted")     // User registered
+    ),
+    clerkInvitationId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    errorDetails: v.optional(v.string()),
+    sentAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    retryCount: v.optional(v.number()),
+    retrierRunId: v.optional(v.string()), // Track the retrier run ID
+    createdAt: v.number(),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_email", ["email"])
+    .index("by_status", ["status"]),
+
 });

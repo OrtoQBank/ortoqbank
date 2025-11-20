@@ -460,7 +460,7 @@ export const claimOrderByEmail = mutation({
 });
 
 /**
- * Send Clerk invitation email with claim token
+ * Send Clerk invitation email with automatic retry logic
  */
 export const sendClerkInvitation = internalAction({
   args: {
@@ -470,42 +470,105 @@ export const sendClerkInvitation = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
+    // Import retrier
+    const { retrier } = await import('./retrier');
+    
+    // Create pending invitation record
+    const invitationId = await ctx.runMutation(internal.payments.createEmailInvitation, {
+      orderId: args.orderId as Id<'pendingOrders'>,
+      email: args.email,
+      customerName: args.customerName,
+    });
+    
+    console.log(`📧 Starting email invitation for ${args.email} (order: ${args.orderId})`);
+    
+    // Run with retrier - this will automatically retry on failure
+    try {
+      await retrier.run(
+        ctx,
+        internal.payments.sendClerkInvitationAttempt,
+        {
+          email: args.email,
+          orderId: args.orderId,
+          customerName: args.customerName,
+          invitationId,
+          attemptNumber: 1,
+        },
+        {
+          initialBackoffMs: 1000,
+          base: 2,
+          maxFailures: 3,
+        }
+      );
+    } catch (error) {
+      // This only happens if all retries fail
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      console.error(`❌ Failed to send invitation after all retries: ${errorMessage}`);
+      
+      await ctx.runMutation(internal.payments.updateEmailInvitationFailure, {
+        invitationId,
+        errorMessage: 'Failed after all retry attempts',
+        errorDetails: errorMessage,
+        retryCount: 3,
+      });
+    }
+    
+    return null;
+  },
+});
+
+/**
+ * Internal action that makes the actual Clerk API call (used by retrier)
+ */
+export const sendClerkInvitationAttempt = internalAction({
+  args: {
+    email: v.string(),
+    orderId: v.string(),
+    customerName: v.string(),
+    invitationId: v.id('emailInvitations'),
+    attemptNumber: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
     const CLERK_SECRET_KEY = process.env.CLERK_SECRET_KEY;
     
     if (!CLERK_SECRET_KEY) {
-      console.error('CLERK_SECRET_KEY not configured');
-      return null;
+      throw new Error('CLERK_SECRET_KEY not configured');
     }
-
-    try {
-      const response = await fetch('https://api.clerk.com/v1/invitations', {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${CLERK_SECRET_KEY}`,
-          'Content-Type': 'application/json',
+    
+    console.log(`📤 Attempt ${args.attemptNumber}: Sending Clerk invitation to ${args.email}`);
+    
+    const response = await fetch('https://api.clerk.com/v1/invitations', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${CLERK_SECRET_KEY}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        email_address: args.email,
+        public_metadata: {
+          orderId: args.orderId,
+          customerName: args.customerName,
         },
-        body: JSON.stringify({
-          email_address: args.email,
-          public_metadata: {
-            orderId: args.orderId,
-            customerName: args.customerName,
-          },
-        }),
-      });
+      }),
+    });
 
-      if (!response.ok) {
-        const error = await response.text();
-        console.error('Failed to send Clerk invitation:', error);
-        return null;
-      }
-
-      const invitation = await response.json();
-      console.log(`✅ Sent Clerk invitation to ${args.email}:`, invitation.id);
-      
-    } catch (error) {
-      console.error('Error sending Clerk invitation:', error);
+    if (!response.ok) {
+      const error = await response.text();
+      console.error(`❌ Attempt ${args.attemptNumber} failed:`, error);
+      throw new Error(`Clerk API error: ${response.status} - ${error}`);
     }
 
+    const invitation = await response.json();
+    console.log(`✅ Attempt ${args.attemptNumber} succeeded: Invitation ${invitation.id} sent to ${args.email}`);
+    
+    // Update success status
+    await ctx.runMutation(internal.payments.updateEmailInvitationSuccess, {
+      invitationId: args.invitationId,
+      clerkInvitationId: invitation.id,
+      retryCount: args.attemptNumber - 1,
+    });
+    
     return null;
   },
 });
@@ -615,5 +678,115 @@ export const getPendingOrderById = query({
       console.error('Error getting pending order:', error);
       return null;
     }
+  },
+});
+
+/**
+ * Create email invitation tracking record
+ */
+export const createEmailInvitation = internalMutation({
+  args: {
+    orderId: v.id('pendingOrders'),
+    email: v.string(),
+    customerName: v.string(),
+    retrierRunId: v.optional(v.string()),
+  },
+  returns: v.id('emailInvitations'),
+  handler: async (ctx, args) => {
+    return await ctx.db.insert('emailInvitations', {
+      orderId: args.orderId,
+      email: args.email,
+      customerName: args.customerName,
+      status: 'pending',
+      retrierRunId: args.retrierRunId,
+      retryCount: 0,
+      createdAt: Date.now(),
+    });
+  },
+});
+
+/**
+ * Update email invitation to success status
+ */
+export const updateEmailInvitationSuccess = internalMutation({
+  args: {
+    invitationId: v.id('emailInvitations'),
+    clerkInvitationId: v.string(),
+    retryCount: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invitationId, {
+      status: 'sent',
+      clerkInvitationId: args.clerkInvitationId,
+      sentAt: Date.now(),
+      retryCount: args.retryCount,
+    });
+    return null;
+  },
+});
+
+/**
+ * Update email invitation to failure status
+ */
+export const updateEmailInvitationFailure = internalMutation({
+  args: {
+    invitationId: v.id('emailInvitations'),
+    errorMessage: v.string(),
+    errorDetails: v.optional(v.string()),
+    retryCount: v.number(),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invitationId, {
+      status: 'failed',
+      errorMessage: args.errorMessage,
+      errorDetails: args.errorDetails,
+      retryCount: args.retryCount,
+    });
+    return null;
+  },
+});
+
+/**
+ * Update email invitation to accepted status
+ */
+export const updateEmailInvitationAccepted = internalMutation({
+  args: { invitationId: v.id('emailInvitations') },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    await ctx.db.patch(args.invitationId, {
+      status: 'accepted',
+      acceptedAt: Date.now(),
+    });
+    return null;
+  },
+});
+
+/**
+ * Find email invitation by email for status update
+ */
+export const findSentInvitationByEmail = query({
+  args: { email: v.string() },
+  returns: v.union(
+    v.object({
+      _id: v.id('emailInvitations'),
+    }),
+    v.null()
+  ),
+  handler: async (ctx, args) => {
+    const invitation = await ctx.db
+      .query('emailInvitations')
+      .withIndex('by_email', q => q.eq('email', args.email))
+      .filter(q => q.eq(q.field('status'), 'sent'))
+      .first();
+    
+    if (!invitation) {
+      return null;
+    }
+    
+    return {
+      _id: invitation._id,
+    };
   },
 });

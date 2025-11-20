@@ -31,6 +31,7 @@ import type * as questions from "../questions.js";
 import type * as questionsAggregateSync from "../questionsAggregateSync.js";
 import type * as quiz from "../quiz.js";
 import type * as quizSessions from "../quizSessions.js";
+import type * as retrier from "../retrier.js";
 import type * as subthemes from "../subthemes.js";
 import type * as termsActions from "../termsActions.js";
 import type * as themes from "../themes.js";
@@ -79,6 +80,7 @@ declare const fullApi: ApiFromModules<{
   questionsAggregateSync: typeof questionsAggregateSync;
   quiz: typeof quiz;
   quizSessions: typeof quizSessions;
+  retrier: typeof retrier;
   subthemes: typeof subthemes;
   termsActions: typeof termsActions;
   themes: typeof themes;
@@ -511,6 +513,53 @@ export declare const components: {
             workflowHandle: string;
           };
         }
+      >;
+    };
+  };
+  actionRetrier: {
+    public: {
+      cancel: FunctionReference<
+        "mutation",
+        "internal",
+        { runId: string },
+        boolean
+      >;
+      cleanup: FunctionReference<
+        "mutation",
+        "internal",
+        { runId: string },
+        any
+      >;
+      start: FunctionReference<
+        "mutation",
+        "internal",
+        {
+          functionArgs: any;
+          functionHandle: string;
+          options: {
+            base: number;
+            initialBackoffMs: number;
+            logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+            maxFailures: number;
+            onComplete?: string;
+            runAfter?: number;
+            runAt?: number;
+          };
+        },
+        string
+      >;
+      status: FunctionReference<
+        "query",
+        "internal",
+        { runId: string },
+        | { type: "inProgress" }
+        | {
+            result:
+              | { returnValue: any; type: "success" }
+              | { error: string; type: "failed" }
+              | { type: "canceled" };
+            type: "completed";
+          }
       >;
     };
   };
