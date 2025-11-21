@@ -497,19 +497,21 @@ export const claimOrderByEmail = mutation({
     message: v.string(),
   }),
   handler: async (ctx, args) => {
-    // Find paid order with matching email
-    const paidOrder = await ctx.db
+    // Query by email index only (avoid using .filter() per Convex guidelines)
+    const order = await ctx.db
       .query("pendingOrders")
       .withIndex("by_email", (q) => q.eq("email", args.email))
-      .filter((q) => q.eq(q.field("status"), "paid"))
       .first();
 
-    if (!paidOrder) {
+    // Check status in TypeScript after retrieval
+    if (!order || order.status !== 'paid') {
       return {
         success: true,
         message: 'No paid orders found for this email.'
       };
     }
+
+    const paidOrder = order;
 
     // Update order with user info
     await ctx.db.patch(paidOrder._id, {
@@ -845,18 +847,17 @@ export const findSentInvitationByEmail = query({
     v.null()
   ),
   handler: async (ctx, args) => {
+    // Query by email index only (avoid using .filter() per Convex guidelines)
     const invitation = await ctx.db
       .query('emailInvitations')
       .withIndex('by_email', q => q.eq('email', args.email))
-      .filter(q => q.eq(q.field('status'), 'sent'))
       .first();
 
-    if (!invitation) {
+    // Check status in TypeScript after retrieval
+    if (!invitation || invitation.status !== 'sent') {
       return null;
     }
 
-    return {
-      _id: invitation._id,
-    };
+    return { _id: invitation._id };
   },
 });
