@@ -471,10 +471,11 @@ function CheckoutPageContent() {
           installments: installmentsToSend,
         });
 
-        // Step 4: Link payment to order
+        // Step 4: Link payment to order with installment info
         await linkPaymentToOrder({
           pendingOrderId,
           asaasPaymentId: payment.paymentId,
+          installmentCount: installmentsToSend, // Store installment count for tracking
         });
 
         // Redirect to processing page for credit card
