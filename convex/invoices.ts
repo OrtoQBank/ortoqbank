@@ -171,9 +171,11 @@ export const processInvoiceGeneration = internalAction({
       }
 
       // Schedule invoice with Asaas
+      // IMPORTANT: Pass explicit value to override payment value (critical for installments)
       const result = await ctx.runAction(api.asaas.scheduleInvoice, {
         asaasPaymentId: invoice.asaasPaymentId,
         serviceDescription: invoice.serviceDescription,
+        value: invoice.value, // Explicit value - overrides payment value (required for installments)
         municipalServiceId: fiscalService.serviceId,
         municipalServiceName,
         observations,

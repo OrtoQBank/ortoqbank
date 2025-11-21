@@ -71,7 +71,7 @@ class AsaasClient {
       ? 'https://api.asaas.com/v3'
       : 'https://api-sandbox.asaas.com/v3';
     this.apiKey = process.env.ASAAS_API_KEY!;
-    
+
     console.log('AsaaS Environment:', isProduction ? 'production' : 'sandbox');
     console.log('AsaaS Base URL:', this.baseUrl);
     console.log('AsaaS API Key prefix:', this.apiKey?.slice(0, 10) + '...');
@@ -79,7 +79,7 @@ class AsaasClient {
 
   async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
-    
+
     const response = await fetch(url, {
       ...options,
       headers: {
@@ -150,7 +150,7 @@ class AsaasClient {
     return this.makeRequest<AsaasPixQrCode>(`/payments/${chargeId}/pixQrCode`);
   }
 
-  async listFiscalServices(params?: { 
+  async listFiscalServices(params?: {
     description?: string;
     offset?: number;
     limit?: number;
@@ -159,7 +159,7 @@ class AsaasClient {
     if (params?.description) queryParams.append('description', params.description);
     if (params?.offset) queryParams.append('offset', params.offset.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
-    
+
     const endpoint = `/fiscalInfo/services${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this.makeRequest<{ data: AsaasFiscalService[], totalCount: number }>(endpoint);
   }
@@ -167,6 +167,7 @@ class AsaasClient {
   async scheduleInvoice(params: {
     payment: string; // Payment ID
     serviceDescription: string;
+    value?: number; // Override invoice value (required for installment payments to use total value)
     municipalServiceId?: string; // The service ID from fiscalInfo/services (e.g., "306615")
     municipalServiceCode?: string; // Manual service code (e.g., "1.01" or "02964")
     municipalServiceName: string; // The service name/description
@@ -187,6 +188,7 @@ class AsaasClient {
       body: JSON.stringify({
         payment: params.payment,
         serviceDescription: params.serviceDescription,
+        value: params.value, // Explicitly set invoice value (overrides payment value)
         municipalServiceId: params.municipalServiceId || null,
         municipalServiceCode: params.municipalServiceCode || null,
         municipalServiceName: params.municipalServiceName,
@@ -221,7 +223,7 @@ export const createAsaasCustomer = action({
   }),
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
-    
+
     const customer = await asaas.createCustomer({
       name: args.name,
       email: args.email,
@@ -267,7 +269,7 @@ export const createPixPayment = action({
 
     // Use the final price from the pending order (already includes coupon and PIX discounts)
     const finalPrice = pendingOrder.finalPrice;
-    
+
     if (finalPrice <= 0) {
       throw new Error('Invalid product price');
     }
@@ -282,7 +284,7 @@ export const createPixPayment = action({
     }
 
     const asaas = new AsaasClient();
-    
+
     // Build description with coupon info if applicable
     let description = `${pricingPlan.name} - PIX`;
     if (pendingOrder.couponCode) {
@@ -305,10 +307,10 @@ export const createPixPayment = action({
       pixData = await asaas.getPixQrCode(payment.id);
     } catch (error) {
       console.warn('Failed to get PIX QR code immediately, will retry:', error);
-      
+
       // Sometimes the QR code is not immediately available, wait a bit and retry
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       try {
         pixData = await asaas.getPixQrCode(payment.id);
       } catch (retryError) {
@@ -373,7 +375,7 @@ export const createCreditCardPayment = action({
 
     // Use the final price from the pending order (already includes coupon discount, but not PIX)
     const finalPrice = pendingOrder.finalPrice;
-    
+
     if (finalPrice <= 0) {
       throw new Error('Invalid product price');
     }
@@ -388,33 +390,33 @@ export const createCreditCardPayment = action({
     }
 
     const asaas = new AsaasClient();
-    
+
     // Build description with coupon info if applicable
     let description = `${pricingPlan.name} - Cartão de Crédito`;
     if (pendingOrder.couponCode) {
       description += ` (Cupom: ${pendingOrder.couponCode})`;
     }
-    
+
     // CRITICAL: Validate and prepare installment parameters
     // Installments are a core business requirement and must be handled correctly
     let installmentCount: number | undefined;
     let isInstallmentPayment = false;
-    
+
     if (args.installments && args.installments > 1) {
       // Validate installment count
       if (args.installments < 1 || args.installments > 21) {
         throw new Error(`Invalid installment count: ${args.installments}. Must be between 1 and 21.`);
       }
-      
+
       installmentCount = args.installments;
       isInstallmentPayment = true;
-      
+
       // Add installment info to description
       description += ` (${installmentCount}x)`;
-      
+
       // Calculate estimated installment value for logging (Asaas will calculate the actual value)
       const estimatedInstallmentValue = Math.round((finalPrice / installmentCount) * 100) / 100;
-      
+
       console.log(`💳 INSTALLMENT PAYMENT - CRITICAL PARAMETERS:`, {
         installmentCount,
         totalValue: finalPrice,
@@ -424,7 +426,7 @@ export const createCreditCardPayment = action({
     } else {
       console.log(`💳 Single payment (no installments)`);
     }
-    
+
     // Build payment request object
     // IMPORTANT: For installments, use 'totalValue' instead of 'value'
     // For single payments, use 'value'
@@ -437,14 +439,14 @@ export const createCreditCardPayment = action({
       creditCard: args.creditCard,
       creditCardHolderInfo: args.creditCardHolderInfo,
     };
-    
+
     // CRITICAL: Use different field based on payment type
     if (isInstallmentPayment && installmentCount !== undefined) {
       // For installment payments: use totalValue + installmentCount
       // Asaas will automatically calculate the installmentValue
       paymentRequest.totalValue = finalPrice;
       paymentRequest.installmentCount = installmentCount;
-      
+
       console.log(`✅ INSTALLMENT PARAMETERS ADDED TO REQUEST:`, {
         totalValue: paymentRequest.totalValue,
         installmentCount: paymentRequest.installmentCount,
@@ -453,23 +455,23 @@ export const createCreditCardPayment = action({
     } else {
       // For single payments: use value only
       paymentRequest.value = finalPrice;
-      
+
       console.log(`✅ SINGLE PAYMENT PARAMETERS ADDED TO REQUEST:`, {
         value: paymentRequest.value,
       });
     }
-    
+
     // Add optional fields
     if (args.remoteIp) {
       paymentRequest.remoteIp = args.remoteIp;
     }
-    
+
     // Log the full request (mask sensitive data in production)
     console.log(`📤 Asaas payment request:`, {
       ...paymentRequest,
       creditCard: '***MASKED***',
     });
-    
+
     // Create Credit Card payment with immediate processing
     const payment = await asaas.createCharge(paymentRequest);
 
@@ -501,7 +503,7 @@ export const getPaymentStatus = action({
   }),
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
-    
+
     const payment = await asaas.makeRequest<AsaasPayment>(`/payments/${args.paymentId}`);
 
     // Map AsaaS status to our status
@@ -567,41 +569,41 @@ export const getFiscalServiceId = action({
   ),
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
-    
+
     try {
       console.log(`🔍 Searching for fiscal service: ${args.serviceDescription}`);
-      
-      const result = await asaas.listFiscalServices({ 
+
+      const result = await asaas.listFiscalServices({
         description: args.serviceDescription,
         limit: 10, // Get more results to find the best one
       });
-      
+
       if (!result.data || result.data.length === 0) {
         console.warn(`⚠️ Fiscal service not found for: ${args.serviceDescription}`);
         console.warn(`💡 TIP: Check if the service is registered in your Asaas account`);
         return null;
       }
-      
+
       // Log all found services to help with debugging
       console.log(`📋 Found ${result.data.length} fiscal service(s):`);
       for (const svc of result.data) {
         console.log(`  - ID: ${svc.id} | ISS: ${svc.issTax}% | Desc: ${svc.description}`);
       }
-      
+
       // Service ID 306562 is EXPIRED (valid until 31/03/2024)
       // We need to use 306615 which has the same format "02964 - 1.09"
       // Skip expired service IDs and use the first valid one
       const EXPIRED_SERVICE_IDS = new Set(['306562']);
-      
+
       const service = result.data.find(svc => !EXPIRED_SERVICE_IDS.has(svc.id)) || result.data[0];
-      
+
       if (EXPIRED_SERVICE_IDS.has(service.id)) {
         console.warn(`⚠️ WARNING: Using expired service ID ${service.id}. All available services are expired!`);
       }
-      
+
       console.log(`✅ Using fiscal service: ${service.id} - ${service.description}`);
       console.log(`   API ISS rate: ${service.issTax}%`);
-      
+
       // IMPORTANT: The API returns issTax: 0, but the dashboard shows 2%
       // This is because the ISS rate is configured in your Asaas account settings, not in the service list
       // We'll use the dashboard rate (2%) as the default, which can be overridden via env var
@@ -626,6 +628,7 @@ export const scheduleInvoice = action({
   args: {
     asaasPaymentId: v.string(),
     serviceDescription: v.string(),
+    value: v.optional(v.number()), // Invoice value (required for installments to override payment value)
     municipalServiceId: v.optional(v.string()), // Service ID from API (e.g., "306562")
     municipalServiceCode: v.optional(v.string()), // Manual code (e.g., "02964" or "1.01")
     municipalServiceName: v.string(), // Service name/description
@@ -646,25 +649,29 @@ export const scheduleInvoice = action({
   }),
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
-    
-    const serviceIdentifier = args.municipalServiceId 
-      ? `ID: ${args.municipalServiceId}` 
+
+    const serviceIdentifier = args.municipalServiceId
+      ? `ID: ${args.municipalServiceId}`
       : `Code: ${args.municipalServiceCode}`;
-    
+
     console.log(`📄 Scheduling invoice with municipal service ${serviceIdentifier} - ${args.municipalServiceName}`);
-    
+    if (args.value) {
+      console.log(`   Explicit invoice value: R$ ${args.value} (overrides payment value)`);
+    }
+
     const invoice = await asaas.scheduleInvoice({
       payment: args.asaasPaymentId,
       serviceDescription: args.serviceDescription,
+      value: args.value, // Pass explicit value to override payment value
       municipalServiceId: args.municipalServiceId,
       municipalServiceCode: args.municipalServiceCode,
       municipalServiceName: args.municipalServiceName,
       observations: args.observations,
       taxes: args.taxes,
     });
-    
+
     console.log(`✅ Invoice scheduled: ${invoice.id} (status: ${invoice.status})`);
-    
+
     return {
       invoiceId: invoice.id,
       status: invoice.status,
