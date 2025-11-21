@@ -254,24 +254,13 @@ export const processAsaasWebhook = internalAction({
           }
 
           // For installment payments, only CONFIRM THE ORDER on the FIRST installment
-          // But we still need to generate invoices for ALL installments
+          // Invoice is generated only once for the first installment with the TOTAL value
           if (installmentNumber !== 1) {
-            console.log(`📄 Processing installment ${installmentNumber} - generating invoice only (order already confirmed)`);
-
-            // Generate invoice for this installment (non-blocking)
-            await ctx.scheduler.runAfter(0, internal.invoices.generateInvoice, {
-              orderId: pendingOrder._id,
-              asaasPaymentId: payment.id,
-              installmentNumber,
-              installmentValue: payment.value || 0,
-              totalInstallments: storedInstallmentCount || installmentNumber,
-            });
-
-            console.log(`✅ Scheduled invoice generation for installment ${installmentNumber}`);
-            return null; // Don't confirm order again
+            console.log(`⏭️ Skipping installment ${installmentNumber} - order and invoice already processed on first installment`);
+            return null; // Don't confirm order or generate invoice again
           }
 
-          console.log(`✅ Processing first installment - will confirm order and generate invoice`);
+          console.log(`✅ Processing first installment - will confirm order and generate single invoice with total value`);
         } else {
           // For single payments, verify the amount exactly
           const paidAmount = payment.value || payment.totalValue || 0;
@@ -361,16 +350,14 @@ export const confirmPayment = internalMutation({
     console.log(`✅ Payment confirmed for order ${args.pendingOrderId}`);
 
     // Trigger invoice generation (non-blocking)
-    // For installment payments, this generates the invoice for the FIRST installment
-    // Subsequent installments are handled directly in processAsaasWebhook
+    // IMPORTANT: For installment payments, generate ONE invoice with the TOTAL value
+    // The invoice will note the payment method and number of installments
     const installmentCount = order.installmentCount || 1;
-    const installmentValue = installmentCount > 1 ? (order.finalPrice / installmentCount) : order.finalPrice;
 
     await ctx.scheduler.runAfter(0, internal.invoices.generateInvoice, {
       orderId: order._id,
       asaasPaymentId: args.asaasPaymentId,
-      installmentNumber: 1, // This is the first installment
-      installmentValue,
+      totalValue: order.finalPrice, // Always use total order value
       totalInstallments: installmentCount,
     });
 

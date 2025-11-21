@@ -10,31 +10,28 @@ import {
 
 /**
  * Create invoice record and trigger Asaas invoice generation
- * For installment payments, this is called once for each installment
+ * IMPORTANT: For installment payments, this generates ONE invoice with the TOTAL value
+ * The invoice notes the payment method and number of installments
  */
 export const generateInvoice = internalMutation({
   args: {
     orderId: v.id('pendingOrders'),
     asaasPaymentId: v.string(),
-    installmentNumber: v.optional(v.number()), // Which installment (1, 2, 3, etc.)
-    installmentValue: v.optional(v.number()), // Value of this specific installment
-    totalInstallments: v.optional(v.number()), // Total number of installments
+    totalValue: v.number(), // Total invoice value (full order amount)
+    totalInstallments: v.optional(v.number()), // Number of installments (for payment info)
   },
   returns: v.union(v.id('invoices'), v.null()),
   handler: async (ctx, args) => {
-    const installmentNumber = args.installmentNumber || 1;
     const totalInstallments = args.totalInstallments || 1;
 
-    // Check if invoice already exists for this specific installment
+    // Check if invoice already exists for this order
     const existingInvoice = await ctx.db
       .query('invoices')
-      .withIndex('by_order_and_installment', q =>
-        q.eq('orderId', args.orderId).eq('installmentNumber', installmentNumber)
-      )
+      .withIndex('by_order', q => q.eq('orderId', args.orderId))
       .first();
 
     if (existingInvoice) {
-      console.log(`Invoice already exists for order ${args.orderId}, installment ${installmentNumber}`);
+      console.log(`Invoice already exists for order ${args.orderId}`);
       return existingInvoice._id;
     }
 
@@ -45,27 +42,29 @@ export const generateInvoice = internalMutation({
       return null;
     }
 
-    // Determine invoice value (installment value or full order value)
-    const invoiceValue = args.installmentValue || order.finalPrice;
+    // Build service description
+    const serviceDescription = 'Acesso à plataforma OrtoQBank';
 
-    // Build service description with installment info if applicable
-    let serviceDescription = 'Acesso à plataforma OrtoQBank';
-    if (totalInstallments > 1) {
-      serviceDescription += ` (Parcela ${installmentNumber}/${totalInstallments})`;
+    // Build payment method description for invoice observations
+    let paymentMethodDescription = 'Cartão de Crédito';
+    if (order.paymentMethod === 'PIX') {
+      paymentMethodDescription = 'PIX';
+    } else if (totalInstallments > 1) {
+      paymentMethodDescription = `Cartão de Crédito - ${totalInstallments}x de R$ ${(args.totalValue / totalInstallments).toFixed(2)}`;
     }
 
-    console.log(`📄 Creating invoice for order ${args.orderId}: ${serviceDescription} - R$ ${invoiceValue}`);
+    console.log(`📄 Creating invoice for order ${args.orderId}: ${serviceDescription} - R$ ${args.totalValue} (${paymentMethodDescription})`);
 
-    // Create invoice record
+    // Create invoice record with installment information for reference
     const invoiceId = await ctx.db.insert('invoices', {
       orderId: args.orderId,
       asaasPaymentId: args.asaasPaymentId,
       status: 'pending',
       municipalServiceId: '', // Will be set during processing
       serviceDescription,
-      value: invoiceValue,
-      installmentNumber,
-      totalInstallments,
+      value: args.totalValue, // Always the TOTAL value
+      installmentNumber: totalInstallments > 1 ? 1 : undefined, // Mark as installment payment
+      totalInstallments: totalInstallments > 1 ? totalInstallments : undefined,
       customerName: order.name,
       customerEmail: order.email,
       customerCpfCnpj: order.cpf,
@@ -160,13 +159,24 @@ export const processInvoiceGeneration = internalAction({
         pis: 0,
       };
 
+      // Build observations with payment method and installment info
+      let observations = `Pedido: ${invoice.orderId}`;
+
+      // Add installment payment information to observations if applicable
+      if (invoice.totalInstallments && invoice.totalInstallments > 1) {
+        const installmentValue = invoice.value / invoice.totalInstallments;
+        observations += `\nForma de Pagamento: Cartão de Crédito`;
+        observations += `\nParcelamento: ${invoice.totalInstallments}x de R$ ${installmentValue.toFixed(2)}`;
+        observations += `\nValor Total: R$ ${invoice.value.toFixed(2)}`;
+      }
+
       // Schedule invoice with Asaas
       const result = await ctx.runAction(api.asaas.scheduleInvoice, {
         asaasPaymentId: invoice.asaasPaymentId,
         serviceDescription: invoice.serviceDescription,
         municipalServiceId: fiscalService.serviceId,
         municipalServiceName,
-        observations: `Pedido: ${invoice.orderId}`,
+        observations,
         taxes, // Pass complete taxes object
       });
 

@@ -371,6 +371,7 @@ export default defineSchema({
     .index("by_external_reference", ["externalReference"]),
 
   // Invoices - tracks nota fiscal (invoice) generation for paid orders
+  // IMPORTANT: For installment payments, ONE invoice is generated with the TOTAL value
   invoices: defineTable({
     orderId: v.id('pendingOrders'),
     asaasPaymentId: v.string(),
@@ -384,10 +385,10 @@ export default defineSchema({
     ),
     municipalServiceId: v.string(), // Service ID from Asaas
     serviceDescription: v.string(),
-    value: v.number(),
-    // Installment information (for credit card installments)
-    installmentNumber: v.optional(v.number()), // Which installment (1, 2, 3, etc.)
-    totalInstallments: v.optional(v.number()), // Total number of installments
+    value: v.number(), // Always the TOTAL value (even for installment payments)
+    // Installment information (for reference and observations only)
+    installmentNumber: v.optional(v.number()), // Always 1 for installment payments (marks it as installment)
+    totalInstallments: v.optional(v.number()), // Total number of installments (for payment info)
     customerName: v.string(),
     customerEmail: v.string(),
     customerCpfCnpj: v.string(),
@@ -405,8 +406,7 @@ export default defineSchema({
     .index("by_order", ["orderId"])
     .index("by_payment", ["asaasPaymentId"])
     .index("by_status", ["status"])
-    .index("by_asaas_invoice", ["asaasInvoiceId"])
-    .index("by_order_and_installment", ["orderId", "installmentNumber"]),
+    .index("by_asaas_invoice", ["asaasInvoiceId"]),
 
   // Email invitations - tracks Clerk invitation emails sent after payment
   emailInvitations: defineTable({
