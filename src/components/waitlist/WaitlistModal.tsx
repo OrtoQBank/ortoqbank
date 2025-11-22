@@ -80,8 +80,8 @@ export function WaitlistModal() {
   const onSubmit = async (values: WaitlistFormValues) => {
     setError(null);
 
-    try {
-      await createWaitlistEntry({
+  
+      const entryId = await createWaitlistEntry({
         name: values.name,
         email: values.email,
         whatsapp: values.whatsapp,
@@ -89,6 +89,11 @@ export function WaitlistModal() {
         residencyLevel: values.residencyLevel,
         subspecialty: values.subspecialty,
       });
+
+      if (entryId === 'email_already_exists') {
+        setError('Este e-mail já está cadastrado na lista de espera.');
+        return;
+      }
 
       setSubmitSuccess(true);
 
@@ -98,9 +103,7 @@ export function WaitlistModal() {
         handleClose();
       }, 2000);
       
-    } catch (error_) {
-      setError(error_ instanceof Error ? error_.message : 'Erro ao enviar formulário');
-    }
+  
   };
 
   if (!isOpen) return null;
