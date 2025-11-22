@@ -21,7 +21,7 @@ export default defineSchema({
     role: v.optional(v.string()),
     status: v.optional(v.union(
       v.literal("invited"),
-      v.literal("active"), 
+      v.literal("active"),
       v.literal("suspended"),
       v.literal("expired")
     )),
@@ -273,7 +273,7 @@ export default defineSchema({
     .index("by_year", ["year"])
     .index("by_active", ["isActive"]),
 
-  // User Products - Junction table for user-product relationships  
+  // User Products - Junction table for user-product relationships
   userProducts: defineTable({
     userId: v.id("users"),
     pricingPlanId: v.id("pricingPlans"), // Reference to pricingPlans table
@@ -292,7 +292,7 @@ export default defineSchema({
     // Status
     status: v.union(
       v.literal("active"),
-      v.literal("expired"), 
+      v.literal("expired"),
       v.literal("suspended"),
       v.literal("refunded")
     ),
@@ -317,37 +317,38 @@ export default defineSchema({
     cpf: v.string(),
     name: v.string(),
     productId: v.string(), // Product identifier (e.g., "ortoqbank_2025")
-    
+
     // Address info (required for invoice generation - optional for migration)
     phone: v.optional(v.string()),
     mobilePhone: v.optional(v.string()),
     postalCode: v.optional(v.string()), // CEP
     address: v.optional(v.string()), // Street address
     addressNumber: v.optional(v.string()), // Address number (defaults to "SN" if not provided)
-    
+
     // Account info (from Clerk after signup)
     userId: v.optional(v.string()), // Clerk user ID (set when claimed)
     accountEmail: v.optional(v.string()), // Account email from Clerk (may differ from contact email)
-    
+
     // Payment info
     paymentMethod: v.string(), // 'PIX' or 'CREDIT_CARD'
+    installmentCount: v.optional(v.number()), // Number of credit card installments (only for CREDIT_CARD)
     asaasPaymentId: v.optional(v.string()), // AsaaS payment ID
     externalReference: v.optional(v.string()), // Order ID for external reference
     originalPrice: v.number(),
     finalPrice: v.number(),
-    
+
     // PIX payment data (for displaying QR code)
     pixData: v.optional(v.object({
       qrPayload: v.optional(v.string()), // PIX copy-paste code
       qrCodeBase64: v.optional(v.string()), // QR code image as base64
       expirationDate: v.optional(v.string()), // When the PIX QR code expires
     })),
-    
+
     // Coupon info
     couponCode: v.optional(v.string()), // Coupon code used (if any)
     couponDiscount: v.optional(v.number()), // Discount amount from coupon
     pixDiscount: v.optional(v.number()), // Additional PIX discount
-    
+
     // State management
     status: v.union(
       v.literal("pending"), // Order created, waiting for payment
@@ -356,7 +357,7 @@ export default defineSchema({
       v.literal("completed"), // Fully processed
       v.literal("failed") // Payment failed or expired
     ),
-    
+
     // Timestamps
     createdAt: v.number(), // When order was created
     paidAt: v.optional(v.number()), // When payment was confirmed
@@ -370,6 +371,7 @@ export default defineSchema({
     .index("by_external_reference", ["externalReference"]),
 
   // Invoices - tracks nota fiscal (invoice) generation for paid orders
+  // IMPORTANT: For installment payments, ONE invoice is generated with the TOTAL value
   invoices: defineTable({
     orderId: v.id('pendingOrders'),
     asaasPaymentId: v.string(),
@@ -383,7 +385,10 @@ export default defineSchema({
     ),
     municipalServiceId: v.string(), // Service ID from Asaas
     serviceDescription: v.string(),
-    value: v.number(),
+    value: v.number(), // Always the TOTAL value (even for installment payments)
+    // Installment information (for reference and observations only)
+    installmentNumber: v.optional(v.number()), // Always 1 for installment payments (marks it as installment)
+    totalInstallments: v.optional(v.number()), // Total number of installments (for payment info)
     customerName: v.string(),
     customerEmail: v.string(),
     customerCpfCnpj: v.string(),
@@ -402,5 +407,29 @@ export default defineSchema({
     .index("by_payment", ["asaasPaymentId"])
     .index("by_status", ["status"])
     .index("by_asaas_invoice", ["asaasInvoiceId"]),
+
+  // Email invitations - tracks Clerk invitation emails sent after payment
+  emailInvitations: defineTable({
+    orderId: v.id('pendingOrders'),
+    email: v.string(),
+    customerName: v.string(),
+    status: v.union(
+      v.literal("pending"),     // About to send
+      v.literal("sent"),        // Successfully sent
+      v.literal("failed"),      // Failed after all retries
+      v.literal("accepted")     // User registered
+    ),
+    clerkInvitationId: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    errorDetails: v.optional(v.string()),
+    sentAt: v.optional(v.number()),
+    acceptedAt: v.optional(v.number()),
+    retryCount: v.optional(v.number()),
+    retrierRunId: v.optional(v.string()), // Track the retrier run ID
+    createdAt: v.number(),
+  })
+    .index("by_order", ["orderId"])
+    .index("by_email", ["email"])
+    .index("by_status", ["status"]),
 
 });

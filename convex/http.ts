@@ -47,6 +47,23 @@ http.route({
               });
               
               console.log(`✅ Claim result:`, result);
+              
+              // Try to update email invitation status to accepted
+              try {
+                const invitation = await ctx.runQuery(api.payments.findSentInvitationByEmail, {
+                  email: email,
+                });
+                  
+                if (invitation) {
+                  await ctx.runMutation(internal.payments.updateEmailInvitationAccepted, {
+                    invitationId: invitation._id,
+                  });
+                  console.log(`✅ Updated invitation status to accepted for ${email}`);
+                }
+              } catch (invitationError) {
+                console.error('Error updating invitation status:', invitationError);
+                // Don't fail the webhook if this fails
+              }
             } catch (linkError) {
               console.error('Error claiming order with token:', linkError);
               // Don't fail the whole webhook if linking fails
