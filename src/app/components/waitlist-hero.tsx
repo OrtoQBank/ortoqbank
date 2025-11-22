@@ -1,13 +1,16 @@
 'use client';
 
 import { Check } from 'lucide-react';
-import { useState } from 'react';
+import { parseAsBoolean, useQueryState } from 'nuqs';
 
 import { Button } from '@/components/ui/button';
 import { WaitlistModal } from '@/components/waitlist/WaitlistModal';
 
 export default function WaitlistHeroSection() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [, setIsModalOpen] = useQueryState(
+    'waitlist',
+    parseAsBoolean.withDefault(false)
+  );
 
   return (
     <>
@@ -70,7 +73,7 @@ export default function WaitlistHeroSection() {
         </div>
       </section>
 
-      <WaitlistModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} />
+      <WaitlistModal />
     </>
   );
 }

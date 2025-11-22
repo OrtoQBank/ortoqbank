@@ -25,7 +25,7 @@ export const createWaitlistEntry = mutation({
       v.literal("Pé e Tornozelo")
     ),
   },
-  returns: v.null(),
+  returns: v.union(v.id('waitlist'), v.literal('email_already_exists')),
   handler: async (ctx, args) => {
     // Check if email already exists
     const existingEntry = await ctx.db
@@ -34,11 +34,11 @@ export const createWaitlistEntry = mutation({
       .first();
 
     if (existingEntry) {
-      throw new Error('Este e-mail já está cadastrado na lista de espera.');
+      return 'email_already_exists';
     }
 
     // Create the waitlist entry
-    await ctx.db.insert('waitlist', {
+    const entryId = await ctx.db.insert('waitlist', {
       name: args.name,
       email: args.email,
       whatsapp: args.whatsapp,
@@ -47,7 +47,7 @@ export const createWaitlistEntry = mutation({
       subspecialty: args.subspecialty,
     });
 
-    return null;
+    return entryId;
   },
 });
 
