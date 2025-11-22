@@ -3,33 +3,29 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation } from 'convex/react';
 import { X } from 'lucide-react';
+import { parseAsBoolean, useQueryState } from 'nuqs';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { Button } from '@/components/ui/button';
 import {
-    Form,
-    FormControl,
-    FormField,
-    FormItem,
-    FormMessage,
+  Form,
+  FormControl,
+  FormField,
+  FormItem,
+  FormMessage,
 } from '@/components/ui/form';
 import { Input } from '@/components/ui/input';
 import {
-    Select,
-    SelectContent,
-    SelectItem,
-    SelectTrigger,
-    SelectValue,
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
 } from '@/components/ui/select';
 
 import { api } from '../../../convex/_generated/api';
-
-interface WaitlistModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-}
 
 const RESIDENCY_LEVELS = ['R1', 'R2', 'R3', 'Já concluí'] as const;
 const SUBSPECIALTIES = [
@@ -58,10 +54,18 @@ const waitlistFormSchema = z.object({
 
 type WaitlistFormValues = z.infer<typeof waitlistFormSchema>;
 
-export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
+export function WaitlistModal() {
+  const [isOpen, setIsOpen] = useQueryState(
+    'waitlist',
+    parseAsBoolean.withDefault(false)
+  );
   const createWaitlistEntry = useMutation(api.waitlist.createWaitlistEntry);
   const [submitSuccess, setSubmitSuccess] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const handleClose = () => {
+    setIsOpen(false);
+  };
 
   const form = useForm<WaitlistFormValues>({
     resolver: zodResolver(waitlistFormSchema),
@@ -88,11 +92,11 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
 
       setSubmitSuccess(true);
 
-      // Reset form after 2 seconds and close modal
-     
+      setTimeout(() => {
         form.reset();
         setSubmitSuccess(false);
-        onClose();
+        handleClose();
+      }, 2000);
       
     } catch (error_) {
       setError(error_ instanceof Error ? error_.message : 'Erro ao enviar formulário');
@@ -105,7 +109,7 @@ export function WaitlistModal({ isOpen, onClose }: WaitlistModalProps) {
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
       <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
         <button
-          onClick={onClose}
+          onClick={handleClose}
           className="absolute right-4 top-4 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           aria-label="Fechar"
         >
