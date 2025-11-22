@@ -8,6 +8,40 @@ import {
   mutation,
   query
 } from './_generated/server';
+import { retrier } from './retrier';
+
+/**
+ * AsaaS webhook payment payload structure
+ * This represents the payment object received in webhook events
+ */
+interface AsaasWebhookPayment {
+  id: string;
+  value: number;
+  totalValue?: number;
+  status: string;
+  externalReference?: string;
+  installmentNumber?: number;
+  installment?: string;
+}
+
+/**
+ * Pending order with installment information
+ */
+interface PendingOrderWithInstallments {
+  _id: Id<'pendingOrders'>;
+  email: string;
+  cpf: string;
+  name: string;
+  productId: string;
+  finalPrice: number;
+  originalPrice: number;
+  couponCode?: string;
+  couponDiscount?: number;
+  pixDiscount?: number;
+  paymentMethod: string;
+  status: string;
+  installmentCount?: number;
+}
 
 /**
  * Create a pending order (Step 1 of checkout flow)
@@ -174,12 +208,13 @@ export const linkPaymentToOrder = mutation({
 export const processAsaasWebhook = internalAction({
   args: {
     event: v.string(),
-    payment: v.any(),
+    payment: v.any(), // Keep as v.any() for webhook validation, but cast to interface inside
     rawWebhookData: v.any(),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    const { event, payment } = args;
+    const { event } = args;
+    const payment = args.payment as AsaasWebhookPayment;
 
     console.log(`Processing AsaaS webhook: ${event} for payment ${payment.id}`);
 
@@ -194,9 +229,9 @@ export const processAsaasWebhook = internalAction({
         }
 
         // SECURITY: Verify payment amount matches order amount
-        const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
+        const pendingOrder = await ctx.runQuery(api.payments.getPendingOrderById, {
           orderId: pendingOrderId,
-        });
+        }) as PendingOrderWithInstallments | null;
 
         if (!pendingOrder) {
           console.error(`Order not found: ${pendingOrderId}`);
@@ -208,8 +243,8 @@ export const processAsaasWebhook = internalAction({
 
         // IMPORTANT: Asaas creates SEPARATE payment records for each installment
         // So for a 2x payment, we receive 2 separate webhooks with individual installment amounts
-        const installmentNumber = (payment as any).installmentNumber;
-        const installmentGroupId = (payment as any).installment;
+        const installmentNumber = payment.installmentNumber;
+        const installmentGroupId = payment.installment;
         const isInstallmentPayment = !!installmentNumber && !!installmentGroupId;
 
         console.log(`💰 Payment verification:`, {
@@ -219,12 +254,12 @@ export const processAsaasWebhook = internalAction({
           installmentGroupId,
           isInstallmentPayment,
           expectedOrderAmount: pendingOrder.finalPrice,
-          orderInstallmentCount: (pendingOrder as any).installmentCount,
+          orderInstallmentCount: pendingOrder.installmentCount,
         });
 
         if (isInstallmentPayment) {
           // Verify installment amount if we have the installment count stored
-          const storedInstallmentCount = (pendingOrder as any).installmentCount;
+          const storedInstallmentCount = pendingOrder.installmentCount;
           if (storedInstallmentCount && storedInstallmentCount > 1) {
             const expectedInstallmentValue = pendingOrder.finalPrice / storedInstallmentCount;
             const actualInstallmentValue = payment.value || 0;
@@ -542,9 +577,6 @@ export const sendClerkInvitation = internalAction({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    // Import retrier
-    const { retrier } = await import('./retrier');
-
     // Create pending invitation record
     const invitationId = await ctx.runMutation(internal.payments.createEmailInvitation, {
       orderId: args.orderId as Id<'pendingOrders'>,
@@ -723,6 +755,7 @@ export const getPendingOrderById = query({
       pixDiscount: v.optional(v.number()),
       paymentMethod: v.string(),
       status: v.string(),
+      installmentCount: v.optional(v.number()),
     }),
     v.null(),
   ),
@@ -745,6 +778,7 @@ export const getPendingOrderById = query({
         pixDiscount: order.pixDiscount,
         paymentMethod: order.paymentMethod,
         status: order.status,
+        installmentCount: order.installmentCount,
       };
     } catch (error) {
       console.error('Error getting pending order:', error);
