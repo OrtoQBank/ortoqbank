@@ -41,6 +41,7 @@ import type * as userStats from "../userStats.js";
 import type * as userStatsCounts from "../userStatsCounts.js";
 import type * as users from "../users.js";
 import type * as utils from "../utils.js";
+import type * as waitlist from "../waitlist.js";
 
 import type {
   ApiFromModules,
@@ -90,6 +91,7 @@ declare const fullApi: ApiFromModules<{
   userStatsCounts: typeof userStatsCounts;
   users: typeof users;
   utils: typeof utils;
+  waitlist: typeof waitlist;
 }>;
 declare const fullApiWithMounts: typeof fullApi;
 
