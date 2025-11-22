@@ -426,7 +426,6 @@ export default defineSchema({
     acceptedAt: v.optional(v.number()),
     retryCount: v.optional(v.number()),
     retrierRunId: v.optional(v.string()), // Track the retrier run ID
-    createdAt: v.number(),
   })
     .index("by_order", ["orderId"])
     .index("by_email", ["email"])
