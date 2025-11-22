@@ -806,7 +806,6 @@ export const createEmailInvitation = internalMutation({
       status: 'pending',
       retrierRunId: args.retrierRunId,
       retryCount: 0,
-      createdAt: Date.now(),
     });
   },
 });

@@ -4,6 +4,7 @@ import Header from './components/header';
 import Hero from './components/hero';
 import Pricing from './components/pricing';
 import StaffSection from './components/staff-section';
+import WaitlistHero from './components/waitlist-hero';
 
 // Force static generation with revalidation every 1 hour
 export const dynamic = 'force-static';
@@ -14,6 +15,7 @@ export default function Home() {
     <div className="flex min-h-screen flex-col">
       <Header />
       <main>
+        <WaitlistHero />
         <Hero />       
    
         <About />

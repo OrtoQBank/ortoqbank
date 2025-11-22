@@ -426,10 +426,33 @@ export default defineSchema({
     acceptedAt: v.optional(v.number()),
     retryCount: v.optional(v.number()),
     retrierRunId: v.optional(v.string()), // Track the retrier run ID
-    createdAt: v.number(),
   })
     .index("by_order", ["orderId"])
     .index("by_email", ["email"])
     .index("by_status", ["status"]),
 
+  // Waitlist - tracks users interested in OrtoClub TEOT
+  waitlist: defineTable({
+    name: v.string(),
+    email: v.string(),
+    whatsapp: v.string(),
+    instagram: v.optional(v.string()),
+    residencyLevel: v.union(
+      v.literal("R1"),
+      v.literal("R2"),
+      v.literal("R3"),
+      v.literal("Já concluí")
+    ),
+    subspecialty: v.union(
+      v.literal("Pediátrica"),
+      v.literal("Tumor"),
+      v.literal("Quadril"),
+      v.literal("Joelho"),
+      v.literal("Ombro e Cotovelo"),
+      v.literal("Mão"),
+      v.literal("Coluna"),
+      v.literal("Pé e Tornozelo")
+    ),
+  })
+    .index("by_email", ["email"])
 });
