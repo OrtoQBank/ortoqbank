@@ -1,16 +1,12 @@
 'use client';
 
 import {
-  BarChart3,
-  BookOpen,
   CogIcon,
   DollarSign,
   FilePlusIcon,
-  FileQuestion,
   FolderCogIcon,
-  Settings,
   SettingsIcon,
-  Users,
+  Users
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
@@ -66,6 +62,13 @@ const navItems = [
     href: '/admin/pricingPlans',
     label: 'Planos de Preços',
     icon: DollarSign,
+    prefetch: false, // Use hover prefetch for less frequently used features
+    useHoverPrefetch: true,
+  },
+  {
+    href: '/admin/waitlist',
+    label: 'Lista de Espera',
+    icon: Users,
     prefetch: false, // Use hover prefetch for less frequently used features
     useHoverPrefetch: true,
   },
