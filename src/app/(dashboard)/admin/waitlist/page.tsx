@@ -25,14 +25,14 @@ export default function WaitlistPage() {
   const isLoading = entries === undefined;
 
   // Filter entries based on search query
-  const filteredEntries = (entries || []).filter(entry => {
+  const filteredEntries = (entries ?? []).filter(entry => {
     if (!searchQuery.trim()) return true;
     const search = searchQuery.toLowerCase();
     return (
       entry.name.toLowerCase().includes(search) ||
       entry.email.toLowerCase().includes(search) ||
-      entry.whatsapp.includes(search) ||
-      (entry.instagram?.toLowerCase().includes(search) ?? false)
+      entry.whatsapp.toLowerCase().includes(search) ||
+      entry.instagram?.toLowerCase().includes(search)
     );
   });
 
@@ -48,8 +48,8 @@ export default function WaitlistPage() {
       Nome: entry.name,
       Email: entry.email,
       WhatsApp: entry.whatsapp,
-      Instagram: entry.instagram || '',
-      'Nível Residência': entry.residencyLevel,
+      Instagram: entry.instagram ?? '',
+      'Nivel Residencia': entry.residencyLevel,
       Subespecialidade: entry.subspecialty,
     }));
 
@@ -102,7 +102,7 @@ export default function WaitlistPage() {
           ? 'Carregando...'
           : searchQuery.trim()
             ? `Mostrando ${filteredEntries.length} resultado(s) da busca.`
-            : `Total de ${(entries || []).length} inscricao(oes) na lista de espera.`}
+            : `Total de ${(entries ?? []).length} inscricao(oes) na lista de espera.`}
       </p>
 
       {/* Entries Table */}
