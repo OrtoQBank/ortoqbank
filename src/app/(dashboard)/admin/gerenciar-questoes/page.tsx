@@ -33,7 +33,6 @@ export default function GerenciarQuestoes() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<Id<'questions'> | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
   const [questionToDelete, setQuestionToDelete] = useState<{
     id: Id<'questions'>;
     title: string;
@@ -80,8 +79,6 @@ export default function GerenciarQuestoes() {
         title: 'Sucesso',
         description: 'Questão excluída com sucesso!',
       });
-      // Refresh the search results by incrementing the refresh key
-      setRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error('Erro ao excluir questão:', error);
       toast({
