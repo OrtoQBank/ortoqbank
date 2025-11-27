@@ -1,10 +1,18 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
 import { Button } from '@/components/ui/button';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import {
   Table,
@@ -25,9 +33,17 @@ export default function GerenciarQuestoes() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
   const [deletingId, setDeletingId] = useState<Id<'questions'> | null>(null);
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [questionToDelete, setQuestionToDelete] = useState<{
+    id: Id<'questions'>;
+    title: string;
+  } | null>(null);
 
   const deleteQuestion = useMutation(api.questions.deleteQuestion);
+  const { results, status, loadMore } = usePaginatedQuery(
+    api.questions.list,
+    {},
+    { initialNumItems: 10 },
+  );
 
   // Use the searchByCode query when search is provided, otherwise show nothing
   const searchResults =
@@ -49,27 +65,20 @@ export default function GerenciarQuestoes() {
     router.push(`/admin/gerenciar-questoes/${questionId}`);
   };
 
-  const handleDelete = async (
-    questionId: Id<'questions'>,
-    questionTitle: string,
-  ) => {
-    if (
-      !confirm(
-        `Tem certeza que deseja excluir a questão "${questionTitle}"?\n\nEsta ação removerá a questão de todos os testes/trilhas que a contêm e não pode ser desfeita.`,
-      )
-    ) {
-      return;
-    }
+  const handleDelete = (questionId: Id<'questions'>, questionTitle: string) => {
+    setQuestionToDelete({ id: questionId, title: questionTitle });
+  };
 
-    setDeletingId(questionId);
+  const confirmDelete = async () => {
+    if (!questionToDelete) return;
+
+    setDeletingId(questionToDelete.id);
     try {
-      await deleteQuestion({ id: questionId });
+      await deleteQuestion({ id: questionToDelete.id });
       toast({
         title: 'Sucesso',
         description: 'Questão excluída com sucesso!',
       });
-      // Refresh the search results by incrementing the refresh key
-      setRefreshKey(prev => prev + 1);
     } catch (error) {
       console.error('Erro ao excluir questão:', error);
       toast({
@@ -79,6 +88,7 @@ export default function GerenciarQuestoes() {
       });
     } finally {
       setDeletingId(null);
+      setQuestionToDelete(null);
     }
   };
 
@@ -104,8 +114,9 @@ export default function GerenciarQuestoes() {
 
       {/* Search Instructions */}
       <p className="text-muted-foreground text-sm">
-        Digite o código ou parte do título da questão e clique em Buscar.
-        Mostrando no máximo 10 resultados.
+        {searchQuery.trim()
+          ? 'Mostrando resultados da busca (máximo 10 resultados).'
+          : 'Mostrando todas as questões. Use a busca para filtrar por código ou título.'}
       </p>
 
       {/* Questions Table */}
@@ -166,20 +177,108 @@ export default function GerenciarQuestoes() {
                   </TableRow>
                 ))
               )
-            ) : (
+            ) : status === 'LoadingFirstPage' ? (
               <TableRow>
                 <TableCell
                   colSpan={4}
                   className="text-muted-foreground py-6 text-center"
                 >
-                  Digite um código ou parte do título da questão e clique em
-                  Buscar para pesquisar questões
+                  Carregando questões...
                 </TableCell>
               </TableRow>
+            ) : results.length === 0 ? (
+              <TableRow>
+                <TableCell
+                  colSpan={4}
+                  className="text-muted-foreground py-6 text-center"
+                >
+                  Nenhuma questão encontrada
+                </TableCell>
+              </TableRow>
+            ) : (
+              results.map(question => (
+                <TableRow key={question._id}>
+                  <TableCell className="font-medium">
+                    {question.questionCode || 'Sem código'}
+                  </TableCell>
+                  <TableCell>{question.title}</TableCell>
+                  <TableCell>
+                    {question.theme
+                      ? question.theme.name
+                      : 'Tema não encontrado'}
+                  </TableCell>
+                  <TableCell className="space-x-2 text-right">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => handleView(question._id)}
+                    >
+                      Visualizar
+                    </Button>
+                    <Button
+                      variant="destructive"
+                      size="sm"
+                      onClick={() =>
+                        handleDelete(question._id, question.title)
+                      }
+                      disabled={deletingId === question._id}
+                    >
+                      {deletingId === question._id
+                        ? 'Excluindo...'
+                        : 'Excluir'}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
             )}
           </TableBody>
         </Table>
       </div>
+
+      {/* Load More Button */}
+      {!searchQuery.trim() && status === 'CanLoadMore' && (
+        <div className="flex justify-center">
+          <Button onClick={() => loadMore(10)} variant="outline">
+            Carregar mais
+          </Button>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={!!questionToDelete}
+        onOpenChange={open => !open && setQuestionToDelete(null)}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Excluir Questão</DialogTitle>
+            <DialogDescription>
+              Tem certeza que deseja excluir a questão &ldquo;
+              {questionToDelete?.title}&rdquo;?
+              <br />
+              <br />
+              Esta ação removerá a questão de todos os testes/trilhas que a
+              contêm e não pode ser desfeita.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setQuestionToDelete(null)}
+              disabled={!!deletingId}
+            >
+              Cancelar
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={confirmDelete}
+              disabled={!!deletingId}
+            >
+              {deletingId ? 'Excluindo...' : 'Excluir'}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
