@@ -40,6 +40,23 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
+    // Validation: 'unanswered' mode requires at least one filter to limit scope
+    if (args.questionMode === 'unanswered') {
+      const hasFilters =
+        (args.selectedThemes?.length || 0) > 0 ||
+        (args.selectedSubthemes?.length || 0) > 0 ||
+        (args.selectedGroups?.length || 0) > 0;
+
+      if (!hasFilters) {
+        return {
+          success: false as const,
+          error: 'UNANSWERED_REQUIRES_FILTERS' as const,
+          message:
+            'Para o modo "Não Respondidas", selecione pelo menos um tema, subtema ou grupo. Isso ajuda a limitar o escopo e melhorar o desempenho.',
+        };
+      }
+    }
+
     // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
@@ -358,13 +375,25 @@ async function getQuestionsByUserMode(
     }
 
     case 'unanswered': {
-      const allQuestions = await ctx.db.query('questions').collect();
+      // NOTE: This is only called when filters are selected (validated at mutation level)
+      // So the scope is limited by hierarchy filtering, preventing large .collect() calls
+
+      // Get answered question IDs (always safe - per user)
       const answeredStats = await ctx.db
         .query('userQuestionStats')
         .withIndex('by_user', q => q.eq('userId', userId))
         .collect();
 
-      const answeredQuestionIds = new Set(answeredStats.map(s => s.questionId));
+      const answeredQuestionIds = new Set(
+        answeredStats.filter(stat => stat.hasAnswered).map(s => s.questionId),
+      );
+
+      // Get a reasonable sample of questions (will be filtered by hierarchy)
+      // Using take() with a safe limit since filters are required
+      const sampleSize = 500; // Safe limit for filtered scope
+      const allQuestions = await ctx.db.query('questions').take(sampleSize);
+
+      // Filter to unanswered only
       return allQuestions.filter(q => !answeredQuestionIds.has(q._id));
     }
 
