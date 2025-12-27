@@ -3,7 +3,6 @@
 import { Color } from '@tiptap/extension-color';
 import ImageExtension from '@tiptap/extension-image';
 import { TextStyle } from '@tiptap/extension-text-style';
-import UnderlineExtension from '@tiptap/extension-underline';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKitExtension from '@tiptap/starter-kit';
 import { useEffect } from 'react';
@@ -36,9 +35,10 @@ export default function RichTextEditor({
   onEditorReady,
 }: RichTextEditorProps) {
   const editor = useEditor({
+    immediatelyRender: false,
+    shouldRerenderOnTransaction: true,
     extensions: [
       StarterKitExtension,
-      UnderlineExtension,
       ExtendedImage,
       ResizeImage,
       Color,
