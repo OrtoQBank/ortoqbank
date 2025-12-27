@@ -2,6 +2,44 @@ import { defineSchema, defineTable } from 'convex/server';
 import { v } from 'convex/values';
 
 export default defineSchema({
+  // =============================================================================
+  // MULTI-TENANCY TABLES
+  // =============================================================================
+
+  // Apps table - defines each tenant/app in the ecosystem
+  apps: defineTable({
+    slug: v.string(),           // "teot", "derma" - used in subdomain
+    name: v.string(),           // "OrtoQBank TEOT"
+    domain: v.string(),         // "teot.ortoqbank.com"
+    description: v.optional(v.string()),
+    logoUrl: v.optional(v.string()),
+    isActive: v.boolean(),
+    createdAt: v.number(),
+  })
+    .index('by_slug', ['slug'])
+    .index('by_domain', ['domain'])
+    .index('by_active', ['isActive']),
+
+  // User-App Access - tracks which users have access to which apps
+  userAppAccess: defineTable({
+    userId: v.id('users'),
+    appId: v.id('apps'),
+    hasAccess: v.boolean(),
+    // Per-app role: 'user' for regular users, 'admin' for app-specific admins
+    role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
+    grantedAt: v.number(),
+    expiresAt: v.optional(v.number()),
+    grantedBy: v.optional(v.id('users')),  // Admin who granted access
+  })
+    .index('by_user', ['userId'])
+    .index('by_user_app', ['userId', 'appId'])
+    .index('by_app', ['appId'])
+    .index('by_app_role', ['appId', 'role']),
+
+  // =============================================================================
+  // GLOBAL TABLES (No tenantId - shared across all apps)
+  // =============================================================================
+
   // Users table
   users: defineTable({
     firstName: v.optional(v.string()),
@@ -33,44 +71,99 @@ export default defineSchema({
     .index('by_email', ['email'])
     .index('by_status', ['status']),
 
+  // =============================================================================
+  // CONTENT TABLES (With tenantId for multi-tenancy)
+  // =============================================================================
+
   themes: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),  // Optional during migration, required after
     name: v.string(),
     prefix: v.optional(v.string()),
     displayOrder: v.optional(v.number()),
-  }).index('by_name', ['name']),
+  })
+    .index('by_name', ['name'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_name', ['tenantId', 'name']),
 
   subthemes: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     themeId: v.id('themes'),
     prefix: v.optional(v.string()),
-  }).index('by_theme', ['themeId']),
+  })
+    .index('by_theme', ['themeId'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_theme', ['tenantId', 'themeId']),
 
   groups: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     subthemeId: v.id('subthemes'),
     prefix: v.optional(v.string()),
-  }).index('by_subtheme', ['subthemeId']),
+  })
+    .index('by_subtheme', ['subthemeId'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_subtheme', ['tenantId', 'subthemeId']),
 
   // Tags table
   tags: defineTable({ name: v.string() }),
 
+  // Question Content - Heavy content stored separately for performance
+  // Load this only when viewing/editing a question, not for lists
+  questionContent: defineTable({
+    questionId: v.id('questions'),
+    questionTextString: v.string(),      // Rich text JSON (heavy)
+    explanationTextString: v.string(),   // Rich text JSON (heavy)
+    alternatives: v.array(v.string()),   // Answer options
+    // Legacy fields (for migration - will be removed after migration complete)
+    questionText: v.optional(v.any()),
+    explanationText: v.optional(v.any()),
+  })
+    .index('by_question', ['questionId']),
+
+  // Questions - Light metadata for lists, filtering, aggregates
   questions: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),  // Optional during migration, required after
+    
+    // Metadata (light)
     title: v.string(),
     normalizedTitle: v.string(),
     questionCode: v.optional(v.string()),
     orderedNumberId: v.optional(v.number()),
-    questionText: v.optional(v.any()),
-    explanationText: v.optional(v.any()),
-    questionTextString: v.string(),
-    explanationTextString: v.string(),
-    contentMigrated: v.optional(v.boolean()),
-    alternatives: v.array(v.string()),
-    correctAlternativeIndex: v.number(),
+    
+    // Taxonomy IDs (for filtering/aggregates)
     themeId: v.id('themes'),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
+    
+    // DENORMALIZED: Taxonomy names (for display - no extra fetches needed)
+    themeName: v.optional(v.string()),
+    subthemeName: v.optional(v.string()),
+    groupName: v.optional(v.string()),
+    
+    // Quiz essentials (keep in main table for quiz generation)
+    correctAlternativeIndex: v.number(),
+    alternativeCount: v.optional(v.number()),  // Just the count, not full content
+    
+    // Other metadata
     authorId: v.optional(v.id('users')),
     isPublic: v.optional(v.boolean()),
+    
+    // Migration tracking
+    contentMigrated: v.optional(v.boolean()),  // True when content moved to questionContent table
+    
+    // Legacy fields - KEPT DURING MIGRATION (will be removed after migration)
+    // These will be moved to questionContent table
+    questionText: v.optional(v.any()),
+    explanationText: v.optional(v.any()),
+    questionTextString: v.optional(v.string()),  // Made optional for new questions
+    explanationTextString: v.optional(v.string()),  // Made optional for new questions
+    alternatives: v.optional(v.array(v.string())),  // Made optional for new questions
+    
     // Legacy taxonomy fields (for migration cleanup only)
     TaxThemeId: v.optional(v.string()),
     TaxSubthemeId: v.optional(v.string()),
@@ -81,10 +174,17 @@ export default defineSchema({
     .index('by_theme', ['themeId'])
     .index('by_subtheme', ['subthemeId'])
     .index('by_group', ['groupId'])
+    // Tenant-first indexes for multi-tenancy
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_theme', ['tenantId', 'themeId'])
+    .index('by_tenant_and_subtheme', ['tenantId', 'subthemeId'])
+    .index('by_tenant_and_group', ['tenantId', 'groupId'])
     .searchIndex('search_by_title', { searchField: 'title' })
     .searchIndex('search_by_code', { searchField: 'questionCode' }),
 
   presetQuizzes: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     description: v.string(),
     category: v.union(v.literal('trilha'), v.literal('simulado')),
@@ -106,9 +206,14 @@ export default defineSchema({
     .index('by_subtheme', ['subthemeId'])
     .index('by_group', ['groupId'])
     .index('by_category', ['category'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_category', ['tenantId', 'category'])
+    .index('by_tenant_and_theme', ['tenantId', 'themeId'])
     .searchIndex('search_by_name', { searchField: 'name' }),
 
   customQuizzes: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     description: v.string(),
     questions: v.array(v.id('questions')),
@@ -129,9 +234,14 @@ export default defineSchema({
     selectedTaxSubthemes: v.optional(v.array(v.string())),
     selectedTaxGroups: v.optional(v.array(v.string())),
     taxonomyPathIds: v.optional(v.array(v.string())),
-  }).searchIndex('search_by_name', { searchField: 'name' }),
+  })
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_author', ['tenantId', 'authorId'])
+    .searchIndex('search_by_name', { searchField: 'name' }),
 
   quizSessions: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     userId: v.id('users'),
     quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
     mode: v.union(v.literal('exam'), v.literal('study')),
@@ -149,9 +259,14 @@ export default defineSchema({
       }),
     ),
     isComplete: v.boolean(),
-  }).index('by_user_quiz', ['userId', 'quizId', 'isComplete']),
+  })
+    .index('by_user_quiz', ['userId', 'quizId', 'isComplete'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId']),
 
   userBookmarks: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     userId: v.id('users'),
     questionId: v.id('questions'),
     // Taxonomy fields for aggregates
@@ -161,10 +276,14 @@ export default defineSchema({
   })
     .index('by_user_question', ['userId', 'questionId'])
     .index('by_user', ['userId'])
-    .index('by_question', ['questionId']),
+    .index('by_question', ['questionId'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId']),
 
   // Table to track user statistics for questions
   userQuestionStats: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     userId: v.id('users'),
     questionId: v.id('questions'),
     hasAnswered: v.boolean(), // Track if user has answered at least once
@@ -178,13 +297,18 @@ export default defineSchema({
     .index('by_user_question', ['userId', 'questionId'])
     .index('by_user', ['userId'])
     .index('by_user_incorrect', ['userId', 'isIncorrect'])
-    .index('by_user_answered', ['userId', 'hasAnswered']),
+    .index('by_user_answered', ['userId', 'hasAnswered'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId'])
+    .index('by_tenant_and_user_incorrect', ['tenantId', 'userId', 'isIncorrect']),
 
   // Table for pre-computed user statistics counts (Performance optimization)
   userStatsCounts: defineTable({
+    // Multi-tenancy - counts are now per-tenant
+    tenantId: v.optional(v.id('apps')),
     userId: v.id('users'),
 
-    // Global counts
+    // Global counts (within tenant)
     totalAnswered: v.number(),
     totalIncorrect: v.number(),
     totalBookmarked: v.number(),
@@ -205,7 +329,10 @@ export default defineSchema({
     bookmarkedByGroup: v.record(v.id('groups'), v.number()),
 
     lastUpdated: v.number(),
-  }).index('by_user', ['userId']),
+  })
+    .index('by_user', ['userId'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId']),
 
   // Admin-managed coupons for checkout
   coupons: defineTable({
