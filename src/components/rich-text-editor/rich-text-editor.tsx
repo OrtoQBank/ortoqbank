@@ -8,8 +8,13 @@ import StarterKitExtension from '@tiptap/starter-kit';
 import { useEffect } from 'react';
 import ResizeImage from 'tiptap-extension-resize-image';
 
+import { toast } from '@/hooks/use-toast';
+
 import TextEditorMenuBar from './editor-menu-bar';
 import { pendingUploads } from './image-upload-button';
+
+// File size limit in MB (should match server-side limit)
+const MAX_FILE_SIZE_MB = 8;
 
 interface RichTextEditorProps {
   onChange?: (value: any) => void;
@@ -70,9 +75,35 @@ export default function RichTextEditor({
               // Prevent default paste behavior
               event.preventDefault();
 
+              // Validate file size
+              const fileSizeMB = file.size / (1024 * 1024);
+              if (fileSizeMB > MAX_FILE_SIZE_MB) {
+                console.error('[ImagePaste] File too large:', {
+                  fileName: file.name,
+                  fileSizeMB: fileSizeMB.toFixed(2),
+                  maxSizeMB: MAX_FILE_SIZE_MB,
+                });
+
+                toast({
+                  title: 'Imagem muito grande',
+                  description: `A imagem colada tem ${fileSizeMB.toFixed(1)}MB. O tamanho máximo permitido é ${MAX_FILE_SIZE_MB}MB. Por favor, reduza o tamanho da imagem antes de colar.`,
+                  variant: 'destructive',
+                  duration: 8000,
+                });
+
+                return true; // Consumed the event but didn't insert
+              }
+
               // Handle the image file
               const blobUrl = URL.createObjectURL(file);
               pendingUploads.set(blobUrl, { file, blobUrl });
+
+              console.log('[ImagePaste] Image added to pending uploads:', {
+                fileName: file.name,
+                fileSizeMB: fileSizeMB.toFixed(2),
+                blobUrl: blobUrl.slice(0, 50) + '...',
+                pendingUploadsSize: pendingUploads.size,
+              });
 
               const imageAttributes: ImageAttributes = {
                 src: blobUrl,
