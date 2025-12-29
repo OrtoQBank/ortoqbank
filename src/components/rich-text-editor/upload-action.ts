@@ -10,11 +10,11 @@ const imageKit = new ImageKit({
 });
 
 // Image optimization constants
-const IMAGE_OPTIMIZATION = {
+export const IMAGE_OPTIMIZATION = {
   FORMAT: 'webp',
   QUALITY: 80, // 80% quality - good balance between size and quality
   MAX_WIDTH: 500, // 500px max width for content images
-  MAX_FILE_SIZE_MB: 8, // Maximum file size before compression (in MB)
+  MAX_FILE_SIZE_MB: 5, // Maximum file size before compression (in MB)
 } as const;
 
 export async function uploadToImageKit(file: File) {

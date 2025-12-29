@@ -7,6 +7,7 @@ import { useCallback, useRef, useState } from 'react';
 import { toast } from '@/hooks/use-toast';
 
 import type { ImageAttributes } from './rich-text-editor';
+import { IMAGE_OPTIMIZATION } from './upload-action';
 
 // Keep track of temporary images
 interface PendingUpload {
@@ -17,26 +18,24 @@ interface PendingUpload {
 // Use a Map to store pending uploads globally
 export const pendingUploads = new Map<string, PendingUpload>();
 
-// File size limit in MB (should match server-side limit)
-const MAX_FILE_SIZE_MB = 8;
-
 /**
  * Validates file size and shows toast if too large.
  * Returns true if valid, false if too large.
  */
 function validateFileSize(file: File): boolean {
   const fileSizeMB = file.size / (1024 * 1024);
+  const maxSizeMB = IMAGE_OPTIMIZATION.MAX_FILE_SIZE_MB;
 
-  if (fileSizeMB > MAX_FILE_SIZE_MB) {
+  if (fileSizeMB > maxSizeMB) {
     console.error('[ImageUpload] File too large:', {
       fileName: file.name,
       fileSizeMB: fileSizeMB.toFixed(2),
-      maxSizeMB: MAX_FILE_SIZE_MB,
+      maxSizeMB,
     });
 
     toast({
       title: 'Imagem muito grande',
-      description: `O arquivo "${file.name}" tem ${fileSizeMB.toFixed(1)}MB. O tamanho máximo permitido é ${MAX_FILE_SIZE_MB}MB. Por favor, reduza o tamanho da imagem antes de enviar.`,
+      description: `O arquivo "${file.name}" tem ${fileSizeMB.toFixed(1)}MB. O tamanho máximo permitido é ${maxSizeMB}MB. Por favor, reduza o tamanho da imagem antes de enviar.`,
       variant: 'destructive',
       duration: 8000,
     });
