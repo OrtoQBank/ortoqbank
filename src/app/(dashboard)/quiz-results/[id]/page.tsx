@@ -174,7 +174,7 @@ export default function UniversalQuizResultsPage() {
         <QuestionContent stringContent={question.questionTextString} />
 
         <div className="mt-4 space-y-2">
-          {question.alternatives.map((alternative, i) => {
+          {(question.alternatives ?? []).map((alternative, i) => {
             const isCorrect = i === question.correctAlternativeIndex;
             const isUserAnswer = i === userAnswer;
 
