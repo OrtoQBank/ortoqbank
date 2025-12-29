@@ -6,8 +6,8 @@ import { useCallback, useRef, useState } from 'react';
 
 import { toast } from '@/hooks/use-toast';
 
+import { IMAGE_OPTIMIZATION } from './constants';
 import type { ImageAttributes } from './rich-text-editor';
-import { IMAGE_OPTIMIZATION } from './upload-action';
 
 // Keep track of temporary images
 interface PendingUpload {
