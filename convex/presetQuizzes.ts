@@ -49,6 +49,7 @@ export const listTrilhasSorted = query({
     v.object({
       _id: v.id('presetQuizzes'),
       _creationTime: v.number(),
+      tenantId: v.optional(v.id('apps')),
       name: v.string(),
       description: v.string(),
       category: v.union(v.literal('trilha'), v.literal('simulado')),
@@ -95,6 +96,7 @@ export const listSimuladosSorted = query({
     v.object({
       _id: v.id('presetQuizzes'),
       _creationTime: v.number(),
+      tenantId: v.optional(v.id('apps')),
       name: v.string(),
       description: v.string(),
       category: v.union(v.literal('trilha'), v.literal('simulado')),
