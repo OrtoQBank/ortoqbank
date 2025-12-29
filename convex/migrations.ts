@@ -319,38 +319,36 @@ export const backfillQuestionDenormalizedNames = migrations.define({
  */
 export const migrateQuestionContent = migrations.define({
   table: 'questions',
-  migrateOne: async (ctx, doc): Promise<{ contentMigrated: boolean } | undefined> => {
-    // Skip if already migrated
-    if (doc.contentMigrated) {
-      return;
-    }
-
-    // Skip if no content to migrate (shouldn't happen with existing data)
-    if (!doc.questionTextString && !doc.explanationTextString && !doc.alternatives) {
-      return { contentMigrated: true };
-    }
-
-    // Check if questionContent already exists for this question
+  migrateOne: async (ctx, doc): Promise<undefined> => {
+    // Check if questionContent ACTUALLY exists for this question (don't rely on flag)
     const existingContent = await ctx.db
       .query('questionContent')
       .withIndex('by_question', (q) => q.eq('questionId', doc._id))
       .first();
 
-    if (!existingContent) {
-      // Create questionContent record with the heavy content
-      await ctx.db.insert('questionContent', {
-        questionId: doc._id,
-        questionTextString: doc.questionTextString || '',
-        explanationTextString: doc.explanationTextString || '',
-        alternatives: doc.alternatives || [],
-        // Also migrate legacy rich text fields if they exist
-        questionText: doc.questionText,
-        explanationText: doc.explanationText,
-      });
+    // Skip if content already exists in questionContent table
+    if (existingContent) {
+      return;
     }
 
-    // Mark as migrated (we keep the legacy fields in questions for now for backward compatibility)
-    return { contentMigrated: true };
+    // Skip if no content to migrate
+    if (!doc.questionTextString && !doc.explanationTextString && !doc.alternatives) {
+      return;
+    }
+
+    // Create questionContent record with the heavy content
+    await ctx.db.insert('questionContent', {
+      questionId: doc._id,
+      questionTextString: doc.questionTextString || '',
+      explanationTextString: doc.explanationTextString || '',
+      alternatives: doc.alternatives || [],
+      // Also migrate legacy rich text fields if they exist
+      questionText: doc.questionText,
+      explanationText: doc.explanationText,
+    });
+
+    // No need to update contentMigrated flag - we check actual content existence
+    return;
   },
 });
 

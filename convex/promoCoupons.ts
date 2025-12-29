@@ -8,6 +8,8 @@ export const list = query({
     v.object({
       _id: v.id('coupons'),
       _creationTime: v.number(),
+      // Multi-tenancy
+      tenantId: v.optional(v.id('apps')),
       code: v.string(),
       type: v.union(
         v.literal('percentage'),
@@ -36,6 +38,8 @@ export const getByCode = query({
     v.object({
       _id: v.id('coupons'),
       _creationTime: v.number(),
+      // Multi-tenancy
+      tenantId: v.optional(v.id('apps')),
       code: v.string(),
       type: v.union(
         v.literal('percentage'),

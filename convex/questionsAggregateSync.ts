@@ -435,6 +435,19 @@ export async function _internalDeleteQuestion(
     console.warn(`Question not found for deletion: ${id}`);
     return false; // Indicate deletion didn't happen
   }
+
+  // Delete associated questionContent record first
+  const questionContent = await ctx.db
+    .query('questionContent')
+    .withIndex('by_question', (q) => q.eq('questionId', id))
+    .first();
+  
+  if (questionContent) {
+    await ctx.db.delete(questionContent._id);
+    console.log(`Deleted questionContent for question ${id}`);
+  }
+
+  // Delete the question itself
   await ctx.db.delete(id);
 
   // Handle ALL aggregate operations with comprehensive error recovery
