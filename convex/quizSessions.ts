@@ -86,6 +86,11 @@ export const startQuizSession = mutation({
   handler: async (ctx, { quizId, mode }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
+    // Get quiz to inherit tenantId
+    const presetQuiz = await ctx.db.get(quizId as any);
+    const customQuiz = !presetQuiz ? await ctx.db.get(quizId as any) : null;
+    const quiz = presetQuiz || customQuiz;
+
     const sessionId = await ctx.db.insert('quizSessions', {
       userId: userId._id,
       quizId,
@@ -94,6 +99,8 @@ export const startQuizSession = mutation({
       answers: [],
       answerFeedback: [],
       isComplete: false,
+      // Multi-tenancy: inherit tenantId from quiz
+      tenantId: quiz?.tenantId,
     });
 
     return { sessionId };

@@ -47,6 +47,8 @@ export const toggleBookmark = mutation({
       themeId: question.themeId,
       ...(question.subthemeId && { subthemeId: question.subthemeId }),
       ...(question.groupId && { groupId: question.groupId }),
+      // Multi-tenancy: inherit tenantId from question
+      tenantId: question.tenantId,
     };
 
     await ctx.db.insert('userBookmarks', bookmarkData);
