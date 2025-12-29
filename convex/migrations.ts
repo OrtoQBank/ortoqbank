@@ -2,8 +2,8 @@ import { Migrations } from '@convex-dev/migrations';
 import { v } from 'convex/values';
 
 import { components, internal } from './_generated/api';
-import { DataModel } from './_generated/dataModel';
-import { internalAction, internalMutation } from './_generated/server';
+import { DataModel, Id } from './_generated/dataModel';
+import { internalAction, internalMutation, internalQuery } from './_generated/server';
 
 // Initialize migrations component
 export const migrations = new Migrations<DataModel>(components.migrations);
@@ -11,374 +11,387 @@ export const migrations = new Migrations<DataModel>(components.migrations);
 // Runner functions for executing migrations
 export const run = migrations.runner();
 
-// Run taxonomy migrations for both tables
-export const runTaxonomyMigrations = migrations.runner([
-  internal.migrations.populateUserQuestionStatsTaxonomy,
-  internal.migrations.populateUserBookmarksTaxonomy,
+// =============================================================================
+// MULTI-TENANCY MIGRATIONS
+// =============================================================================
+
+/**
+ * Get or create the default app for migration
+ * Call this FIRST before running any tenantId backfill migrations
+ */
+export const getOrCreateDefaultApp = internalMutation({
+  args: {
+    slug: v.optional(v.string()),
+    name: v.optional(v.string()),
+    domain: v.optional(v.string()),
+  },
+  returns: v.id('apps'),
+  handler: async (ctx, args) => {
+    const slug = args.slug || 'ortoqbank';
+    const name = args.name || 'OrtoQBank';
+    const domain = args.domain || 'ortoqbank.com';
+
+    // Check if default app already exists
+    const existingApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', slug))
+      .first();
+
+    if (existingApp) {
+      console.log(`Default app already exists: ${existingApp._id}`);
+      return existingApp._id;
+    }
+
+    // Create default app
+    const appId = await ctx.db.insert('apps', {
+      slug,
+      name,
+      domain,
+      description: 'Default OrtoQBank application',
+      isActive: true,
+      createdAt: Date.now(),
+    });
+
+    console.log(`Created default app: ${appId}`);
+    return appId;
+  },
+});
+
+/**
+ * Get the default app ID (query version for use in migrations)
+ */
+export const getDefaultAppId = internalQuery({
+  args: {
+    slug: v.optional(v.string()),
+  },
+  returns: v.union(v.id('apps'), v.null()),
+  handler: async (ctx, args) => {
+    const slug = args.slug || 'ortoqbank';
+    const app = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', slug))
+      .first();
+    return app?._id || null;
+  },
+});
+
+// Runner for multi-tenancy migrations (run in order)
+export const runMultiTenancyMigrations = migrations.runner([
+  internal.migrations.backfillThemesTenantId,
+  internal.migrations.backfillSubthemesTenantId,
+  internal.migrations.backfillGroupsTenantId,
+  internal.migrations.backfillQuestionsTenantId,
+  internal.migrations.backfillPresetQuizzesTenantId,
+  internal.migrations.backfillCustomQuizzesTenantId,
+  internal.migrations.backfillQuizSessionsTenantId,
+  internal.migrations.backfillUserBookmarksTenantId,
+  internal.migrations.backfillUserQuestionStatsTenantId,
+  internal.migrations.backfillUserStatsCountsTenantId,
 ]);
 
-// Individual migration runners
-export const runUserStatsOnly = migrations.runner(
-  internal.migrations.populateUserQuestionStatsTaxonomy,
-);
-export const runBookmarksOnly = migrations.runner(
-  internal.migrations.populateUserBookmarksTaxonomy,
-);
+// Runner for question denormalization migrations
+export const runDenormalizationMigrations = migrations.runner([
+  internal.migrations.backfillQuestionDenormalizedNames,
+  internal.migrations.migrateQuestionContent,
+]);
 
 /**
- * Migration to populate taxonomy fields in userQuestionStats
- * This migration adds themeId, subthemeId, and groupId to existing records
+ * Backfill tenantId for themes table
  */
-export const populateUserQuestionStatsTaxonomy = migrations.define({
-  table: 'userQuestionStats',
-  migrateOne: async (ctx, userStat) => {
-    // Skip if taxonomy fields are already populated
-    if (userStat.themeId) {
-      return; // No update needed
-    }
-
-    // Get the question to extract taxonomy fields
-    const question = await ctx.db.get(userStat.questionId);
-    if (!question) {
-      console.warn(
-        `Question ${userStat.questionId} not found for userStat ${userStat._id}`,
-      );
+export const backfillThemesTenantId = migrations.define({
+  table: 'themes',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    // Skip if already has tenantId
+    if (doc.tenantId) {
       return;
     }
 
-    // Return the patch data to update taxonomy fields
-    // Only include taxonomy fields that exist to avoid issues with hierarchical aggregates
-    const updateData: any = {
-      themeId: question.themeId,
-    };
-
-    // Only include optional taxonomy fields if they exist
-    if (question.subthemeId) {
-      updateData.subthemeId = question.subthemeId;
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
     }
-    if (question.groupId) {
-      updateData.groupId = question.groupId;
-    }
-
-    return updateData;
+    return { tenantId: defaultAppId };
   },
 });
 
 /**
- * Migration to populate taxonomy fields in userBookmarks
- * This migration adds themeId, subthemeId, and groupId to existing records
+ * Backfill tenantId for subthemes table
  */
-export const populateUserBookmarksTaxonomy = migrations.define({
+export const backfillSubthemesTenantId = migrations.define({
+  table: 'subthemes',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for groups table
+ */
+export const backfillGroupsTenantId = migrations.define({
+  table: 'groups',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for questions table
+ */
+export const backfillQuestionsTenantId = migrations.define({
+  table: 'questions',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for presetQuizzes table
+ */
+export const backfillPresetQuizzesTenantId = migrations.define({
+  table: 'presetQuizzes',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for customQuizzes table
+ */
+export const backfillCustomQuizzesTenantId = migrations.define({
+  table: 'customQuizzes',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for quizSessions table
+ */
+export const backfillQuizSessionsTenantId = migrations.define({
+  table: 'quizSessions',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for userBookmarks table
+ */
+export const backfillUserBookmarksTenantId = migrations.define({
   table: 'userBookmarks',
-  migrateOne: async (ctx, bookmark) => {
-    // Skip if taxonomy fields are already populated
-    if (bookmark.themeId) {
-      return; // No update needed
-    }
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
 
-    // Get the question to extract taxonomy fields
-    const question = await ctx.db.get(bookmark.questionId);
-    if (!question) {
-      console.warn(
-        `Question ${bookmark.questionId} not found for bookmark ${bookmark._id}`,
-      );
-      return;
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
     }
-
-    // Return the patch data to update taxonomy fields
-    // Only include taxonomy fields that exist to avoid issues with hierarchical aggregates
-    const updateData: any = {
-      themeId: question.themeId,
-    };
-
-    // Only include optional taxonomy fields if they exist
-    if (question.subthemeId) {
-      updateData.subthemeId = question.subthemeId;
-    }
-    if (question.groupId) {
-      updateData.groupId = question.groupId;
-    }
-
-    return updateData;
+    return { tenantId: defaultAppId };
   },
 });
 
 /**
- * Clean up old taxonomy fields using manual document replacement
- * This approach works when fields are no longer in the schema
+ * Backfill tenantId for userQuestionStats table
  */
-export const cleanupOldTaxonomyFields = internalAction({
+export const backfillUserQuestionStatsTenantId = migrations.define({
+  table: 'userQuestionStats',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for userStatsCounts table
+ */
+export const backfillUserStatsCountsTenantId = migrations.define({
+  table: 'userStatsCounts',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill denormalized theme/subtheme/group names on questions
+ */
+export const backfillQuestionDenormalizedNames = migrations.define({
+  table: 'questions',
+  migrateOne: async (ctx, doc): Promise<{
+    themeName?: string;
+    subthemeName?: string;
+    groupName?: string;
+    alternativeCount?: number;
+  } | undefined> => {
+    // Skip if already has denormalized names
+    if (doc.themeName) {
+      return;
+    }
+
+    const updates: {
+      themeName?: string;
+      subthemeName?: string;
+      groupName?: string;
+      alternativeCount?: number;
+    } = {};
+
+    // Get theme name
+    const theme = await ctx.db.get(doc.themeId);
+    if (theme) {
+      updates.themeName = theme.name;
+    }
+
+    // Get subtheme name if exists
+    if (doc.subthemeId) {
+      const subtheme = await ctx.db.get(doc.subthemeId);
+      if (subtheme) {
+        updates.subthemeName = subtheme.name;
+      }
+    }
+
+    // Get group name if exists
+    if (doc.groupId) {
+      const group = await ctx.db.get(doc.groupId);
+      if (group) {
+        updates.groupName = group.name;
+      }
+    }
+
+    // Set alternative count (from legacy field or default to 0)
+    if (doc.alternatives && !doc.alternativeCount) {
+      updates.alternativeCount = doc.alternatives.length;
+    }
+
+    return Object.keys(updates).length > 0 ? updates : undefined;
+  },
+});
+
+/**
+ * Migrate question content to separate questionContent table
+ * This moves heavy content (questionTextString, explanationTextString, alternatives)
+ * to the questionContent table for better query performance
+ */
+export const migrateQuestionContent = migrations.define({
+  table: 'questions',
+  migrateOne: async (ctx, doc): Promise<{ contentMigrated: boolean } | undefined> => {
+    // Skip if already migrated
+    if (doc.contentMigrated) {
+      return;
+    }
+
+    // Skip if no content to migrate (shouldn't happen with existing data)
+    if (!doc.questionTextString && !doc.explanationTextString && !doc.alternatives) {
+      return { contentMigrated: true };
+    }
+
+    // Check if questionContent already exists for this question
+    const existingContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', (q) => q.eq('questionId', doc._id))
+      .first();
+
+    if (!existingContent) {
+      // Create questionContent record with the heavy content
+      await ctx.db.insert('questionContent', {
+        questionId: doc._id,
+        questionTextString: doc.questionTextString || '',
+        explanationTextString: doc.explanationTextString || '',
+        alternatives: doc.alternatives || [],
+        // Also migrate legacy rich text fields if they exist
+        questionText: doc.questionText,
+        explanationText: doc.explanationText,
+      });
+    }
+
+    // Mark as migrated (we keep the legacy fields in questions for now for backward compatibility)
+    return { contentMigrated: true };
+  },
+});
+
+/**
+ * Master action to run all multi-tenancy setup
+ * Run this action to perform the complete multi-tenancy migration
+ */
+export const setupMultiTenancy = internalAction({
   args: {
-    table: v.union(
-      v.literal('presetQuizzes'),
-      v.literal('customQuizzes'),
-      v.literal('questions'),
-    ),
-    batchSize: v.optional(v.number()),
+    defaultAppSlug: v.optional(v.string()),
+    defaultAppName: v.optional(v.string()),
+    defaultAppDomain: v.optional(v.string()),
   },
   returns: v.object({
-    processedCount: v.number(),
-    updatedCount: v.number(),
+    defaultAppId: v.id('apps'),
     message: v.string(),
   }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 50;
-    let totalProcessed = 0;
-    let totalUpdated = 0;
-    let hasMore = true;
-    let lastProcessedTime: number | undefined;
+  handler: async (ctx, args): Promise<{ defaultAppId: Id<'apps'>; message: string }> => {
+    console.log('=== Starting Multi-Tenancy Setup ===');
 
-    console.log(
-      `Starting cleanup of ${args.table} with batch size: ${batchSize}`,
-    );
+    // Step 1: Create default app
+    console.log('Step 1: Creating/getting default app...');
+    const defaultAppId: Id<'apps'> = await ctx.runMutation(internal.migrations.getOrCreateDefaultApp, {
+      slug: args.defaultAppSlug,
+      name: args.defaultAppName,
+      domain: args.defaultAppDomain,
+    });
+    console.log(`Default app ID: ${defaultAppId}`);
 
-    while (hasMore) {
-      const result = await ctx.runMutation(internal.migrations.processBatch, {
-        table: args.table,
-        batchSize,
-        lastProcessedTime,
-      });
-
-      totalProcessed += result.processedCount;
-      totalUpdated += result.updatedCount;
-      hasMore = result.hasMore;
-      lastProcessedTime = result.lastProcessedTime;
-
-      // Small delay between batches
-      if (hasMore) {
-        await new Promise(resolve => setTimeout(resolve, 100));
-      }
-    }
-
-    const message = `${args.table} cleanup completed. Processed: ${totalProcessed}, Updated: ${totalUpdated}`;
-    console.log(message);
+    // Step 2: Run tenantId backfill migrations
+    console.log('Step 2: Running tenantId backfill migrations...');
+    console.log('Run the following in Convex dashboard:');
+    console.log('  npx convex run migrations:runMultiTenancyMigrations');
+    
+    // Step 3: Run denormalization migrations
+    console.log('Step 3: After tenantId backfill, run denormalization migrations:');
+    console.log('  npx convex run migrations:runDenormalizationMigrations');
 
     return {
-      processedCount: totalProcessed,
-      updatedCount: totalUpdated,
-      message,
-    };
-  },
-});
-
-/**
- * Process a single batch of documents
- */
-export const processBatch = internalMutation({
-  args: {
-    table: v.union(
-      v.literal('presetQuizzes'),
-      v.literal('customQuizzes'),
-      v.literal('questions'),
-    ),
-    batchSize: v.number(),
-    lastProcessedTime: v.optional(v.number()),
-  },
-  returns: v.object({
-    processedCount: v.number(),
-    updatedCount: v.number(),
-    hasMore: v.boolean(),
-    lastProcessedTime: v.optional(v.number()),
-  }),
-  handler: async (ctx, args) => {
-    // Fetch batch using cursor-based pagination with creation time
-    let batch: any[];
-    if (args.table === 'presetQuizzes') {
-      const query = ctx.db.query('presetQuizzes').order('asc');
-      batch = args.lastProcessedTime
-        ? await query
-            .filter(q =>
-              q.gt(q.field('_creationTime'), args.lastProcessedTime!),
-            )
-            .take(args.batchSize)
-        : await query.take(args.batchSize);
-    } else if (args.table === 'customQuizzes') {
-      const query = ctx.db.query('customQuizzes').order('asc');
-      batch = args.lastProcessedTime
-        ? await query
-            .filter(q =>
-              q.gt(q.field('_creationTime'), args.lastProcessedTime!),
-            )
-            .take(args.batchSize)
-        : await query.take(args.batchSize);
-    } else {
-      const query = ctx.db.query('questions').order('asc');
-      batch = args.lastProcessedTime
-        ? await query
-            .filter(q =>
-              q.gt(q.field('_creationTime'), args.lastProcessedTime!),
-            )
-            .take(args.batchSize)
-        : await query.take(args.batchSize);
-    }
-
-    let updatedCount = 0;
-    let lastProcessedTime: number | undefined;
-
-    for (const doc of batch) {
-      let hasOldFields = false;
-      let fieldsToRemove: string[] = [];
-
-      // Track the last processed document's creation time
-      lastProcessedTime = doc._creationTime;
-
-      // Check for old fields based on table type
-      switch (args.table) {
-        case 'presetQuizzes': {
-          if ('TaxThemeId' in doc) fieldsToRemove.push('TaxThemeId');
-          if ('TaxSubthemeId' in doc) fieldsToRemove.push('TaxSubthemeId');
-          if ('TaxGroupId' in doc) fieldsToRemove.push('TaxGroupId');
-          if ('taxonomyPathIds' in doc) fieldsToRemove.push('taxonomyPathIds');
-
-          break;
-        }
-        case 'customQuizzes': {
-          if ('selectedTaxThemes' in doc)
-            fieldsToRemove.push('selectedTaxThemes');
-          if ('selectedTaxSubthemes' in doc)
-            fieldsToRemove.push('selectedTaxSubthemes');
-          if ('selectedTaxGroups' in doc)
-            fieldsToRemove.push('selectedTaxGroups');
-          if ('taxonomyPathIds' in doc) fieldsToRemove.push('taxonomyPathIds');
-
-          break;
-        }
-        case 'questions': {
-          if ('TaxThemeId' in doc) fieldsToRemove.push('TaxThemeId');
-          if ('TaxSubthemeId' in doc) fieldsToRemove.push('TaxSubthemeId');
-          if ('TaxGroupId' in doc) fieldsToRemove.push('TaxGroupId');
-          if ('taxonomyPathIds' in doc) fieldsToRemove.push('taxonomyPathIds');
-
-          break;
-        }
-        // No default
-      }
-
-      hasOldFields = fieldsToRemove.length > 0;
-
-      if (hasOldFields) {
-        // Create new document without old fields
-        const cleanDoc: any = {};
-        Object.keys(doc).forEach(key => {
-          if (
-            !fieldsToRemove.includes(key) &&
-            key !== '_id' &&
-            key !== '_creationTime'
-          ) {
-            cleanDoc[key] = doc[key];
-          }
-        });
-
-        // Replace the document
-        await ctx.db.replace(doc._id, cleanDoc);
-        updatedCount++;
-
-        console.log(
-          `Cleaned ${args.table} document ${doc._id} - removed: ${fieldsToRemove.join(', ')}`,
-        );
-      }
-    }
-
-    return {
-      processedCount: batch.length,
-      updatedCount,
-      hasMore: batch.length === args.batchSize, // If we got fewer than requested, we're done
-      lastProcessedTime,
-    };
-  },
-});
-
-/**
- * Run all taxonomy cleanup operations
- */
-export const runAllTaxonomyCleanup = internalAction({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    presetQuizzesResult: v.object({
-      processedCount: v.number(),
-      updatedCount: v.number(),
-      message: v.string(),
-    }),
-    customQuizzesResult: v.object({
-      processedCount: v.number(),
-      updatedCount: v.number(),
-      message: v.string(),
-    }),
-    questionsResult: v.object({
-      processedCount: v.number(),
-      updatedCount: v.number(),
-      message: v.string(),
-    }),
-    overallMessage: v.string(),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    presetQuizzesResult: {
-      processedCount: number;
-      updatedCount: number;
-      message: string;
-    };
-    customQuizzesResult: {
-      processedCount: number;
-      updatedCount: number;
-      message: string;
-    };
-    questionsResult: {
-      processedCount: number;
-      updatedCount: number;
-      message: string;
-    };
-    overallMessage: string;
-  }> => {
-    const batchSize = args.batchSize || 50;
-
-    console.log('Starting full taxonomy cleanup...');
-
-    // Clean up each table
-    const presetQuizzesResult: {
-      processedCount: number;
-      updatedCount: number;
-      message: string;
-    } = await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
-      table: 'presetQuizzes',
-      batchSize,
-    });
-
-    const customQuizzesResult: {
-      processedCount: number;
-      updatedCount: number;
-      message: string;
-    } = await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
-      table: 'customQuizzes',
-      batchSize,
-    });
-
-    const questionsResult: {
-      processedCount: number;
-      updatedCount: number;
-      message: string;
-    } = await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
-      table: 'questions',
-      batchSize,
-    });
-
-    const overallMessage =
-      `Full taxonomy cleanup completed! ` +
-      `PresetQuizzes: ${presetQuizzesResult.updatedCount} updated. ` +
-      `CustomQuizzes: ${customQuizzesResult.updatedCount} updated. ` +
-      `Questions: ${questionsResult.updatedCount} updated.`;
-
-    console.log(overallMessage);
-
-    return {
-      presetQuizzesResult,
-      customQuizzesResult,
-      questionsResult,
-      overallMessage,
+      defaultAppId,
+      message: `Multi-tenancy setup initiated. Default app created: ${defaultAppId}. Now run the migration runners.`,
     };
   },
 });
