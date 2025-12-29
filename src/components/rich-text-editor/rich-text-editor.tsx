@@ -10,9 +10,9 @@ import ResizeImage from 'tiptap-extension-resize-image';
 
 import { toast } from '@/hooks/use-toast';
 
+import { IMAGE_OPTIMIZATION } from './constants';
 import TextEditorMenuBar from './editor-menu-bar';
 import { pendingUploads } from './image-upload-button';
-import { IMAGE_OPTIMIZATION } from './upload-action';
 
 interface RichTextEditorProps {
   onChange?: (value: any) => void;

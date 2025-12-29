@@ -1,3 +1,4 @@
+import { IMAGE_OPTIMIZATION } from '@/components/rich-text-editor/constants';
 import {
   hasBlobUrls,
   InvalidImageInfo,
@@ -104,7 +105,7 @@ export async function processAndSubmitQuestion(
     ];
 
     if (allInvalidImages.length > 0) {
-      // Log detailed info for debugging
+      // Log detailed info for debugging (internal only)
       console.error('[QuestionForm] Image validation failed:', {
         totalInvalidImages: allInvalidImages.length,
         invalidImages: allInvalidImages,
@@ -118,24 +119,24 @@ export async function processAndSubmitQuestion(
           const location = img.location;
           switch (img.reason) {
             case 'blob_url':
-              return `• ${location}: "${fileName}" - Upload falhou (verifique o console para detalhes)`;
+              return `• ${location}: "${fileName}" - Falha no upload. Tente uma imagem menor (máx ${IMAGE_OPTIMIZATION.MAX_FILE_SIZE_MB}MB)`;
             case 'external_url':
-              return `• ${location}: "${fileName}" - URL externa não permitida`;
+              return `• ${location}: "${fileName}" - URL externa não permitida. Use o botão de upload`;
             case 'missing_src':
-              return `• ${location}: "${fileName}" - Imagem sem fonte`;
+              return `• ${location}: "${fileName}" - Imagem corrompida`;
             default:
-              return `• ${location}: "${fileName}" - Formato inválido`;
+              return `• ${location}: "${fileName}" - Erro desconhecido`;
           }
         })
         .join('\n');
 
       toast({
-        title: 'Erro de Validação de Imagens',
-        description: `${allInvalidImages.length} imagem(ns) com problema:\n${errorDetails}\n\nTente remover e adicionar a(s) imagem(ns) novamente.`,
+        title: 'Erro nas Imagens',
+        description: `${errorDetails}\n\nRemova e adicione novamente.`,
         variant: 'destructive',
-        duration: 10000, // Show longer for readability
+        duration: 10000,
       });
-      return false; // Abort submission
+      return false;
     }
     // --- END VALIDATION STEP ---
 

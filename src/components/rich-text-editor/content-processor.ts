@@ -184,17 +184,19 @@ export const processEditorContent = async (
 
       if (pendingUpload) {
         try {
-          console.log('[ImageUpload] Starting upload to ImageKit...', {
-            fileName: pendingUpload.file.name,
-            fileSize: `${(pendingUpload.file.size / 1024).toFixed(2)} KB`,
+          const { file } = pendingUpload;
+          console.log('[ImageUpload] Starting upload...', {
+            fileName: file.name,
+            fileSize: `${(file.size / 1024).toFixed(2)} KB`,
           });
 
-          const imagekitUrl = await uploadToImageKit(pendingUpload.file);
+          // Use FormData for native Server Action file support
+          const formData = new FormData();
+          formData.append('file', file);
 
-          console.log('[ImageUpload] Upload successful:', {
-            fileName: pendingUpload.file.name,
-            imagekitUrl,
-          });
+          const imagekitUrl = await uploadToImageKit(formData);
+
+          console.log('[ImageUpload] Upload successful:', imagekitUrl);
 
           // Update the cloned node's attributes and strip null values
           processedNode.attrs = stripNullValues({
@@ -205,13 +207,7 @@ export const processEditorContent = async (
           URL.revokeObjectURL(blobUrl);
           pendingUploads.delete(blobUrl);
         } catch (error) {
-          console.error('[ImageUpload] Failed to upload image to ImageKit:', {
-            fileName: pendingUpload.file.name,
-            fileSize: `${(pendingUpload.file.size / 1024).toFixed(2)} KB`,
-            fileType: pendingUpload.file.type,
-            error: error instanceof Error ? error.message : String(error),
-            stack: error instanceof Error ? error.stack : undefined,
-          });
+          console.error('[ImageUpload] Failed:', error);
           // Keep original node attrs (with blob URL) - validation will catch this later
         }
       } else {
