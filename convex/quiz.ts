@@ -15,9 +15,16 @@ export const create = mutation({
     groupId: v.optional(v.id('groups')),
   },
   handler: async (ctx, args) => {
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
     return await ctx.db.insert('presetQuizzes', {
       ...args,
       isPublic: false, // Default to private
+      tenantId: defaultApp?._id,
     });
   },
 });
