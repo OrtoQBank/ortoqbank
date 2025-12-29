@@ -10,33 +10,71 @@ const imageKit = new ImageKit({
 });
 
 // Image optimization constants
-const IMAGE_OPTIMIZATION = {
+export const IMAGE_OPTIMIZATION = {
   FORMAT: 'webp',
   QUALITY: 80, // 80% quality - good balance between size and quality
   MAX_WIDTH: 500, // 500px max width for content images
+  MAX_FILE_SIZE_MB: 5, // Maximum file size before compression (in MB)
 } as const;
 
 export async function uploadToImageKit(file: File) {
-  const arrayBuffer = await file.arrayBuffer();
+  const fileSizeMB = file.size / (1024 * 1024);
 
-  // Optimize image before upload
-  const optimizedBuffer = await sharp(Buffer.from(arrayBuffer))
-    .webp({ quality: IMAGE_OPTIMIZATION.QUALITY })
-    .resize(IMAGE_OPTIMIZATION.MAX_WIDTH, undefined, {
-      withoutEnlargement: true,
-    })
-    .toBuffer();
+  console.log('[ImageKit] Starting upload:', {
+    fileName: file.name,
+    fileType: file.type,
+    fileSizeMB: fileSizeMB.toFixed(2),
+  });
+
+  // Validate file size before processing
+  if (fileSizeMB > IMAGE_OPTIMIZATION.MAX_FILE_SIZE_MB) {
+    const errorMsg = `Arquivo muito grande: ${fileSizeMB.toFixed(2)}MB. Máximo permitido: ${IMAGE_OPTIMIZATION.MAX_FILE_SIZE_MB}MB`;
+    console.error('[ImageKit] File too large:', {
+      fileName: file.name,
+      fileSizeMB: fileSizeMB.toFixed(2),
+      maxSizeMB: IMAGE_OPTIMIZATION.MAX_FILE_SIZE_MB,
+    });
+    throw new Error(errorMsg);
+  }
 
   try {
+    const arrayBuffer = await file.arrayBuffer();
+    console.log('[ImageKit] ArrayBuffer created, starting sharp optimization...');
+
+    // Optimize image before upload
+    const optimizedBuffer = await sharp(Buffer.from(arrayBuffer))
+      .webp({ quality: IMAGE_OPTIMIZATION.QUALITY })
+      .resize(IMAGE_OPTIMIZATION.MAX_WIDTH, undefined, {
+        withoutEnlargement: true,
+      })
+      .toBuffer();
+
+    const optimizedSizeKB = optimizedBuffer.length / 1024;
+    console.log('[ImageKit] Image optimized:', {
+      originalSizeMB: fileSizeMB.toFixed(2),
+      optimizedSizeKB: optimizedSizeKB.toFixed(2),
+      compressionRatio: `${((1 - optimizedBuffer.length / file.size) * 100).toFixed(1)}%`,
+    });
+
     const response = await imageKit.upload({
       file: optimizedBuffer,
       fileName: `${file.name.split('.')[0]}.${IMAGE_OPTIMIZATION.FORMAT}`,
       useUniqueFileName: true,
     });
 
+    console.log('[ImageKit] Upload successful:', {
+      fileName: file.name,
+      url: response.url,
+    });
+
     return response.url;
   } catch (error) {
-    console.error('ImageKit upload failed:', error);
+    console.error('[ImageKit] Upload failed:', {
+      fileName: file.name,
+      fileSizeMB: fileSizeMB.toFixed(2),
+      error: error instanceof Error ? error.message : String(error),
+      stack: error instanceof Error ? error.stack : undefined,
+    });
     throw error;
   }
 }

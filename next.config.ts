@@ -5,6 +5,12 @@ const nextConfig: NextConfig = {
   trailingSlash: false,
   // This is required to support PostHog trailing slash API requests
   skipTrailingSlashRedirect: true,
+  // Increase server action body size limit for image uploads (default is 1MB)
+  experimental: {
+    serverActions: {
+      bodySizeLimit: '10mb',
+    },
+  },
   images: {
     remotePatterns: [
       {

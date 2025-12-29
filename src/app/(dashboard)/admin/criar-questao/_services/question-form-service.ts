@@ -1,8 +1,9 @@
 import {
   hasBlobUrls,
+  InvalidImageInfo,
   processEditorContent,
   TiptapNode,
-  validateImageSources,
+  validateImageSourcesWithDetails,
 } from '@/components/rich-text-editor/content-processor';
 import { toast } from '@/hooks/use-toast';
 
@@ -82,21 +83,57 @@ export async function processAndSubmitQuestion(
     };
 
     // --- VALIDATION STEP ---
-    const isQuestionTextValid = validateImageSources(
+    const questionValidation = validateImageSourcesWithDetails(
       processedQuestionText.content,
       imageKitEndpoint,
     );
-    const isExplanationTextValid = validateImageSources(
+    const explanationValidation = validateImageSourcesWithDetails(
       processedExplanationText.content,
       imageKitEndpoint,
     );
 
-    if (!isQuestionTextValid || !isExplanationTextValid) {
+    const allInvalidImages = [
+      ...questionValidation.invalidImages.map(img => ({
+        ...img,
+        location: 'Enunciado' as const,
+      })),
+      ...explanationValidation.invalidImages.map(img => ({
+        ...img,
+        location: 'Explicação' as const,
+      })),
+    ];
+
+    if (allInvalidImages.length > 0) {
+      // Log detailed info for debugging
+      console.error('[QuestionForm] Image validation failed:', {
+        totalInvalidImages: allInvalidImages.length,
+        invalidImages: allInvalidImages,
+        imageKitEndpoint,
+      });
+
+      // Build user-friendly error message
+      const errorDetails = allInvalidImages
+        .map(img => {
+          const fileName = img.alt || 'imagem sem nome';
+          const location = img.location;
+          switch (img.reason) {
+            case 'blob_url':
+              return `• ${location}: "${fileName}" - Upload falhou (verifique o console para detalhes)`;
+            case 'external_url':
+              return `• ${location}: "${fileName}" - URL externa não permitida`;
+            case 'missing_src':
+              return `• ${location}: "${fileName}" - Imagem sem fonte`;
+            default:
+              return `• ${location}: "${fileName}" - Formato inválido`;
+          }
+        })
+        .join('\n');
+
       toast({
-        title: 'Erro de Validação',
-        description:
-          'Uma ou mais imagens no texto da questão ou explicação não foram processadas corretamente ou são de fontes externas. Remova ou substitua as imagens inválidas.',
+        title: 'Erro de Validação de Imagens',
+        description: `${allInvalidImages.length} imagem(ns) com problema:\n${errorDetails}\n\nTente remover e adicionar a(s) imagem(ns) novamente.`,
         variant: 'destructive',
+        duration: 10000, // Show longer for readability
       });
       return false; // Abort submission
     }

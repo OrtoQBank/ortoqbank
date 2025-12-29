@@ -56,30 +56,97 @@ export const hasBlobUrls = (content: TiptapNode[]): boolean => {
 };
 
 /**
+ * Details about an invalid image source found during validation.
+ */
+export interface InvalidImageInfo {
+  src: string | undefined;
+  alt: string | undefined;
+  reason: 'missing_src' | 'blob_url' | 'external_url' | 'invalid_format';
+  nodeType: string;
+}
+
+/**
  * Recursively validates that all image sources within the content start with the specified ImageKit endpoint.
+ * Returns an object with validation result and details about any invalid images.
+ */
+export const validateImageSourcesWithDetails = (
+  content: TiptapNode[],
+  imageKitEndpoint: string,
+): { isValid: boolean; invalidImages: InvalidImageInfo[] } => {
+  const invalidImages: InvalidImageInfo[] = [];
+
+  const validate = (nodes: TiptapNode[]): void => {
+    for (const node of nodes) {
+      if (isImageNode(node.type)) {
+        const src = node.attrs?.src;
+        const alt = node.attrs?.alt;
+
+        if (!src) {
+          invalidImages.push({
+            src,
+            alt,
+            reason: 'missing_src',
+            nodeType: node.type,
+          });
+          console.error('[ImageValidation] Image missing src attribute:', {
+            nodeType: node.type,
+            attrs: node.attrs,
+          });
+        } else if (src.startsWith('blob:')) {
+          invalidImages.push({
+            src,
+            alt,
+            reason: 'blob_url',
+            nodeType: node.type,
+          });
+          console.error('[ImageValidation] Image still has blob URL (upload may have failed):', {
+            src,
+            alt,
+            nodeType: node.type,
+            pendingUploadsSize: pendingUploads.size,
+            hasPendingUpload: pendingUploads.has(src),
+          });
+        } else if (!src.startsWith(imageKitEndpoint)) {
+          invalidImages.push({
+            src,
+            alt,
+            reason: 'external_url',
+            nodeType: node.type,
+          });
+          console.error('[ImageValidation] Image has external/invalid URL:', {
+            src,
+            alt,
+            expectedPrefix: imageKitEndpoint,
+            nodeType: node.type,
+          });
+        }
+      }
+
+      // Recursively check content if the node has children
+      if (node.content && Array.isArray(node.content)) {
+        validate(node.content);
+      }
+    }
+  };
+
+  validate(content);
+
+  return {
+    isValid: invalidImages.length === 0,
+    invalidImages,
+  };
+};
+
+/**
+ * Recursively validates that all image sources within the content start with the specified ImageKit endpoint.
+ * @deprecated Use validateImageSourcesWithDetails for better error reporting
  */
 export const validateImageSources = (
   content: TiptapNode[],
   imageKitEndpoint: string,
 ): boolean => {
-  for (const node of content) {
-    if (
-      isImageNode(node.type) && // Check if src exists and starts with the ImageKit endpoint
-      (!node.attrs?.src || !node.attrs.src.startsWith(imageKitEndpoint))
-    ) {
-      console.warn('Invalid image source found:', node.attrs?.src);
-      return false; // Invalid source found
-    }
-    // Recursively check content if the node has children
-    if (
-      node.content &&
-      Array.isArray(node.content) &&
-      !validateImageSources(node.content, imageKitEndpoint)
-    ) {
-      return false; // Invalid source found in children
-    }
-  }
-  return true; // All image sources are valid
+  const result = validateImageSourcesWithDetails(content, imageKitEndpoint);
+  return result.isValid;
 };
 
 /**
@@ -105,9 +172,30 @@ export const processEditorContent = async (
       const blobUrl = node.attrs.src;
       const pendingUpload = pendingUploads.get(blobUrl);
 
+      console.log('[ImageUpload] Processing blob image:', {
+        blobUrl: blobUrl.slice(0, 50) + '...',
+        alt: node.attrs?.alt,
+        hasPendingUpload: !!pendingUpload,
+        pendingUploadsSize: pendingUploads.size,
+        fileSize: pendingUpload?.file?.size,
+        fileType: pendingUpload?.file?.type,
+        fileName: pendingUpload?.file?.name,
+      });
+
       if (pendingUpload) {
         try {
+          console.log('[ImageUpload] Starting upload to ImageKit...', {
+            fileName: pendingUpload.file.name,
+            fileSize: `${(pendingUpload.file.size / 1024).toFixed(2)} KB`,
+          });
+
           const imagekitUrl = await uploadToImageKit(pendingUpload.file);
+
+          console.log('[ImageUpload] Upload successful:', {
+            fileName: pendingUpload.file.name,
+            imagekitUrl,
+          });
+
           // Update the cloned node's attributes and strip null values
           processedNode.attrs = stripNullValues({
             ...processedNode.attrs,
@@ -117,11 +205,22 @@ export const processEditorContent = async (
           URL.revokeObjectURL(blobUrl);
           pendingUploads.delete(blobUrl);
         } catch (error) {
-          console.error('Failed to upload image:', error);
+          console.error('[ImageUpload] Failed to upload image to ImageKit:', {
+            fileName: pendingUpload.file.name,
+            fileSize: `${(pendingUpload.file.size / 1024).toFixed(2)} KB`,
+            fileType: pendingUpload.file.type,
+            error: error instanceof Error ? error.message : String(error),
+            stack: error instanceof Error ? error.stack : undefined,
+          });
           // Keep original node attrs (with blob URL) - validation will catch this later
         }
       } else {
-        console.warn('Blob URL found without pending upload:', blobUrl);
+        console.error('[ImageUpload] Blob URL not found in pendingUploads map:', {
+          blobUrl: blobUrl.slice(0, 80),
+          alt: node.attrs?.alt,
+          pendingUploadsKeys: [...pendingUploads.keys()].map(k => k.slice(0, 50)),
+          hint: 'This can happen if: 1) Image was copy-pasted from another source, 2) Page was refreshed, 3) Image was added via drag-drop without proper handling',
+        });
         // Keep original node attrs - validation will catch this later
       }
     }
