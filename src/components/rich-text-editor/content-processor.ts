@@ -11,12 +11,20 @@ export interface TiptapNode {
   // Add other potential node properties if needed
 }
 
+// Image node types to check - includes both standard image and resize extension types
+const IMAGE_NODE_TYPES = ['image', 'imageResize'];
+
+/**
+ * Checks if a node type represents an image node.
+ */
+const isImageNode = (type: string): boolean => IMAGE_NODE_TYPES.includes(type);
+
 /**
  * Checks if any node in the content array represents an image with a blob URL.
  */
 export const hasBlobUrls = (content: TiptapNode[]): boolean => {
   for (const node of content) {
-    if (node.type === 'image' && node.attrs?.src?.startsWith('blob:')) {
+    if (isImageNode(node.type) && node.attrs?.src?.startsWith('blob:')) {
       return true;
     }
     // Recursively check content if the node has children
@@ -40,7 +48,7 @@ export const validateImageSources = (
 ): boolean => {
   for (const node of content) {
     if (
-      node.type === 'image' && // Check if src exists and starts with the ImageKit endpoint
+      isImageNode(node.type) && // Check if src exists and starts with the ImageKit endpoint
       (!node.attrs?.src || !node.attrs.src.startsWith(imageKitEndpoint))
     ) {
       console.warn('Invalid image source found:', node.attrs?.src);
@@ -71,7 +79,7 @@ export const processEditorContent = async (
     // Clone the node to avoid modifying the original data directly
     let processedNode = { ...node };
 
-    if (node.type === 'image' && node.attrs?.src?.startsWith('blob:')) {
+    if (isImageNode(node.type) && node.attrs?.src?.startsWith('blob:')) {
       const blobUrl = node.attrs.src;
       const pendingUpload = pendingUploads.get(blobUrl);
 
