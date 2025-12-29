@@ -219,6 +219,8 @@ async function updateBookmarkCounts(
       incorrectByGroup: {},
       bookmarkedByGroup: {},
       lastUpdated: Date.now(),
+      // Multi-tenancy: inherit tenantId from question
+      tenantId: question?.tenantId,
     };
 
     const countsId = await ctx.db.insert('userStatsCounts', userCounts);
