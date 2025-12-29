@@ -144,6 +144,8 @@ export const _updateQuestionStats = internalMutation({
       themeId: question.themeId,
       subthemeId: question.subthemeId || null,
       groupId: question.groupId || null,
+      // Multi-tenancy: pass tenantId to scheduled function
+      tenantId: question.tenantId || null,
     });
 
     return {
@@ -167,6 +169,8 @@ export const _updateUserStatsCounts = internalMutation({
     themeId: v.id('themes'),
     subthemeId: v.union(v.id('subthemes'), v.null()),
     groupId: v.union(v.id('groups'), v.null()),
+    // Multi-tenancy
+    tenantId: v.union(v.id('apps'), v.null()),
   },
   handler: async (ctx, params) => {
     await updateUserStatsCounts(ctx, {
@@ -179,6 +183,8 @@ export const _updateUserStatsCounts = internalMutation({
         themeId: params.themeId,
         subthemeId: params.subthemeId,
         groupId: params.groupId,
+        // Multi-tenancy: forward tenantId to helper
+        tenantId: params.tenantId,
       },
     });
   },
