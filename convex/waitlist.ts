@@ -38,6 +38,12 @@ export const createWaitlistEntry = mutation({
       return 'email_already_exists';
     }
 
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
     // Create the waitlist entry
     const entryId = await ctx.db.insert('waitlist', {
       name: args.name,
@@ -46,6 +52,8 @@ export const createWaitlistEntry = mutation({
       instagram: args.instagram,
       residencyLevel: args.residencyLevel,
       subspecialty: args.subspecialty,
+      // Multi-tenancy
+      tenantId: defaultApp?._id,
     });
 
     return entryId;
@@ -58,6 +66,8 @@ export const list = query({
     v.object({
       _id: v.id('waitlist'),
       _creationTime: v.number(),
+      // Multi-tenancy
+      tenantId: v.optional(v.id('apps')),
       name: v.string(),
       email: v.string(),
       whatsapp: v.string(),

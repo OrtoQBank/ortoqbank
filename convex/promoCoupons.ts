@@ -8,6 +8,8 @@ export const list = query({
     v.object({
       _id: v.id('coupons'),
       _creationTime: v.number(),
+      // Multi-tenancy
+      tenantId: v.optional(v.id('apps')),
       code: v.string(),
       type: v.union(
         v.literal('percentage'),
@@ -36,6 +38,8 @@ export const getByCode = query({
     v.object({
       _id: v.id('coupons'),
       _creationTime: v.number(),
+      // Multi-tenancy
+      tenantId: v.optional(v.id('apps')),
       code: v.string(),
       type: v.union(
         v.literal('percentage'),
@@ -89,7 +93,14 @@ export const create = mutation({
     if (existing) {
       throw new Error('Coupon code already exists');
     }
-    return await ctx.db.insert('coupons', { ...args, code });
+
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
+    return await ctx.db.insert('coupons', { ...args, code, tenantId: defaultApp?._id });
   },
 });
 

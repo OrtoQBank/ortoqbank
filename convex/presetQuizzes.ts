@@ -21,6 +21,12 @@ export const create = mutation({
       throw new Error('themeId is required for trilhas');
     }
 
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
     return await ctx.db.insert('presetQuizzes', {
       name: args.name,
       description: args.description,
@@ -32,6 +38,8 @@ export const create = mutation({
       isPublic: args.isPublic,
       subcategory: args.subcategory,
       displayOrder: args.displayOrder,
+      // Multi-tenancy
+      tenantId: defaultApp?._id,
     });
   },
 });
@@ -49,6 +57,7 @@ export const listTrilhasSorted = query({
     v.object({
       _id: v.id('presetQuizzes'),
       _creationTime: v.number(),
+      tenantId: v.optional(v.id('apps')),
       name: v.string(),
       description: v.string(),
       category: v.union(v.literal('trilha'), v.literal('simulado')),
@@ -95,6 +104,7 @@ export const listSimuladosSorted = query({
     v.object({
       _id: v.id('presetQuizzes'),
       _creationTime: v.number(),
+      tenantId: v.optional(v.id('apps')),
       name: v.string(),
       description: v.string(),
       category: v.union(v.literal('trilha'), v.literal('simulado')),

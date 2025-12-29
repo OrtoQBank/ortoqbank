@@ -14,15 +14,39 @@ import {
 } from './aggregates';
 // Question stats are now handled by aggregates and triggers
 
+// Type for question content that goes into separate table
+type QuestionContentData = {
+  questionTextString: string;
+  explanationTextString: string;
+  alternatives: string[];
+  // Legacy fields (optional, for migration compatibility)
+  questionText?: any;
+  explanationText?: any;
+};
+
 // ---------- Helper Functions for Question CRUD + Aggregate Sync ----------
 
 // Use GenericMutationCtx with DataModel
 export async function _internalInsertQuestion(
   ctx: GenericMutationCtx<DataModel>,
   data: Omit<Doc<'questions'>, '_id' | '_creationTime'>,
+  contentData?: QuestionContentData,
 ) {
   const questionId = await ctx.db.insert('questions', data);
   const questionDoc = (await ctx.db.get(questionId))!;
+
+  // If content data is provided, insert into questionContent table
+  if (contentData) {
+    await ctx.db.insert('questionContent', {
+      questionId,
+      questionTextString: contentData.questionTextString,
+      explanationTextString: contentData.explanationTextString,
+      alternatives: contentData.alternatives,
+      questionText: contentData.questionText,
+      explanationText: contentData.explanationText,
+    });
+    console.log(`Created questionContent for question ${questionId}`);
+  }
 
   console.log(`Attempting to insert question ${questionId} into aggregates...`);
 
@@ -411,6 +435,19 @@ export async function _internalDeleteQuestion(
     console.warn(`Question not found for deletion: ${id}`);
     return false; // Indicate deletion didn't happen
   }
+
+  // Delete associated questionContent record first
+  const questionContent = await ctx.db
+    .query('questionContent')
+    .withIndex('by_question', (q) => q.eq('questionId', id))
+    .first();
+  
+  if (questionContent) {
+    await ctx.db.delete(questionContent._id);
+    console.log(`Deleted questionContent for question ${id}`);
+  }
+
+  // Delete the question itself
   await ctx.db.delete(id);
 
   // Handle ALL aggregate operations with comprehensive error recovery

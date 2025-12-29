@@ -91,6 +91,12 @@ export const create = mutation({
       args.description ||
       `Custom quiz with ${selectedQuestionIds.length} questions`;
 
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
     // Create the custom quiz
     const quizId = await ctx.db.insert('customQuizzes', {
       name: quizName,
@@ -102,6 +108,8 @@ export const create = mutation({
       selectedThemes: args.selectedThemes,
       selectedSubthemes: args.selectedSubthemes,
       selectedGroups: args.selectedGroups,
+      // Multi-tenancy
+      tenantId: defaultApp?._id,
     });
 
     // Create quiz session immediately
@@ -113,6 +121,8 @@ export const create = mutation({
       answers: [],
       answerFeedback: [],
       isComplete: false,
+      // Multi-tenancy
+      tenantId: defaultApp?._id,
     });
 
     return {

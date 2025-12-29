@@ -71,17 +71,69 @@ export const create = mutation({
       .unique();
     if (!user) throw new Error('User not found');
 
-    // Prepare data and call the internal helper
+    // Get the default tenant (ortoqbank app)
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+    
+    // Lookup taxonomy names for denormalization
+    const theme = await ctx.db.get(args.themeId);
+    if (!theme) throw new Error('Theme not found');
+    
+    const subtheme = args.subthemeId ? await ctx.db.get(args.subthemeId) : null;
+    const group = args.groupId ? await ctx.db.get(args.groupId) : null;
+
+    // Prepare question data with ALL fields for backwards compatibility
+    // During migration phase, we store heavy content in BOTH tables
+    // This ensures frontend (Quiz.tsx) continues to work without changes
     const questionData = {
-      ...args,
-      // Set migration flag
+      // Multi-tenancy
+      tenantId: defaultApp?._id,
+      
+      // Metadata
+      title: args.title,
       normalizedTitle: args.title.trim().toLowerCase(),
+      questionCode: args.questionCode,
+      
+      // Taxonomy IDs
+      themeId: args.themeId,
+      subthemeId: args.subthemeId,
+      groupId: args.groupId,
+      
+      // DENORMALIZED: Taxonomy names (new)
+      themeName: theme.name,
+      subthemeName: subtheme?.name,
+      groupName: group?.name,
+      
+      // Quiz essentials
+      correctAlternativeIndex: args.correctAlternativeIndex,
+      alternativeCount: args.alternatives.length,
+      
+      // Publishing
+      isPublic: false,
       authorId: user._id,
-      isPublic: false, // Default value
+      
+      // BACKWARDS COMPATIBILITY: Keep heavy content in questions table too
+      // This allows existing frontend code to continue working
+      questionTextString: args.questionTextString,
+      explanationTextString: args.explanationTextString,
+      alternatives: args.alternatives,
+      
+      // Mark as migrated (content ALSO exists in questionContent table)
+      contentMigrated: true,
     };
 
-    // Use the helper function
-    const questionId = await _internalInsertQuestion(ctx, questionData);
+    // Also store heavy content in questionContent table (new format)
+    // In future, queries can choose to fetch from here for better performance
+    const contentData = {
+      questionTextString: args.questionTextString,
+      explanationTextString: args.explanationTextString,
+      alternatives: args.alternatives,
+    };
+
+    // Use the helper function (stores in both tables)
+    const questionId = await _internalInsertQuestion(ctx, questionData, contentData);
     return questionId;
   },
 });
@@ -168,19 +220,43 @@ export const update = mutation({
       );
     }
 
-    // Don't need to check if question exists here, helper does it
+    // Lookup taxonomy names for denormalization
+    const theme = await ctx.db.get(args.themeId);
+    if (!theme) throw new Error('Theme not found');
+    
+    const subtheme = args.subthemeId ? await ctx.db.get(args.subthemeId) : null;
+    const group = args.groupId ? await ctx.db.get(args.groupId) : null;
 
     const { id, ...otherFields } = args;
 
-    // Prepare update data
+    // Prepare update data with denormalized names
     const updates = {
       ...otherFields,
-
-      normalizedTitle: args.title?.trim().toLowerCase(), // Handle optional title in updates
+      normalizedTitle: args.title?.trim().toLowerCase(),
+      // Update denormalized taxonomy names
+      themeName: theme.name,
+      subthemeName: subtheme?.name,
+      groupName: group?.name,
+      // Update alternative count
+      alternativeCount: args.alternatives.length,
     };
 
-    // Use the helper function
+    // Use the helper function for question table
     await _internalUpdateQuestion(ctx, id, updates);
+
+    // Also update questionContent table if it exists
+    const existingContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', (q) => q.eq('questionId', id))
+      .first();
+
+    if (existingContent) {
+      await ctx.db.patch(existingContent._id, {
+        questionTextString: args.questionTextString,
+        explanationTextString: args.explanationTextString,
+        alternatives: args.alternatives,
+      });
+    }
 
     return true; // Indicate success
   },
@@ -463,31 +539,3 @@ export const searchByTitle = query({
   },
 });
 
-/**
- * Clean up old taxonomy fields from questions
- * Removes: TaxThemeId, TaxSubthemeId, TaxGroupId
- */
-export const cleanupQuestionsOldFields = internalAction({
-  args: {
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processedCount: v.number(),
-    updatedCount: v.number(),
-    message: v.string(),
-  }),
-  handler: async (
-    ctx,
-    args,
-  ): Promise<{
-    processedCount: number;
-    updatedCount: number;
-    message: string;
-  }> => {
-    // Delegate to the centralized cleanup function
-    return await ctx.runAction(internal.migrations.cleanupOldTaxonomyFields, {
-      table: 'questions',
-      batchSize: args.batchSize,
-    });
-  },
-});

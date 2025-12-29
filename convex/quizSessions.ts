@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 
 import { internal } from './_generated/api';
+import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
@@ -86,6 +87,11 @@ export const startQuizSession = mutation({
   handler: async (ctx, { quizId, mode }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
+    // Get quiz to inherit tenantId - try both table types
+    const presetQuiz = await ctx.db.get(quizId as Id<'presetQuizzes'>);
+    const customQuiz = await ctx.db.get(quizId as Id<'customQuizzes'>);
+    const quiz = presetQuiz || customQuiz;
+
     const sessionId = await ctx.db.insert('quizSessions', {
       userId: userId._id,
       quizId,
@@ -94,6 +100,8 @@ export const startQuizSession = mutation({
       answers: [],
       answerFeedback: [],
       isComplete: false,
+      // Multi-tenancy: inherit tenantId from quiz
+      tenantId: quiz?.tenantId,
     });
 
     return { sessionId };

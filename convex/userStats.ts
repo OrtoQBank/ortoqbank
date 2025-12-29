@@ -126,6 +126,8 @@ export const _updateQuestionStats = internalMutation({
         themeId: question.themeId,
         subthemeId: question.subthemeId,
         groupId: question.groupId,
+        // Multi-tenancy: inherit tenantId from question
+        tenantId: question.tenantId,
       };
 
       await ctx.db.insert('userQuestionStats', newStatData);
@@ -142,6 +144,8 @@ export const _updateQuestionStats = internalMutation({
       themeId: question.themeId,
       subthemeId: question.subthemeId || null,
       groupId: question.groupId || null,
+      // Multi-tenancy: pass tenantId to scheduled function
+      tenantId: question.tenantId || null,
     });
 
     return {
@@ -165,6 +169,8 @@ export const _updateUserStatsCounts = internalMutation({
     themeId: v.id('themes'),
     subthemeId: v.union(v.id('subthemes'), v.null()),
     groupId: v.union(v.id('groups'), v.null()),
+    // Multi-tenancy
+    tenantId: v.union(v.id('apps'), v.null()),
   },
   handler: async (ctx, params) => {
     await updateUserStatsCounts(ctx, {
@@ -177,6 +183,8 @@ export const _updateUserStatsCounts = internalMutation({
         themeId: params.themeId,
         subthemeId: params.subthemeId,
         groupId: params.groupId,
+        // Multi-tenancy: forward tenantId to helper
+        tenantId: params.tenantId,
       },
     });
   },
@@ -222,6 +230,8 @@ async function updateUserStatsCounts(
       incorrectByGroup: {},
       bookmarkedByGroup: {},
       lastUpdated: Date.now(),
+      // Multi-tenancy: inherit tenantId from question
+      tenantId: question?.tenantId,
     };
 
     const countsId = await ctx.db.insert('userStatsCounts', userCounts);
@@ -864,6 +874,12 @@ export const initializeUserStatsCounts = mutation({
       }
     }
 
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
     // Insert the computed counts
     await ctx.db.insert('userStatsCounts', {
       userId: args.userId,
@@ -880,6 +896,8 @@ export const initializeUserStatsCounts = mutation({
       incorrectByGroup,
       bookmarkedByGroup,
       lastUpdated: Date.now(),
+      // Multi-tenancy
+      tenantId: defaultApp?._id,
     });
 
     return {
@@ -911,6 +929,12 @@ export const initializeAllUserStatsCounts = mutation({
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize || 10; // Default to 10 users at a time
+
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
 
     let processedUsers = 0;
     let skippedUsers = 0;
@@ -1035,6 +1059,8 @@ export const initializeAllUserStatsCounts = mutation({
             incorrectByGroup,
             bookmarkedByGroup,
             lastUpdated: Date.now(),
+            // Multi-tenancy
+            tenantId: defaultApp?._id,
           });
 
           processedUsers++;
