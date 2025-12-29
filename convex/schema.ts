@@ -336,6 +336,8 @@ export default defineSchema({
 
   // Admin-managed coupons for checkout
   coupons: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     code: v.string(), // store uppercase
     type: v.union(
       v.literal('percentage'),
@@ -353,7 +355,9 @@ export default defineSchema({
     currentUses: v.optional(v.number()), // Current total usage count
     // Minimum price protection
     minimumPrice: v.optional(v.number()), // Minimum final price after discount
-  }).index('by_code', ['code']),
+  })
+    .index('by_code', ['code'])
+    .index('by_tenant', ['tenantId']),
 
   // Coupon usage tracking
   couponUsage: defineTable({
@@ -374,6 +378,8 @@ export default defineSchema({
 
   //pricing plans
   pricingPlans: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     badge: v.string(),
     originalPrice: v.optional(v.string()), // Marketing strikethrough price
@@ -398,6 +404,7 @@ export default defineSchema({
     .index("by_product_id", ["productId"])
     .index("by_category", ["category"])
     .index("by_year", ["year"])
+    .index("by_tenant", ["tenantId"])
     .index("by_active", ["isActive"]),
 
   // User Products - Junction table for user-product relationships
@@ -560,6 +567,8 @@ export default defineSchema({
 
   // Waitlist - tracks users interested in OrtoClub TEOT
   waitlist: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     email: v.string(),
     whatsapp: v.string(),
@@ -582,4 +591,5 @@ export default defineSchema({
     ),
   })
     .index("by_email", ["email"])
+    .index("by_tenant", ["tenantId"])
 });

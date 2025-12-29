@@ -89,7 +89,14 @@ export const create = mutation({
     if (existing) {
       throw new Error('Coupon code already exists');
     }
-    return await ctx.db.insert('coupons', { ...args, code });
+
+    // Get default tenant for multi-tenancy
+    const defaultApp = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .first();
+
+    return await ctx.db.insert('coupons', { ...args, code, tenantId: defaultApp?._id });
   },
 });
 

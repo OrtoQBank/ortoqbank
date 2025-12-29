@@ -45,8 +45,17 @@ export const savePricingPlan = mutation({
         await ctx.db.patch(id, planData);
         return id;
       } else {
+        // Get default tenant for multi-tenancy
+        const defaultApp = await ctx.db
+          .query('apps')
+          .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+          .first();
+
         // Criar novo plano
-        return await ctx.db.insert('pricingPlans', planData);
+        return await ctx.db.insert('pricingPlans', {
+          ...planData,
+          tenantId: defaultApp?._id,
+        });
       }
     },
   });

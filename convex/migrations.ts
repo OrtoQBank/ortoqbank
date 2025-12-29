@@ -395,3 +395,62 @@ export const setupMultiTenancy = internalAction({
     };
   },
 });
+
+// =============================================================================
+// ADDITIONAL TENANTID MIGRATIONS (coupons, pricingPlans, waitlist)
+// =============================================================================
+
+/**
+ * Backfill tenantId for coupons table
+ */
+export const backfillCouponsTenantId = migrations.define({
+  table: 'coupons',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for pricingPlans table
+ */
+export const backfillPricingPlansTenantId = migrations.define({
+  table: 'pricingPlans',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+/**
+ * Backfill tenantId for waitlist table
+ */
+export const backfillWaitlistTenantId = migrations.define({
+  table: 'waitlist',
+  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+    if (doc.tenantId) return;
+
+    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    if (!defaultAppId) {
+      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+    }
+    return { tenantId: defaultAppId };
+  },
+});
+
+// Runner for additional tables (coupons, pricingPlans, waitlist)
+export const runAdditionalTenantIdMigrations = migrations.runner([
+  internal.migrations.backfillCouponsTenantId,
+  internal.migrations.backfillPricingPlansTenantId,
+  internal.migrations.backfillWaitlistTenantId,
+]);
