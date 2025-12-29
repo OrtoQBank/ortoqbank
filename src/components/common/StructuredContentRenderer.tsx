@@ -135,8 +135,18 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
       element = <br key={key} />;
       break;
     }
-    case 'image': {
-      const { src, alt, width, height, style } = node.attrs || {};
+    case 'image':
+    case 'imageResize': {
+      // Handle both standard image and imageResize from tiptap-extension-resize-image
+      const {
+        src,
+        alt,
+        width,
+        height,
+        style,
+        containerStyle,
+        wrapperStyle,
+      } = node.attrs || {};
       // Basic image rendering, consider adding error handling or placeholders
 
       // Parse the style string into an object
@@ -154,7 +164,21 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
         });
       }
 
-      element = (
+      // Parse wrapperStyle for imageResize nodes (e.g., "display: flex")
+      const parsedWrapperStyles: Record<string, string> = {};
+      if (typeof wrapperStyle === 'string') {
+        wrapperStyle.split(';').forEach(declaration => {
+          const [property, value] = declaration.split(':');
+          if (property && value) {
+            const camelCaseProperty = property
+              .trim()
+              .replaceAll(/-([a-z])/g, g => g[1].toUpperCase());
+            parsedWrapperStyles[camelCaseProperty] = value.trim();
+          }
+        });
+      }
+
+      const imgElement = (
         <img
           key={key}
           src={src}
@@ -164,6 +188,17 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
           style={parsedStyles as React.CSSProperties} // Apply the parsed style object, cast to CSSProperties
         />
       );
+
+      // Wrap in a container if wrapperStyle exists (for imageResize centering/alignment)
+      if (Object.keys(parsedWrapperStyles).length > 0) {
+        element = (
+          <div key={key} style={parsedWrapperStyles as React.CSSProperties}>
+            {imgElement}
+          </div>
+        );
+      } else {
+        element = imgElement;
+      }
       break;
     }
     case 'heading': {
