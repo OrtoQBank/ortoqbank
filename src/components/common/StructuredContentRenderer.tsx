@@ -138,15 +138,8 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
     case 'image':
     case 'imageResize': {
       // Handle both standard image and imageResize from tiptap-extension-resize-image
-      const {
-        src,
-        alt,
-        width,
-        height,
-        style,
-        containerStyle,
-        wrapperStyle,
-      } = node.attrs || {};
+      const { src, alt, width, height, style, wrapperStyle } =
+        node.attrs || {};
       // Basic image rendering, consider adding error handling or placeholders
 
       // Parse the style string into an object

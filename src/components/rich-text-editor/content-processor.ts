@@ -20,6 +20,22 @@ const IMAGE_NODE_TYPES = ['image', 'imageResize'];
 const isImageNode = (type: string): boolean => IMAGE_NODE_TYPES.includes(type);
 
 /**
+ * Removes null and undefined values from an object.
+ * Returns a new object with only defined, non-null values.
+ */
+const stripNullValues = <T extends Record<string, unknown>>(
+  obj: T,
+): Partial<T> => {
+  const result: Partial<T> = {};
+  for (const [key, value] of Object.entries(obj)) {
+    if (value !== null && value !== undefined) {
+      result[key as keyof T] = value as T[keyof T];
+    }
+  }
+  return result;
+};
+
+/**
  * Checks if any node in the content array represents an image with a blob URL.
  */
 export const hasBlobUrls = (content: TiptapNode[]): boolean => {
@@ -67,8 +83,9 @@ export const validateImageSources = (
 };
 
 /**
- * Processes Tiptap content: uploads blob images to ImageKit and updates their URLs.
- * Returns a new content array with updated image URLs.
+ * Processes Tiptap content: uploads blob images to ImageKit, updates their URLs,
+ * and strips null/undefined values from node attributes to keep the stored JSON clean.
+ * Returns a new content array with updated image URLs and sanitized attributes.
  */
 export const processEditorContent = async (
   content: TiptapNode[],
@@ -79,6 +96,11 @@ export const processEditorContent = async (
     // Clone the node to avoid modifying the original data directly
     let processedNode = { ...node };
 
+    // Strip null values from attrs if they exist
+    if (processedNode.attrs) {
+      processedNode.attrs = stripNullValues(processedNode.attrs);
+    }
+
     if (isImageNode(node.type) && node.attrs?.src?.startsWith('blob:')) {
       const blobUrl = node.attrs.src;
       const pendingUpload = pendingUploads.get(blobUrl);
@@ -86,8 +108,11 @@ export const processEditorContent = async (
       if (pendingUpload) {
         try {
           const imagekitUrl = await uploadToImageKit(pendingUpload.file);
-          // Update the cloned node's attributes
-          processedNode.attrs = { ...processedNode.attrs, src: imagekitUrl };
+          // Update the cloned node's attributes and strip null values
+          processedNode.attrs = stripNullValues({
+            ...processedNode.attrs,
+            src: imagekitUrl,
+          });
           // Clean up
           URL.revokeObjectURL(blobUrl);
           pendingUploads.delete(blobUrl);
