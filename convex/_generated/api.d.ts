@@ -16,6 +16,7 @@ import type * as asaas from "../asaas.js";
 import type * as bookmark from "../bookmark.js";
 import type * as clerkActions from "../clerkActions.js";
 import type * as crons from "../crons.js";
+import type * as customQuizWorkflow from "../customQuizWorkflow.js";
 import type * as customQuizzes from "../customQuizzes.js";
 import type * as customQuizzesCreation from "../customQuizzesCreation.js";
 import type * as groups from "../groups.js";
@@ -59,6 +60,7 @@ declare const fullApi: ApiFromModules<{
   bookmark: typeof bookmark;
   clerkActions: typeof clerkActions;
   crons: typeof crons;
+  customQuizWorkflow: typeof customQuizWorkflow;
   customQuizzes: typeof customQuizzes;
   customQuizzesCreation: typeof customQuizzesCreation;
   groups: typeof groups;

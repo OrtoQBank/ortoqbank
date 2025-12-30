@@ -452,3 +452,4 @@ export const runAdditionalTenantIdMigrations = migrations.runner([
   internal.migrations.backfillPricingPlansTenantId,
   internal.migrations.backfillWaitlistTenantId,
 ]);
+
