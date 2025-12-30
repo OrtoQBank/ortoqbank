@@ -27,6 +27,7 @@ import type * as payments from "../payments.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
 import type * as pricingPlans from "../pricingPlans.js";
 import type * as promoCoupons from "../promoCoupons.js";
+import type * as questionErrorReport from "../questionErrorReport.js";
 import type * as questions from "../questions.js";
 import type * as questionsAggregateSync from "../questionsAggregateSync.js";
 import type * as quiz from "../quiz.js";
@@ -69,6 +70,7 @@ declare const fullApi: ApiFromModules<{
   presetQuizzes: typeof presetQuizzes;
   pricingPlans: typeof pricingPlans;
   promoCoupons: typeof promoCoupons;
+  questionErrorReport: typeof questionErrorReport;
   questions: typeof questions;
   questionsAggregateSync: typeof questionsAggregateSync;
   quiz: typeof quiz;

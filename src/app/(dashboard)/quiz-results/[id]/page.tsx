@@ -6,6 +6,7 @@ import { CheckCircle, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import { useParams } from 'next/navigation';
 import { useState } from 'react';
 
+import ReportProblemButton from '@/components/common/ReportProblemButton';
 import StructuredContentRenderer from '@/components/common/StructuredContentRenderer';
 import QuestionContent from '@/components/quiz/QuestionContent';
 import QuizProgressResults from '@/components/quiz/QuizProgressResults';
@@ -167,9 +168,22 @@ export default function UniversalQuizResultsPage() {
 
       {/* Question content */}
       <div className="my-6 border-t p-4">
-        <h3 className="text-md my-4 font-medium">
-          Questão {currentQuestionIndex + 1}
-        </h3>
+        <div className="my-4 flex items-center justify-between">
+          <h3 className="text-md font-medium">
+            Questão {currentQuestionIndex + 1}
+          </h3>
+          <div className="flex items-center gap-2">
+            {question.questionCode && (
+              <span className="text-muted-foreground text-xs">
+                Código: {question.questionCode}
+              </span>
+            )}
+            <ReportProblemButton
+              questionId={question._id}
+              questionCode={question.questionCode}
+            />
+          </div>
+        </div>
 
         <QuestionContent stringContent={question.questionTextString} />
 

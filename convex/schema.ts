@@ -591,5 +591,36 @@ export default defineSchema({
     ),
   })
     .index("by_email", ["email"])
+    .index("by_tenant", ["tenantId"]),
+
+  // Question Error Reports - tracks user-reported issues with questions
+  questionErrorReports: defineTable({
+    // Multi-tenancy
+    tenantId: v.optional(v.id('apps')),
+    // Question reference
+    questionId: v.id('questions'),
+    questionCode: v.optional(v.string()),
+    // Reporter info
+    reporterId: v.id('users'),
+    reporterEmail: v.optional(v.string()),
+    // Report content
+    description: v.string(),
+    screenshotStorageId: v.optional(v.id('_storage')),
+    // Status management
+    status: v.union(
+      v.literal("pending"),
+      v.literal("reviewed"),
+      v.literal("resolved"),
+      v.literal("dismissed")
+    ),
+    // Admin review
+    reviewedBy: v.optional(v.id('users')),
+    reviewedAt: v.optional(v.number()),
+    reviewNotes: v.optional(v.string()),
+  })
+    .index("by_question", ["questionId"])
+    .index("by_reporter", ["reporterId"])
+    .index("by_status", ["status"])
     .index("by_tenant", ["tenantId"])
+    .index("by_tenant_and_status", ["tenantId", "status"])
 });
