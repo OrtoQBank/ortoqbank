@@ -83,11 +83,11 @@ export function ImageUploadButton({ editor }: { editor: Editor }) {
           pendingUploadsSize: pendingUploads.size,
         });
 
-        // Insert blob URL into editor with resizable style
+        // Insert blob URL into editor with initial width (resize is handled by TipTap's built-in resize option)
         const imageAttributes: ImageAttributes = {
           src: blobUrl,
           alt: file.name,
-          style: 'width: 250px; height: auto; resize: both; overflow: hidden;',
+          width: 250,
         };
 
         editor.chain().focus().setImage(imageAttributes).run();
