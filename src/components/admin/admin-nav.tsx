@@ -1,6 +1,7 @@
 'use client';
 
 import {
+  AlertTriangle,
   CogIcon,
   DollarSign,
   FilePlusIcon,
@@ -69,6 +70,13 @@ const navItems = [
     href: '/admin/waitlist',
     label: 'Lista de Espera',
     icon: Users,
+    prefetch: false, // Use hover prefetch for less frequently used features
+    useHoverPrefetch: true,
+  },
+  {
+    href: '/admin/reports',
+    label: 'Relatórios',
+    icon: AlertTriangle,
     prefetch: false, // Use hover prefetch for less frequently used features
     useHoverPrefetch: true,
   },

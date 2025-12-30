@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
 import BookmarkButton from '@/components/common/BookmarkButton';
+import ReportProblemButton from '@/components/common/ReportProblemButton';
 import { useQuiz } from '@/components/hooks/useQuiz';
 
 import { Id } from '../../../convex/_generated/dataModel';
@@ -339,12 +340,16 @@ function QuizStepper({
                   </div>
 
                   <div className="flex flex-col items-center">
-                    <div className="flex items-center">
+                    <div className="flex items-center gap-1">
                       <BookmarkButton
                         questionId={currentQuestion._id}
                         isBookmarked={
                           bookmarkStatuses[currentQuestion._id] || false
                         }
+                      />
+                      <ReportProblemButton
+                        questionId={currentQuestion._id}
+                        questionCode={currentQuestion.questionCode}
                       />
                     </div>
                     {currentQuestion.questionCode && (
