@@ -291,7 +291,11 @@ export default defineSchema({
     .index('by_user', ['userId'])
     .index('by_question', ['questionId'])
     .index('by_tenant', ['tenantId'])
-    .index('by_tenant_and_user', ['tenantId', 'userId']),
+    .index('by_tenant_and_user', ['tenantId', 'userId'])
+    // Compound indexes for taxonomy-filtered bookmark queries
+    .index('by_user_theme', ['userId', 'themeId'])
+    .index('by_user_subtheme', ['userId', 'subthemeId'])
+    .index('by_user_group', ['userId', 'groupId']),
 
   // Table to track user statistics for questions
   userQuestionStats: defineTable({
@@ -313,7 +317,11 @@ export default defineSchema({
     .index('by_user_answered', ['userId', 'hasAnswered'])
     .index('by_tenant', ['tenantId'])
     .index('by_tenant_and_user', ['tenantId', 'userId'])
-    .index('by_tenant_and_user_incorrect', ['tenantId', 'userId', 'isIncorrect']),
+    .index('by_tenant_and_user_incorrect', ['tenantId', 'userId', 'isIncorrect'])
+    // Compound indexes for taxonomy-filtered queries (enables efficient filtered quiz creation)
+    .index('by_user_theme_incorrect', ['userId', 'themeId', 'isIncorrect'])
+    .index('by_user_subtheme_incorrect', ['userId', 'subthemeId', 'isIncorrect'])
+    .index('by_user_group_incorrect', ['userId', 'groupId', 'isIncorrect']),
 
   // Table for pre-computed user statistics counts (Performance optimization)
   userStatsCounts: defineTable({
@@ -635,5 +643,58 @@ export default defineSchema({
     .index("by_reporter", ["reporterId"])
     .index("by_status", ["status"])
     .index("by_tenant", ["tenantId"])
-    .index("by_tenant_and_status", ["tenantId", "status"])
+    .index("by_tenant_and_status", ["tenantId", "status"]),
+
+  // =============================================================================
+  // QUIZ CREATION WORKFLOW TABLES
+  // =============================================================================
+
+  // Quiz creation jobs for progress tracking (used by workflow system)
+  quizCreationJobs: defineTable({
+    userId: v.id('users'),
+    tenantId: v.optional(v.id('apps')),
+    workflowId: v.optional(v.string()),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('collecting_questions'),
+      v.literal('applying_filters'),
+      v.literal('selecting_questions'),
+      v.literal('creating_quiz'),
+      v.literal('completed'),
+      v.literal('failed')
+    ),
+    progress: v.number(), // 0-100
+    progressMessage: v.optional(v.string()),
+    // Input params (with optimized hierarchy data)
+    input: v.object({
+      name: v.string(),
+      description: v.string(),
+      testMode: v.union(v.literal('study'), v.literal('exam')),
+      questionMode: v.union(
+        v.literal('all'),
+        v.literal('unanswered'),
+        v.literal('incorrect'),
+        v.literal('bookmarked')
+      ),
+      numQuestions: v.optional(v.number()),
+      selectedThemes: v.optional(v.array(v.id('themes'))),
+      selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
+      selectedGroups: v.optional(v.array(v.id('groups'))),
+      // PRE-COMPUTED HIERARCHY - eliminates DB reads
+      groupToSubtheme: v.optional(v.record(v.id('groups'), v.id('subthemes'))),
+      subthemeToTheme: v.optional(v.record(v.id('subthemes'), v.id('themes'))),
+    }),
+    // Results
+    quizId: v.optional(v.id('customQuizzes')),
+    questionCount: v.optional(v.number()),
+    error: v.optional(v.string()),
+    errorMessage: v.optional(v.string()),
+    createdAt: v.number(),
+    completedAt: v.optional(v.number()),
+  })
+    .index('by_user', ['userId'])
+    .index('by_workflow', ['workflowId'])
+    .index('by_status', ['status'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId']),
 });
