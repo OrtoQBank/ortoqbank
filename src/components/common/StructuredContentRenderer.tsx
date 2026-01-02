@@ -138,57 +138,66 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
     case 'image':
     case 'imageResize': {
       // Handle both standard image and imageResize from tiptap-extension-resize-image
-      const { src, alt, width, height, style, wrapperStyle } =
+      const { src, alt, width, height, style, wrapperStyle, containerStyle } =
         node.attrs || {};
-      // Basic image rendering, consider adding error handling or placeholders
 
-      // Parse the style string into an object
-      const parsedStyles: Record<string, string> = {};
-      if (typeof style === 'string') {
-        style.split(';').forEach(declaration => {
-          const [property, value] = declaration.split(':');
-          if (property && value) {
-            // Convert kebab-case to camelCase for React style properties
-            const camelCaseProperty = property
-              .trim()
-              .replaceAll(/-([a-z])/g, g => g[1].toUpperCase());
-            parsedStyles[camelCaseProperty] = value.trim();
-          }
-        });
-      }
+      // Helper function to parse CSS style string into React CSSProperties object
+      const parseStyleString = (styleStr: string | undefined): Record<string, string> => {
+        const styles: Record<string, string> = {};
+        if (typeof styleStr === 'string') {
+          styleStr.split(';').forEach(declaration => {
+            const [property, ...valueParts] = declaration.split(':');
+            const value = valueParts.join(':'); // Handle values that contain colons
+            if (property && value) {
+              // Convert kebab-case to camelCase for React style properties
+              const camelCaseProperty = property
+                .trim()
+                .replaceAll(/-([a-z])/g, g => g[1].toUpperCase());
+              styles[camelCaseProperty] = value.trim();
+            }
+          });
+        }
+        return styles;
+      };
 
-      // Parse wrapperStyle for imageResize nodes (e.g., "display: flex")
-      const parsedWrapperStyles: Record<string, string> = {};
-      if (typeof wrapperStyle === 'string') {
-        wrapperStyle.split(';').forEach(declaration => {
-          const [property, value] = declaration.split(':');
-          if (property && value) {
-            const camelCaseProperty = property
-              .trim()
-              .replaceAll(/-([a-z])/g, g => g[1].toUpperCase());
-            parsedWrapperStyles[camelCaseProperty] = value.trim();
-          }
-        });
-      }
+      // Parse all style attributes
+      const parsedStyles = parseStyleString(style);
+      const parsedWrapperStyles = parseStyleString(wrapperStyle);
+      const parsedContainerStyles = parseStyleString(containerStyle);
 
       const imgElement = (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          key={key}
           src={src}
           alt={alt || ''}
-          width={width} // Keep width/height attributes if they exist for semantics/SSR
+          width={width}
           height={height}
-          style={parsedStyles as React.CSSProperties} // Apply the parsed style object, cast to CSSProperties
+          style={parsedStyles as React.CSSProperties}
         />
       );
 
-      // Wrap in a container if wrapperStyle exists (for imageResize centering/alignment)
-      element = Object.keys(parsedWrapperStyles).length > 0 ? (
-          <div key={key} style={parsedWrapperStyles as React.CSSProperties}>
+      // Build the element with proper nesting for imageResize alignment
+      // The structure mirrors tiptap-extension-resize-image: wrapper > container > img
+      const hasContainerStyles = Object.keys(parsedContainerStyles).length > 0;
+      const hasWrapperStyles = Object.keys(parsedWrapperStyles).length > 0;
+
+      if (hasWrapperStyles || hasContainerStyles) {
+        const containerElement = hasContainerStyles ? (
+          <div style={parsedContainerStyles as React.CSSProperties}>
             {imgElement}
           </div>
         ) : imgElement;
+
+        element = hasWrapperStyles ? (
+          <div key={key} style={parsedWrapperStyles as React.CSSProperties}>
+            {containerElement}
+          </div>
+        ) : (
+          <div key={key}>{containerElement}</div>
+        );
+      } else {
+        element = <div key={key}>{imgElement}</div>;
+      }
       break;
     }
     case 'heading': {
