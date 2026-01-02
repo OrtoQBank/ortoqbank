@@ -145,7 +145,7 @@ export const createPendingOrder = mutation({
       // Address info (for invoice generation)
       phone: args.phone,
       mobilePhone: args.mobilePhone,
-      postalCode: args.postalCode?.replace(/\D/g, ''), // Clean CEP
+      postalCode: args.postalCode?.replaceAll(/\D/g, ''), // Clean CEP
       address: args.address,
       addressNumber: args.addressNumber || 'SN', // Default to "SN" (Sem Número) if not provided
       createdAt: now,

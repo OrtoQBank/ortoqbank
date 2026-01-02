@@ -1,11 +1,11 @@
 'use client';
 
 import { Color } from '@tiptap/extension-color';
-import Image from '@tiptap/extension-image';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import { useEffect } from 'react';
+import ImageResize from 'tiptap-extension-resize-image';
 
 import { toast } from '@/hooks/use-toast';
 
@@ -25,6 +25,7 @@ export type ImageAttributes = {
   title?: string;
   width?: number;
   height?: number;
+  style?: string;
 };
 
 export default function RichTextEditor({
@@ -37,14 +38,9 @@ export default function RichTextEditor({
     shouldRerenderOnTransaction: true,
     extensions: [
       StarterKit,
-      Image.configure({
+      ImageResize.configure({
         inline: false,
         allowBase64: true,
-        resize: {
-          enabled: true,
-          minWidth: 50,
-          minHeight: 50,
-        },
       }),
       Color,
       TextStyle,

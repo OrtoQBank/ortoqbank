@@ -184,7 +184,7 @@ export function getWeekString(timestamp: number): string {
   // Adjust to nearest Thursday (ISO week date system)
   // Thursday is day 4 in ISO (Monday=1, Tuesday=2, ..., Sunday=7)
   const dayOfWeek = (date.getDay() + 6) % 7; // Convert Sunday=0 to Sunday=6, Monday=0
-  const nearestThursday = new Date(date.getTime());
+  const nearestThursday = new Date(date);
   nearestThursday.setDate(date.getDate() - dayOfWeek + 3); // Adjust to Thursday
 
   // Get the year of the Thursday (this determines the ISO year)
@@ -192,7 +192,7 @@ export function getWeekString(timestamp: number): string {
 
   // Find the first Thursday of the ISO year (which is in the first ISO week)
   const jan4 = new Date(isoYear, 0, 4);
-  const firstThursday = new Date(jan4.getTime());
+  const firstThursday = new Date(jan4);
   const jan4DayOfWeek = (jan4.getDay() + 6) % 7; // Convert to Monday=0 system
   firstThursday.setDate(4 - jan4DayOfWeek + 3); // Adjust to first Thursday
 

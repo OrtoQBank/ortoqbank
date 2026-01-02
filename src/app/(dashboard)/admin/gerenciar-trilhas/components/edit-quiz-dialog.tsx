@@ -94,7 +94,7 @@ export function EditExamDialog({
       undefined,
   );
   const [selectedQuestions, setSelectedQuestions] = useState<Set<string>>(
-    new Set(presetQuizzes.find(q => q._id === quiz.id)?.questions ?? []),
+    new Set(presetQuizzes.find(q => q._id === quiz.id)?.questions),
   );
 
   // Clear subcategory when category changes to trilha

@@ -12,12 +12,12 @@ export interface TiptapNode {
 }
 
 // Image node types to check - includes both standard image and resize extension types
-const IMAGE_NODE_TYPES = ['image', 'imageResize'];
+const IMAGE_NODE_TYPES = new Set(['image', 'imageResize']);
 
 /**
  * Checks if a node type represents an image node.
  */
-const isImageNode = (type: string): boolean => IMAGE_NODE_TYPES.includes(type);
+const isImageNode = (type: string): boolean => IMAGE_NODE_TYPES.has(type);
 
 /**
  * Removes null and undefined values from an object.

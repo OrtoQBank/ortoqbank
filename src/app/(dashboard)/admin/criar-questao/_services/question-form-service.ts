@@ -118,14 +118,18 @@ export async function processAndSubmitQuestion(
           const fileName = img.alt || 'imagem sem nome';
           const location = img.location;
           switch (img.reason) {
-            case 'blob_url':
+            case 'blob_url': {
               return `• ${location}: "${fileName}" - Falha no upload. Tente uma imagem menor (máx ${IMAGE_OPTIMIZATION.MAX_FILE_SIZE_MB}MB)`;
-            case 'external_url':
+            }
+            case 'external_url': {
               return `• ${location}: "${fileName}" - URL externa não permitida. Use o botão de upload`;
-            case 'missing_src':
+            }
+            case 'missing_src': {
               return `• ${location}: "${fileName}" - Imagem corrompida`;
-            default:
+            }
+            default: {
               return `• ${location}: "${fileName}" - Erro desconhecido`;
+            }
           }
         })
         .join('\n');
@@ -134,7 +138,7 @@ export async function processAndSubmitQuestion(
         title: 'Erro nas Imagens',
         description: `${errorDetails}\n\nRemova e adicione novamente.`,
         variant: 'destructive',
-        duration: 10000,
+        duration: 10_000,
       });
       return false;
     }

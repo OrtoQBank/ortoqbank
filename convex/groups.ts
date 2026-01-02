@@ -1,8 +1,8 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 import { requireAdmin } from './users';
+import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
