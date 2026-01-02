@@ -98,6 +98,20 @@ export default function RichTextEditor({
     }
   }, [editor, onEditorReady]);
 
+  // Update editor content when initialContent changes (e.g., when editing existing content)
+  useEffect(() => {
+    if (editor && initialContent && !editor.isDestroyed) {
+      // Only update if the editor content is empty or different from initialContent
+      const currentContent = editor.getJSON();
+      const isEmpty = !currentContent.content || currentContent.content.length === 0 || 
+        (currentContent.content.length === 1 && currentContent.content[0].type === 'paragraph' && !currentContent.content[0].content);
+      
+      if (isEmpty) {
+        editor.commands.setContent(initialContent);
+      }
+    }
+  }, [editor, initialContent]);
+
   return (
     <div>
       <TextEditorMenuBar editor={editor} />
