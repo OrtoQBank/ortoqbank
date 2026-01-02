@@ -101,8 +101,8 @@ export default function UniversalQuizResultsPage() {
       }
     };
 
-    window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+    globalThis.addEventListener('keydown', handleKeyDown);
+    return () => globalThis.removeEventListener('keydown', handleKeyDown);
   }, [goToPrevious, goToNext]);
 
   // If auth state is loaded and the user is not signed in, prevent loading loop

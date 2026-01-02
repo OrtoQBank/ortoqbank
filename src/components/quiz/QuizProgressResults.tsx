@@ -1,5 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 
 interface QuizProgressResultsProps {
   currentIndex: number;
@@ -16,30 +16,30 @@ export default function QuizProgressResults({
   answerFeedback,
   visibleCount = 10, // Default to showing 10 questions at a time for results
 }: QuizProgressResultsProps) {
-  // State to track user's manual navigation offset
-  const [manualOffset, setManualOffset] = useState(0);
+  // State to track the view window position
+  const [viewOffset, setViewOffset] = useState(0);
 
-  // Sync manualOffset when currentIndex changes to keep it visible
-  // This only runs when currentIndex changes (e.g., via Anterior/Próxima or clicking a question)
-  // It does NOT run when manualOffset changes (e.g., via left/right arrows)
-  useEffect(() => {
-    if (currentIndex < manualOffset) {
-      setManualOffset(Math.max(0, currentIndex));
-    } else if (currentIndex >= manualOffset + visibleCount) {
-      setManualOffset(
-        Math.max(
-          0,
-          Math.min(currentIndex - visibleCount + 1, totalQuestions - visibleCount),
-        ),
-      );
+  const maxOffset = Math.max(0, totalQuestions - visibleCount);
+  const validStartIndex = Math.max(0, Math.min(viewOffset, maxOffset));
+
+  // Navigate view and optionally navigate to a question
+  const handleQuestionClick = (questionIndex: number) => {
+    // When clicking a question, also ensure it's visible in the view
+    if (questionIndex < validStartIndex) {
+      setViewOffset(Math.max(0, questionIndex));
+    } else if (questionIndex >= validStartIndex + visibleCount) {
+      setViewOffset(Math.min(maxOffset, questionIndex - visibleCount + 1));
     }
-  }, [currentIndex, visibleCount, totalQuestions]);
+    onNavigate(questionIndex);
+  };
 
-  // Use manualOffset directly as the source of truth for the view position
-  const validStartIndex = Math.max(
-    0,
-    Math.min(manualOffset, totalQuestions - Math.min(totalQuestions, visibleCount)),
-  );
+  const handleLeftArrow = () => {
+    setViewOffset(Math.max(0, validStartIndex - visibleCount));
+  };
+
+  const handleRightArrow = () => {
+    setViewOffset(Math.min(maxOffset, validStartIndex + visibleCount));
+  };
 
   // Check if we need navigation arrows
   const showLeftArrow = validStartIndex > 0;
@@ -67,9 +67,7 @@ export default function QuizProgressResults({
         {/* Left arrow */}
         {showLeftArrow && (
           <button
-            onClick={() =>
-              setManualOffset(Math.max(0, validStartIndex - visibleCount))
-            }
+            onClick={handleLeftArrow}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"
             aria-label="Previous questions"
           >
@@ -102,7 +100,7 @@ export default function QuizProgressResults({
             return (
               <button
                 key={questionIndex}
-                onClick={() => onNavigate(questionIndex)}
+                onClick={() => handleQuestionClick(questionIndex)}
                 className={`flex h-8 w-8 items-center justify-center rounded-full text-sm font-medium ${bgColor} hover:opacity-90`}
                 aria-label={`Go to question ${questionIndex + 1}`}
                 title={
@@ -122,14 +120,7 @@ export default function QuizProgressResults({
         {/* Right arrow */}
         {showRightArrow && (
           <button
-            onClick={() =>
-              setManualOffset(
-                Math.min(
-                  totalQuestions - visibleCount,
-                  validStartIndex + visibleCount,
-                ),
-              )
-            }
+            onClick={handleRightArrow}
             className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"
             aria-label="Next questions"
           >
