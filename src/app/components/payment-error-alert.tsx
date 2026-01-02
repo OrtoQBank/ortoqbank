@@ -2,25 +2,28 @@
 
 import { AlertCircle } from 'lucide-react';
 import { useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useMemo, useState } from 'react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 
 function PaymentErrorAlertContent() {
   const searchParams = useSearchParams();
-  const [showPaymentError, setShowPaymentError] = useState(false);
-
-  useEffect(() => {
-    const error = searchParams.get('error');
-    if (error === 'payment_required') {
-      setShowPaymentError(true);
-      // Auto-hide after 10 seconds
-      const timer = setTimeout(() => setShowPaymentError(false), 10_000);
-      return () => clearTimeout(timer);
-    }
+  const [isHidden, setIsHidden] = useState(false);
+  
+  // Derive whether to show error from searchParams
+  const hasPaymentError = useMemo(() => {
+    return searchParams.get('error') === 'payment_required';
   }, [searchParams]);
 
-  if (!showPaymentError) {
+  // Auto-hide after 10 seconds
+  useEffect(() => {
+    if (hasPaymentError && !isHidden) {
+      const timer = setTimeout(() => setIsHidden(true), 10_000);
+      return () => clearTimeout(timer);
+    }
+  }, [hasPaymentError, isHidden]);
+
+  if (!hasPaymentError || isHidden) {
     return null;
   }
 

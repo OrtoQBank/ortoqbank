@@ -1,5 +1,5 @@
 import { useQuery } from 'convex/react';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
@@ -19,7 +19,6 @@ export function useTaxonomyData(
   const [selectedGroup, setSelectedGroup] = useState<Id<'groups'> | undefined>(
     defaultGroupId,
   );
-  const [generatedId, setGeneratedId] = useState<string>('');
 
   // Query data
   const themes = useQuery(api.themes.list);
@@ -38,30 +37,16 @@ export function useTaxonomyData(
     selectedTheme ? { themeId: selectedTheme } : 'skip',
   );
 
-  // Generate ID whenever dependencies change
-  useEffect(() => {
-    generateId();
-  }, [
-    selectedTheme,
-    selectedSubtheme,
-    selectedGroup,
-    themes,
-    subthemes,
-    groups,
-    themeQuestionCount,
-  ]);
-
-  const generateId = () => {
+  // Derive generatedId using useMemo instead of effect + state
+  const generatedId = useMemo(() => {
     // Don't try to generate if theme not selected or data not loaded
     if (!selectedTheme || !themes || themeQuestionCount === undefined) {
-      setGeneratedId('');
-      return;
+      return '';
     }
 
     const theme = themes.find(t => t._id === selectedTheme);
     if (!theme) {
-      setGeneratedId('');
-      return;
+      return '';
     }
 
     // Get theme prefix from the database or default to first 3 letters
@@ -97,8 +82,16 @@ export function useTaxonomyData(
     // Increase padding to 4 digits
     const paddedCount = String(count).padStart(4, '0');
 
-    setGeneratedId(`${codePrefix}-${paddedCount}`);
-  };
+    return `${codePrefix}-${paddedCount}`;
+  }, [
+    selectedTheme,
+    selectedSubtheme,
+    selectedGroup,
+    themes,
+    subthemes,
+    groups,
+    themeQuestionCount,
+  ]);
 
   // Reset dependent fields when parent selection changes
   const handleThemeChange = (themeId: Id<'themes'> | undefined) => {

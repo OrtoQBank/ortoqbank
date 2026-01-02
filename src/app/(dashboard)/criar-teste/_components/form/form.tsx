@@ -222,7 +222,7 @@ export default function TestForm() {
   // Memoized sorted data to prevent re-sorting on every render
   const sortedThemes = useMemo(
     () =>
-      ([...(hierarchicalData?.themes || [])] as any[]).sort((a: any, b: any) =>
+      ([...(hierarchicalData?.themes || [])] as any[]).toSorted((a: any, b: any) =>
         (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.themes],
@@ -230,7 +230,7 @@ export default function TestForm() {
 
   const sortedSubthemes = useMemo(
     () =>
-      ([...(hierarchicalData?.subthemes || [])] as any[]).sort(
+      ([...(hierarchicalData?.subthemes || [])] as any[]).toSorted(
         (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.subthemes],
@@ -238,7 +238,7 @@ export default function TestForm() {
 
   const sortedGroups = useMemo(
     () =>
-      ([...(hierarchicalData?.groups || [])] as any[]).sort((a: any, b: any) =>
+      ([...(hierarchicalData?.groups || [])] as any[]).toSorted((a: any, b: any) =>
         (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.groups],

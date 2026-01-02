@@ -2,7 +2,7 @@
 
 import { CheckCircle, Clock, RefreshCw, XCircle } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useCallback, useEffect, useState } from 'react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -19,7 +19,7 @@ function CheckoutStatusContent() {
   const [isLoading, setIsLoading] = useState(true);
   const [lastChecked, setLastChecked] = useState<Date | null>(null);
 
-  const checkPaymentStatus = async () => {
+  const checkPaymentStatus = useCallback(async () => {
     if (!paymentId) return;
     
     setIsLoading(true);
@@ -49,7 +49,7 @@ function CheckoutStatusContent() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [paymentId]);
 
   useEffect(() => {
     checkPaymentStatus();
@@ -62,7 +62,7 @@ function CheckoutStatusContent() {
     }, 10_000);
 
     return () => clearInterval(interval);
-  }, [paymentId, status]);
+  }, [checkPaymentStatus, status]);
 
   const getStatusIcon = () => {
     switch (status) {
@@ -331,7 +331,7 @@ function CheckoutStatusContent() {
 
 export default function CheckoutStatusPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Loading...</div>}>
+    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
       <CheckoutStatusContent />
     </Suspense>
   );

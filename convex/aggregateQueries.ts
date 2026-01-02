@@ -794,7 +794,7 @@ async function getRandomFromHierarchicalAggregates(
   }
 
   // Shuffle and return the requested count
-  const shuffled = questionIds.sort(() => Math.random() - 0.5);
+  const shuffled = questionIds.toSorted(() => Math.random() - 0.5);
   return shuffled.slice(0, Math.min(args.count, shuffled.length));
 }
 
@@ -861,7 +861,7 @@ async function getRandomUnansweredQuestions(
   }
 
   // Shuffle and return the requested count
-  const shuffled = unansweredQuestions.sort(() => Math.random() - 0.5);
+  const shuffled = unansweredQuestions.toSorted(() => Math.random() - 0.5);
   return shuffled
     .slice(0, Math.min(args.count, shuffled.length))
     .map(q => q._id);

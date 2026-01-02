@@ -10,6 +10,7 @@ import {
   Image as ImageIcon,
   XCircle,
 } from 'lucide-react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useState } from 'react';
 
@@ -316,6 +317,7 @@ export default function AdminReportsPage() {
                     target="_blank"
                     rel="noopener noreferrer"
                   >
+                    {/* eslint-disable-next-line @next/next/no-img-element */}
                     <img
                       src={selectedReport.screenshotUrl}
                       alt="Screenshot"

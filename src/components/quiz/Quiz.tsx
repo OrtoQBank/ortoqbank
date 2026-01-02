@@ -2,7 +2,7 @@
 
 import { defineStepper } from '@stepperize/react';
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
 import BookmarkButton from '@/components/common/BookmarkButton';
 import ReportProblemButton from '@/components/common/ReportProblemButton';
@@ -50,7 +50,7 @@ export default function Quiz({ quizId, mode }: QuizProps) {
     initializeSession();
   }, [progress, isLoading, startQuiz, sessionInitialized]);
 
-  if (!quizData || !progress) return <div>Loading...</div>;
+  if (!quizData || !progress) return <div>Carregando...</div>;
 
   return (
     <QuizStepper
@@ -188,13 +188,45 @@ function QuizStepper({
     }
   };
 
+  // Handle quiz completion
+  const handleComplete = useCallback(async () => {
+    try {
+      // Only call completeQuiz if the session exists, is not already complete,
+      // and the quiz is in progress (has some answers)
+      if (
+        progress &&
+        !progress.isComplete &&
+        progress.answers &&
+        progress.answers.length > 0
+      ) {
+        try {
+          await completeQuiz();
+        } catch (error) {
+          // Catch and log the error, but continue to navigate
+          console.error('Error completing quiz (non-blocking):', error);
+        }
+      } else {
+        console.log(
+          'Quiz already complete or no answers, skipping completion API call',
+        );
+      }
+
+      // Always navigate to results regardless of completion status
+      router.push(`/quiz-results/${quizData._id}`);
+    } catch (error) {
+      console.error('Error in handleComplete:', error);
+      // If completing the quiz fails but we can still navigate, go to results anyway
+      router.push(`/quiz-results/${quizData._id}`);
+    }
+  }, [progress, completeQuiz, router, quizData._id]);
+
   // Navigation only allowed in study mode
-  const handlePrevious = () => {
+  const handlePrevious = useCallback(() => {
     if (mode === 'exam') return;
     stepper.prev();
-  };
+  }, [mode, stepper]);
 
-  const handleNext = async () => {
+  const handleNext = useCallback(async () => {
     if (mode === 'exam') return;
 
     setIsLoading(true);
@@ -210,7 +242,7 @@ function QuizStepper({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [mode, stepper, handleComplete]);
 
   const currentQuestion = quizData.questions[currentStepIndex];
 
@@ -285,39 +317,8 @@ function QuizStepper({
     handleNext,
   ]);
 
-  const handleComplete = async () => {
-    try {
-      // Only call completeQuiz if the session exists, is not already complete,
-      // and the quiz is in progress (has some answers)
-      if (
-        progress &&
-        !progress.isComplete &&
-        progress.answers &&
-        progress.answers.length > 0
-      ) {
-        try {
-          await completeQuiz();
-        } catch (error) {
-          // Catch and log the error, but continue to navigate
-          console.error('Error completing quiz (non-blocking):', error);
-        }
-      } else {
-        console.log(
-          'Quiz already complete or no answers, skipping completion API call',
-        );
-      }
-
-      // Always navigate to results regardless of completion status
-      router.push(`/quiz-results/${quizData._id}`);
-    } catch (error) {
-      console.error('Error in handleComplete:', error);
-      // If completing the quiz fails but we can still navigate, go to results anyway
-      router.push(`/quiz-results/${quizData._id}`);
-    }
-  };
-
   return (
-    <div className="container mx-auto mt-6 max-w-3xl rounded-3xl border bg-white p-6 md:mt-16">
+    <div className="container mx-auto max-w-3xl rounded-3xl border bg-white p-6">
       {stepper.switch({
         ...Object.fromEntries(
           quizData.questions.map((_, index) => [

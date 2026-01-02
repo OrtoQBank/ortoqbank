@@ -1,6 +1,7 @@
 'use client';
 
 import { useMutation, useQuery } from 'convex/react';
+import Image from 'next/image';
 import { useState } from 'react';
 
 import { api } from '../../../../convex/_generated/api';
@@ -55,7 +56,7 @@ export default function AdminDashboard() {
   };
 
   if (!users) {
-    return <div>Loading...</div>;
+    return <div>Carregando...</div>;
   }
 
   return (
@@ -84,9 +85,11 @@ export default function AdminDashboard() {
               >
                 <div className="mb-4 flex items-center gap-3">
                   {user.imageUrl && (
-                    <img
+                    <Image
                       src={user.imageUrl}
                       alt={`${user.firstName} ${user.lastName}`}
+                      width={40}
+                      height={40}
                       className="h-10 w-10 rounded-full object-cover"
                     />
                   )}

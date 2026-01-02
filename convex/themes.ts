@@ -19,7 +19,7 @@ export const listSorted = query({
     const themes = await context.db.query('themes').collect();
 
     // Sort themes: displayOrder first (undefined goes last), then alphabetically by name
-    return themes.sort((a, b) => {
+    return themes.toSorted((a, b) => {
       if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
         return a.displayOrder - b.displayOrder;
       }

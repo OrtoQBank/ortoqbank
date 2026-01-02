@@ -172,6 +172,7 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
       }
 
       const imgElement = (
+        // eslint-disable-next-line @next/next/no-img-element
         <img
           key={key}
           src={src}

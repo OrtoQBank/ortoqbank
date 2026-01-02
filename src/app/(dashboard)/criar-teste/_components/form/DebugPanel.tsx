@@ -133,7 +133,7 @@ export function DebugPanel({
                   Available Questions
                 </div>
                 <div className="text-lg font-bold text-gray-900">
-                  {isCountLoading ? 'Loading...' : availableQuestionCount}
+                  {isCountLoading ? 'Carregando...' : availableQuestionCount}
                 </div>
               </div>
               <div className="rounded border bg-white p-3">

@@ -3,7 +3,7 @@
 import { zodResolver } from '@hookform/resolvers/zod';
 import { useMutation, useQuery } from 'convex/react';
 import { useEffect, useState } from 'react';
-import { useForm } from 'react-hook-form';
+import { useForm, useWatch } from 'react-hook-form';
 import * as z from 'zod';
 
 import { Button } from '@/components/ui/button';
@@ -179,11 +179,11 @@ export default function ManagePresetExams() {
     },
   });
 
-  // Watch the theme ID to filter questions
-  const watchedThemeId = form.watch('themeId');
+  // Watch category value outside of JSX to avoid React Compiler warnings
+  const watchedCategory = useWatch({ control: form.control, name: 'category' });
 
-  // Watch for category changes to reset subcategory if needed
-  const watchedCategory = form.watch('category');
+  // Watch the theme ID to filter questions
+  const watchedThemeId = useWatch({ control: form.control, name: 'themeId' });
 
   // Reset subcategory when category changes to trilha
   useEffect(() => {
@@ -422,7 +422,7 @@ export default function ManagePresetExams() {
                             <FormItem>
                               <FormLabel>
                                 Tema{' '}
-                                {form.watch('category') === 'trilha' && (
+                                {watchedCategory === 'trilha' && (
                                   <span className="text-red-500">*</span>
                                 )}
                               </FormLabel>
@@ -432,7 +432,7 @@ export default function ManagePresetExams() {
                                   setSelectedThemeFilter(value);
                                 }}
                                 defaultValue={field.value}
-                                disabled={form.watch('category') !== 'trilha'}
+                                disabled={watchedCategory !== 'trilha'}
                               >
                                 <FormControl>
                                   <SelectTrigger>
@@ -485,7 +485,7 @@ export default function ManagePresetExams() {
                                   {...field}
                                   placeholder="Ex: TARO, TEOT, Simulados"
                                   value={field.value || ''}
-                                  disabled={form.watch('category') === 'trilha'}
+                                  disabled={watchedCategory === 'trilha'}
                                 />
                               </FormControl>
                               <FormMessage />

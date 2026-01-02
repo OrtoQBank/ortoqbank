@@ -4,9 +4,9 @@ import playwright from 'eslint-plugin-playwright';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
 import unicornPluginUnicorn from 'eslint-plugin-unicorn';
 
-export default [
+const eslintConfig = [
   // Global ignores
-  globalIgnores(['src/components/', 'src/app/components/']),
+  globalIgnores(['src/components/ui', 'src/components/kibo-ui']),
 
   // Native flat configs
   ...nextCoreWebVitals,
@@ -39,3 +39,5 @@ export default [
     },
   },
 ];
+
+export default eslintConfig;
