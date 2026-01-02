@@ -1,5 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 
 interface QuizProgressResultsProps {
   currentIndex: number;
@@ -19,25 +19,26 @@ export default function QuizProgressResults({
   // State to track user's manual navigation offset
   const [manualOffset, setManualOffset] = useState(0);
 
-  // Derive startIndex from currentIndex (ensuring current question is visible)
-  const baseStartIndex = useMemo(() => {
-    // Calculate the base position to keep current question visible
+  // Sync manualOffset when currentIndex changes to keep it visible
+  // This only runs when currentIndex changes (e.g., via Anterior/Próxima or clicking a question)
+  // It does NOT run when manualOffset changes (e.g., via left/right arrows)
+  useEffect(() => {
     if (currentIndex < manualOffset) {
-      return Math.max(0, currentIndex);
+      setManualOffset(Math.max(0, currentIndex));
+    } else if (currentIndex >= manualOffset + visibleCount) {
+      setManualOffset(
+        Math.max(
+          0,
+          Math.min(currentIndex - visibleCount + 1, totalQuestions - visibleCount),
+        ),
+      );
     }
-    if (currentIndex >= manualOffset + visibleCount) {
-      return Math.max(0, Math.min(currentIndex, totalQuestions - visibleCount));
-    }
-    return manualOffset;
-  }, [currentIndex, manualOffset, visibleCount, totalQuestions]);
+  }, [currentIndex, visibleCount, totalQuestions]);
 
-  // Make sure start index is valid
+  // Use manualOffset directly as the source of truth for the view position
   const validStartIndex = Math.max(
     0,
-    Math.min(
-      baseStartIndex,
-      totalQuestions - Math.min(totalQuestions, visibleCount),
-    ),
+    Math.min(manualOffset, totalQuestions - Math.min(totalQuestions, visibleCount)),
   );
 
   // Check if we need navigation arrows

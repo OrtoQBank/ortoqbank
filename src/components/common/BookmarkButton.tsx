@@ -35,9 +35,9 @@ export default function BookmarkButton({
       aria-label={isBookmarked ? 'Remove bookmark' : 'Add bookmark'}
     >
       {isBookmarked ? (
-        <BookmarkCheckIcon className="h-6 w-6 text-brand-blue" />
+        <BookmarkCheckIcon className="h-5 w-5 text-brand-blue" />
       ) : (
-        <BookmarkPlusIcon className="h-6 w-6 text-gray-400" />
+        <BookmarkPlusIcon className="h-5 w-5 text-gray-400 hover:text-brand-blue" />
       )}
     </button>
   );

@@ -4,10 +4,12 @@ import { SignInButton, useUser } from '@clerk/nextjs';
 import { useQuery } from 'convex/react';
 import { CheckCircle, ChevronLeft, ChevronRight, XCircle } from 'lucide-react';
 import { useParams } from 'next/navigation';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 
+import BookmarkButton from '@/components/common/BookmarkButton';
 import ReportProblemButton from '@/components/common/ReportProblemButton';
 import StructuredContentRenderer from '@/components/common/StructuredContentRenderer';
+import { useBookmarks } from '@/components/hooks/useBookmarks';
 import QuestionContent from '@/components/quiz/QuestionContent';
 import QuizProgressResults from '@/components/quiz/QuizProgressResults';
 import { Button } from '@/components/ui/button';
@@ -60,6 +62,11 @@ export default function UniversalQuizResultsPage() {
   // Combined quiz data - use the appropriate result based on quiz type
   const quiz = isCustom ? customQuizResult : presetQuizResult;
 
+  // Get bookmark statuses for all questions in the quiz
+  const { bookmarkStatuses } = useBookmarks(
+    quiz?.questions?.flatMap(q => (q ? [q._id] : [])),
+  );
+
   // Get the completed sessions for this quiz
   const completedSessions =
     useQuery(
@@ -71,6 +78,32 @@ export default function UniversalQuizResultsPage() {
 
   // Get the most recent session (index 0)
   const session = completedSessions[0];
+
+  // Calculate total questions (safe for hooks, defaults to 1 to avoid division issues)
+  const totalQuestions = quiz?.questions?.length ?? 1;
+
+  // Simple navigation functions (must be before early returns)
+  const goToPrevious = useCallback(() => {
+    setCurrentQuestionIndex(prev => Math.max(0, prev - 1));
+  }, []);
+
+  const goToNext = useCallback(() => {
+    setCurrentQuestionIndex(prev => Math.min(totalQuestions - 1, prev + 1));
+  }, [totalQuestions]);
+
+  // Keyboard navigation with arrow keys
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'ArrowLeft') {
+        goToPrevious();
+      } else if (e.key === 'ArrowRight') {
+        goToNext();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [goToPrevious, goToNext]);
 
   // If auth state is loaded and the user is not signed in, prevent loading loop
   if (isLoaded && !isSignedIn) {
@@ -96,7 +129,6 @@ export default function UniversalQuizResultsPage() {
   }
 
   // Calculate results
-  const totalQuestions = quiz.questions.length;
   const correctAnswers = session.answerFeedback.filter(
     (fb: { isCorrect: boolean }) => fb.isCorrect,
   ).length;
@@ -106,18 +138,6 @@ export default function UniversalQuizResultsPage() {
   const question = quiz.questions[currentQuestionIndex];
   const userAnswer = session.answers[currentQuestionIndex];
   const feedback = session.answerFeedback[currentQuestionIndex];
-
-  // Simple navigation functions
-  const goToPrevious = () => {
-    setCurrentQuestionIndex(prev => Math.max(0, prev - 1));
-  };
-
-  const goToNext = () => {
-    setCurrentQuestionIndex(prev => Math.min(totalQuestions - 1, prev + 1));
-  };
-
-  // Determine the appropriate return link based on quiz type using ternary
-  const getReturnLink = () => (isCustom ? '/criar-teste' : '/trilhas');
 
   return (
     <div className="container mx-auto max-w-3xl rounded-lg border bg-white p-6">
@@ -178,6 +198,10 @@ export default function UniversalQuizResultsPage() {
                 Código: {question.questionCode}
               </span>
             )}
+            <BookmarkButton
+              questionId={question._id}
+              isBookmarked={bookmarkStatuses[question._id] || false}
+            />
             <ReportProblemButton
               questionId={question._id}
               questionCode={question.questionCode}
