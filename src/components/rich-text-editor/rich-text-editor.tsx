@@ -4,7 +4,7 @@ import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import { useEffect } from 'react';
+import { useEffect, useMemo } from 'react';
 import ImageResize from 'tiptap-extension-resize-image';
 
 import { toast } from '@/hooks/use-toast';
@@ -28,11 +28,44 @@ export type ImageAttributes = {
   style?: string;
 };
 
+// Transform content to convert 'image' nodes to 'imageResize' nodes
+// This is needed because tiptap-extension-resize-image uses 'imageResize' as the node type
+// but older content may have been saved with 'image' type
+function transformImageNodes(content: any): any {
+  if (!content) return content;
+  
+  if (Array.isArray(content)) {
+    return content.map(transformImageNodes);
+  }
+  
+  if (typeof content === 'object') {
+    const transformed = { ...content };
+    
+    // Convert 'image' type to 'imageResize'
+    if (transformed.type === 'image') {
+      transformed.type = 'imageResize';
+    }
+    
+    // Recursively transform nested content
+    if (transformed.content) {
+      transformed.content = transformImageNodes(transformed.content);
+    }
+    
+    return transformed;
+  }
+  
+  return content;
+}
+
 export default function RichTextEditor({
   onChange,
   initialContent,
   onEditorReady,
 }: RichTextEditorProps) {
+  // Transform image nodes to imageResize for compatibility with tiptap-extension-resize-image
+  const transformedContent = useMemo(() => {
+    return transformImageNodes(initialContent);
+  }, [initialContent]);
   const editor = useEditor({
     immediatelyRender: false,
     shouldRerenderOnTransaction: true,
@@ -45,7 +78,7 @@ export default function RichTextEditor({
       Color,
       TextStyle,
     ],
-    content: initialContent,
+    content: transformedContent,
     onUpdate: ({ editor }) => {
       onChange?.(editor.getJSON());
     },
@@ -100,17 +133,17 @@ export default function RichTextEditor({
 
   // Update editor content when initialContent changes (e.g., when editing existing content)
   useEffect(() => {
-    if (editor && initialContent && !editor.isDestroyed) {
+    if (editor && transformedContent && !editor.isDestroyed) {
       // Only update if the editor content is empty or different from initialContent
       const currentContent = editor.getJSON();
       const isEmpty = !currentContent.content || currentContent.content.length === 0 || 
         (currentContent.content.length === 1 && currentContent.content[0].type === 'paragraph' && !currentContent.content[0].content);
       
       if (isEmpty) {
-        editor.commands.setContent(initialContent);
+        editor.commands.setContent(transformedContent);
       }
     }
-  }, [editor, initialContent]);
+  }, [editor, transformedContent]);
 
   return (
     <div>
