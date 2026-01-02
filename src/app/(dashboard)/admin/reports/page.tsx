@@ -192,11 +192,7 @@ export default function AdminReportsPage() {
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-0">
-          {!reports ? (
-            <div className="py-8 text-center text-muted-foreground">
-              Carregando...
-            </div>
-          ) : reports.length === 0 ? (
+          {reports ? reports.length === 0 ? (
             <div className="py-8 text-center text-muted-foreground">
               Nenhum relatório encontrado nesta categoria.
             </div>
@@ -265,6 +261,10 @@ export default function AdminReportsPage() {
                   </div>
                 );
               })}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              Carregando...
             </div>
           )}
         </TabsContent>

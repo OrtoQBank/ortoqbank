@@ -4,8 +4,8 @@ import { Color } from '@tiptap/extension-color';
 import { TextStyle } from '@tiptap/extension-text-style';
 import { EditorContent, useEditor } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
-import ImageResize from 'tiptap-extension-resize-image';
 import { useEffect } from 'react';
+import ImageResize from 'tiptap-extension-resize-image';
 
 import { toast } from '@/hooks/use-toast';
 

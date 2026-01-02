@@ -1,28 +1,18 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-
-import { fixupConfigRules } from '@eslint/compat';
-import { FlatCompat } from '@eslint/eslintrc';
-import js from '@eslint/js';
+import { globalIgnores } from 'eslint/config';
+import nextCoreWebVitals from 'eslint-config-next/core-web-vitals';
+import playwright from 'eslint-plugin-playwright';
 import simpleImportSort from 'eslint-plugin-simple-import-sort';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
-const compat = new FlatCompat({
-  baseDirectory: __dirname,
-  recommendedConfig: js.configs.recommended,
-  allConfig: js.configs.all,
-});
+import unicornPluginUnicorn from 'eslint-plugin-unicorn';
 
 export default [
-  ...fixupConfigRules(
-    compat.extends(
-      'next/core-web-vitals',
-      'plugin:unicorn/recommended',
-      'plugin:import/recommended',
-      'plugin:playwright/recommended',
-    ),
-  ),
+  // Global ignores
+  globalIgnores(['src/components/', 'src/app/components/']),
+
+  // Native flat configs
+  ...nextCoreWebVitals,
+  unicornPluginUnicorn.configs.recommended,
+  playwright.configs['flat/recommended'],
+
   {
     plugins: {
       'simple-import-sort': simpleImportSort,
@@ -43,7 +33,7 @@ export default [
   },
   {
     files: ['**/*.js'],
-
+    
     rules: {
       'unicorn/prefer-module': 'off',
     },

@@ -183,15 +183,11 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
       );
 
       // Wrap in a container if wrapperStyle exists (for imageResize centering/alignment)
-      if (Object.keys(parsedWrapperStyles).length > 0) {
-        element = (
+      element = Object.keys(parsedWrapperStyles).length > 0 ? (
           <div key={key} style={parsedWrapperStyles as React.CSSProperties}>
             {imgElement}
           </div>
-        );
-      } else {
-        element = imgElement;
-      }
+        ) : imgElement;
       break;
     }
     case 'heading': {
