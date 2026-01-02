@@ -7,7 +7,9 @@
     "migrate-tiptap-content": "./scripts/migrate-content-to-string.js"
   },
   "scripts": {
-    "dev": "next dev --turbopack",
+    "dev": "next dev",
+    "dev:convex": "convex dev",
+    "dev:all": "npm-run-all --parallel dev dev:convex",
     "seed": "convex run init",
     "build": "next build && npm run sentry:sourcemaps",
     "start": "next start",
@@ -86,6 +88,7 @@
     "lucide-react": "^0.525.0",
     "next": "16.1.1",
     "nextjs-toploader": "^3.9.17",
+    "npm-run-all2": "^8.0.4",
     "nuqs": "^2.8.6",
     "posthog-js": "^1.310.1",
     "posthog-node": "^4.18.0",
