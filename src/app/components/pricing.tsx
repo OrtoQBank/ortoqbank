@@ -7,13 +7,18 @@ import { PricingClient } from './pricing-client';
 export const dynamic = 'force-static';
 export const revalidate = 3600;
 
-// Server component that fetches the data
-export default async function Pricing() {
+// Helper function to fetch plans with error handling
+async function getPlans() {
   try {
-    const plans = await fetchQuery(api.pricingPlans.getPricingPlans);
-    return <PricingClient plans={plans} />;
+    return await fetchQuery(api.pricingPlans.getPricingPlans);
   } catch (error) {
     console.error('Failed to fetch pricing plans:', error);
-    return <PricingClient plans={[]} />;
+    return [];
   }
+}
+
+// Server component that fetches the data
+export default async function Pricing() {
+  const plans = await getPlans();
+  return <PricingClient plans={plans} />;
 }

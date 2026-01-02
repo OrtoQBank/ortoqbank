@@ -183,10 +183,7 @@ export default function ManagePresetExams() {
   const watchedCategory = useWatch({ control: form.control, name: 'category' });
 
   // Watch the theme ID to filter questions
-  const watchedThemeId = form.watch('themeId');
-
-  // Watch for category changes to reset subcategory if needed
-  const watchedCategory = form.watch('category');
+  const watchedThemeId = useWatch({ control: form.control, name: 'themeId' });
 
   // Reset subcategory when category changes to trilha
   useEffect(() => {
@@ -488,7 +485,7 @@ export default function ManagePresetExams() {
                                   {...field}
                                   placeholder="Ex: TARO, TEOT, Simulados"
                                   value={field.value || ''}
-                                  disabled={form.watch('category') === 'trilha'}
+                                  disabled={watchedCategory === 'trilha'}
                                 />
                               </FormControl>
                               <FormMessage />

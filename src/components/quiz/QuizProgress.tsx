@@ -1,5 +1,5 @@
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
-import { useEffect, useState } from 'react';
+import { useMemo, useState } from 'react';
 
 interface QuizProgressProps {
   currentIndex: number;
@@ -20,8 +20,8 @@ export default function QuizProgress({
 }: QuizProgressProps) {
   const isExamMode = mode === 'exam';
 
-  // State to track the first visible question index
-  const [startIndex, setStartIndex] = useState(0);
+  // State to track user's manual navigation offset
+  const [manualOffset, setManualOffset] = useState(0);
 
   // Find the furthest answered question index
   const furthestAnsweredIndex = answerFeedback.reduce(
@@ -36,24 +36,23 @@ export default function QuizProgress({
     totalQuestions - 1,
   );
 
-  // Ensure current question is visible initially, but not after user manually navigates
-  useEffect(() => {
-    // Only auto-adjust when the current question changes, not when startIndex changes
-    if (
-      currentIndex < startIndex ||
-      currentIndex >= startIndex + visibleCount
-    ) {
-      setStartIndex(
-        Math.max(0, Math.min(currentIndex, totalQuestions - visibleCount)),
-      );
+  // Derive startIndex from currentIndex (ensuring current question is visible)
+  const baseStartIndex = useMemo(() => {
+    // Calculate the base position to keep current question visible
+    if (currentIndex < manualOffset) {
+      return Math.max(0, currentIndex);
     }
-  }, [currentIndex, totalQuestions, visibleCount]);
+    if (currentIndex >= manualOffset + visibleCount) {
+      return Math.max(0, Math.min(currentIndex, totalQuestions - visibleCount));
+    }
+    return manualOffset;
+  }, [currentIndex, manualOffset, visibleCount, totalQuestions]);
 
   // Make sure start index is valid
   const validStartIndex = Math.max(
     0,
     Math.min(
-      startIndex,
+      baseStartIndex,
       totalQuestions - Math.min(totalQuestions, visibleCount),
     ),
   );
@@ -76,7 +75,7 @@ export default function QuizProgress({
         {showLeftArrow && (
           <button
             onClick={() =>
-              setStartIndex(Math.max(0, validStartIndex - visibleCount))
+              setManualOffset(Math.max(0, validStartIndex - visibleCount))
             }
             className="flex h-8 w-8 items-center justify-center rounded-full bg-gray-100 hover:bg-gray-200"
             aria-label="Previous questions"
@@ -154,7 +153,7 @@ export default function QuizProgress({
         {showRightArrow && (
           <button
             onClick={() =>
-              setStartIndex(
+              setManualOffset(
                 Math.min(
                   totalQuestions - visibleCount,
                   validStartIndex + visibleCount,

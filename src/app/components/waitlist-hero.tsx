@@ -20,6 +20,7 @@ export default function WaitlistHeroSection() {
             <div className="grid items-center gap-12 lg:grid-cols-[400px_1fr] lg:gap-20">
               {/* Left side - Image/Card */}
               <div className="flex justify-center lg:justify-start">
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 <img 
                   src="/hero1.1.jpeg" 
                   alt="OrtoClub TEOT" 

@@ -56,7 +56,7 @@ export default function AdminDashboard() {
   };
 
   if (!users) {
-    return <div>Loading...</div>;
+    return <div>Carregando...</div>;
   }
 
   return (

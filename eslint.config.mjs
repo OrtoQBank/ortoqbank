@@ -6,7 +6,7 @@ import unicornPluginUnicorn from 'eslint-plugin-unicorn';
 
 const eslintConfig = [
   // Global ignores
-  globalIgnores(['src/components/', 'src/app/components/']),
+  globalIgnores(['src/components/ui', 'src/components/kibo-ui']),
 
   // Native flat configs
   ...nextCoreWebVitals,
