@@ -420,7 +420,7 @@ export const SubthemeSelector = memo(function SubthemeSelector({
         </div>
       ) : undefined;
     });
-  }, [selectedThemes, themes, themeSubthemes, SubthemeItem, questionMode]);
+  }, [selectedThemes, themes, themeSubthemes, SubthemeItem]);
 
   // Conditional rendering AFTER all hooks are called
   if (!selectedThemes || selectedThemes.length === 0) {
