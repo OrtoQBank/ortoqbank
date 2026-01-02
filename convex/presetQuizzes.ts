@@ -82,7 +82,7 @@ export const listTrilhasSorted = query({
       .collect();
 
     // Sort by displayOrder, then name
-    return trilhas.sort((a, b) => {
+    return trilhas.toSorted((a, b) => {
       if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
         return a.displayOrder - b.displayOrder;
       }
@@ -129,7 +129,7 @@ export const listSimuladosSorted = query({
       .collect();
 
     // Sort by displayOrder, then name
-    return simulados.sort((a, b) => {
+    return simulados.toSorted((a, b) => {
       if (a.displayOrder !== undefined && b.displayOrder !== undefined) {
         return a.displayOrder - b.displayOrder;
       }

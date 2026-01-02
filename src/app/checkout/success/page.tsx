@@ -3,7 +3,7 @@
 import { useQuery } from 'convex/react';
 import { CheckCircle, Home,Loader2, Mail } from 'lucide-react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef } from 'react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
@@ -22,7 +22,7 @@ function CheckoutSuccessContent() {
   const searchParams = useSearchParams();
   const orderId = searchParams.get('order');
   
-  const [gtmEventSent, setGtmEventSent] = useState(false);
+  const gtmEventSentRef = useRef(false);
 
   // Get order details
   const orderDetails = useQuery(
@@ -32,7 +32,7 @@ function CheckoutSuccessContent() {
 
   // Send GTM purchase event
   useEffect(() => {
-    if (orderDetails && !gtmEventSent && typeof globalThis !== 'undefined') {
+    if (orderDetails && !gtmEventSentRef.current && typeof globalThis !== 'undefined') {
       const dataLayer = (globalThis as typeof globalThis & { dataLayer?: Object[] }).dataLayer;
       if (dataLayer) {
         dataLayer.push({
@@ -51,10 +51,10 @@ function CheckoutSuccessContent() {
           transaction_id: orderId,
           value: orderDetails.finalPrice,
         });
-        setGtmEventSent(true);
+        gtmEventSentRef.current = true;
       }
     }
-  }, [orderDetails, orderId, gtmEventSent]);
+  }, [orderDetails, orderId]);
 
   if (!orderId) {
     return (

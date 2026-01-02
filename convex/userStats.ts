@@ -444,7 +444,7 @@ export const getUserStatsFast = query({
         };
       })
       .filter((stat): stat is NonNullable<typeof stat> => stat !== null)
-      .sort((a, b) => b.total - a.total);
+      .toSorted((a, b) => b.total - a.total);
 
     return {
       overall: {
@@ -680,7 +680,7 @@ export const getUserWeeklyProgress = query({
 
     // Convert to array and sort by week
     const sortedWeeks = [...weeklyData.entries()]
-      .sort(([a], [b]) => a.localeCompare(b))
+      .toSorted(([a], [b]) => a.localeCompare(b))
       .slice(-12); // Get last 12 weeks
 
     // Calculate cumulative totals

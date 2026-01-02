@@ -1,7 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay';
@@ -18,8 +18,11 @@ export default function Layout({
 }) {
   const router = useRouter();
   const [showOnboarding, setShowOnboarding] = useState(false);
-  const [isRedirecting, setIsRedirecting] = useState(false);
+  const [hasRedirected, setHasRedirected] = useState(false);
   const { isLoading, isAuthenticated, user } = useCurrentUser();
+  
+  // Track if we've already initiated redirect to prevent multiple calls
+  const redirectInitiatedRef = useRef(false);
   
   // Check if user should see onboarding (simplified without URL params)
   useEffect(() => {
@@ -30,10 +33,9 @@ export default function Layout({
     if (isAuthenticated && user && hasCompletedOnboarding === false) {
       // Small delay to ensure sidebar is rendered
       timerId = setTimeout(() => setShowOnboarding(true), 500);
-    } else {
-      // Hide onboarding in all other cases
-      setShowOnboarding(false);
     }
+    // Note: we only set showOnboarding to true via timeout, never synchronously set to false
+    // The false state is handled by the onComplete callback or initial state
     
     // Cleanup: cancel pending timer when effect re-runs or component unmounts
     return () => {
@@ -41,12 +43,14 @@ export default function Layout({
         clearTimeout(timerId);
       }
     };
-  }, [user?.onboardingCompleted, isAuthenticated]);
+  }, [user?.onboardingCompleted, isAuthenticated, user]);
 
   // Redirect to sign-in if not authenticated using Next.js navigation
   useEffect(() => {
-    if (!isLoading && !isAuthenticated) {
-      setIsRedirecting(true);
+    if (!isLoading && !isAuthenticated && !redirectInitiatedRef.current) {
+      redirectInitiatedRef.current = true;
+      // Use setTimeout to avoid synchronous setState
+      setTimeout(() => setHasRedirected(true), 0);
       router.replace('/sign-in');
     }
   }, [isLoading, isAuthenticated, router]);
@@ -64,7 +68,7 @@ export default function Layout({
   }
 
   // Show loading placeholder while redirecting to sign-in
-  if (!isAuthenticated || isRedirecting) {
+  if (!isAuthenticated || hasRedirected) {
     return null;
   }
 
