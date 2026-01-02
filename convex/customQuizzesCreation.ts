@@ -40,6 +40,23 @@ export const create = mutation({
   handler: async (ctx, args) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
+    // Validation: 'unanswered' mode requires at least one filter to limit scope
+    if (args.questionMode === 'unanswered') {
+      const hasFilters =
+        (args.selectedThemes?.length || 0) > 0 ||
+        (args.selectedSubthemes?.length || 0) > 0 ||
+        (args.selectedGroups?.length || 0) > 0;
+
+      if (!hasFilters) {
+        return {
+          success: false as const,
+          error: 'UNANSWERED_REQUIRES_FILTERS' as const,
+          message:
+            'Para o modo "Não Respondidas", selecione pelo menos um tema, subtema ou grupo. Isso ajuda a limitar o escopo e melhorar o desempenho.',
+        };
+      }
+    }
+
     // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
@@ -152,24 +169,44 @@ async function collectQuestions(
   );
 
   // Step 1: Get base question pool based on question mode
-  if (questionMode === 'all') {
-    // Use aggregate-backed random selection for ultra-fast 'all' mode
+  if (questionMode === 'all' || questionMode === 'unanswered') {
+    // Use aggregate-backed random selection for 'all' and 'unanswered' modes
+    // For 'unanswered', we'll filter out answered questions after getting random IDs
     const questionIds = await collectAllModeQuestionIds(
       ctx,
       selectedThemes,
       selectedSubthemes,
       selectedGroups,
-      maxQuestions,
+      maxQuestions * 2, // Over-fetch for unanswered filtering
     );
 
-    const docs = await Promise.all(questionIds.map(id => ctx.db.get(id)));
+    // For 'unanswered' mode, filter out answered questions
+    let filteredIds = questionIds;
+    if (questionMode === 'unanswered') {
+      const answeredStats = await ctx.db
+        .query('userQuestionStats')
+        .withIndex('by_user', q => q.eq('userId', userId))
+        .collect();
+
+      const answeredQuestionIds = new Set(
+        answeredStats.filter(stat => stat.hasAnswered).map(s => s.questionId),
+      );
+
+      filteredIds = questionIds.filter(id => !answeredQuestionIds.has(id));
+      console.log(
+        `🚀 Filtered to ${filteredIds.length} unanswered questions from ${questionIds.length} total`,
+      );
+    }
+
+    const docs = await Promise.all(filteredIds.map(id => ctx.db.get(id)));
     const questions = docs.filter((q): q is Doc<'questions'> => q !== null);
     console.log(
-      `🚀 'all' mode selected ${questions.length} questions via aggregates`,
+      `🚀 '${questionMode}' mode selected ${questions.length} questions via aggregates`,
     );
     return questions;
   }
 
+  // For 'incorrect' and 'bookmarked' modes
   const baseQuestions = await getQuestionsByUserMode(ctx, userId, questionMode);
 
   console.log(
@@ -345,7 +382,8 @@ async function collectAllModeQuestionIds(
 }
 
 /**
- * Get questions filtered by user mode (incorrect, unanswered, bookmarked)
+ * Get questions filtered by user mode (incorrect, bookmarked)
+ * NOTE: 'unanswered' mode is handled directly in collectQuestions using aggregates
  */
 async function getQuestionsByUserMode(
   ctx: QueryCtx | MutationCtx,
@@ -367,17 +405,6 @@ async function getQuestionsByUserMode(
       return questions.filter((q): q is Doc<'questions'> => q !== null);
     }
 
-    case 'unanswered': {
-      const allQuestions = await ctx.db.query('questions').collect();
-      const answeredStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user', q => q.eq('userId', userId))
-        .collect();
-
-      const answeredQuestionIds = new Set(answeredStats.map(s => s.questionId));
-      return allQuestions.filter(q => !answeredQuestionIds.has(q._id));
-    }
-
     case 'bookmarked': {
       const bookmarks = await ctx.db
         .query('userBookmarks')
@@ -388,6 +415,14 @@ async function getQuestionsByUserMode(
         bookmarks.map(bookmark => ctx.db.get(bookmark.questionId)),
       );
       return questions.filter((q): q is Doc<'questions'> => q !== null);
+    }
+
+    case 'all':
+    case 'unanswered': {
+      // These modes are handled in collectQuestions via aggregates
+      throw new Error(
+        `${questionMode} mode should be handled in collectQuestions`,
+      );
     }
 
     default: {
