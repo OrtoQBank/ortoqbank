@@ -242,13 +242,19 @@ export const completeQuizSession = mutation({
     await ctx.db.patch(session._id, { isComplete: true });
 
     // Insert into lightweight summary table for efficient queries
-    await ctx.db.insert('completedQuizSummaries', {
-      tenantId: session.tenantId,
-      userId: userId._id,
-      quizId: args.quizId,
-      sessionId: session._id,
-      completedAt: Date.now(),
-    });
+    const existingSummary = await ctx.db
+      .query('completedQuizSummaries')
+      .withIndex('by_session', q => q.eq('sessionId', session._id))
+      .first();
+    if (!existingSummary) {
+      await ctx.db.insert('completedQuizSummaries', {
+        tenantId: session.tenantId,
+        userId: userId._id,
+        quizId: args.quizId,
+        sessionId: session._id,
+        completedAt: Date.now(),
+      });
+    }
 
     return { success: true };
   },
