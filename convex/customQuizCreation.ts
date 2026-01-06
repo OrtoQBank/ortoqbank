@@ -1,13 +1,35 @@
+/**
+ * Custom Quiz Creation Module
+ *
+ * This module handles the creation of custom quizzes with optimized question selection.
+ *
+ * ARCHITECTURE:
+ * - Mode-aware selection: Different strategies for all/unanswered/incorrect/bookmarked
+ * - Hierarchy-first filtering: When filters are applied, query by hierarchy FIRST
+ * - Aggregate-based for 'all' mode: Ultra-fast random selection using aggregates
+ * - Index-based for filtered modes: Use DB indexes to query efficiently
+ *
+ * PERFORMANCE CONSIDERATIONS:
+ * - Never do global table scans followed by post-filtering
+ * - Use hierarchy indexes when theme/subtheme/group filters are applied
+ * - Limit document fetches to only what's needed
+ */
+
 import { v } from 'convex/values';
 
 import { api } from './_generated/api';
 import { Doc, Id } from './_generated/dataModel';
 import { mutation, type MutationCtx, type QueryCtx } from './_generated/server';
 import { QuestionMode } from './customQuizzes';
+import { selectRandom, shuffleArray } from './lib/shuffle';
 import { getCurrentUserOrThrow } from './users';
 
 // Maximum number of questions allowed in a custom quiz
 export const MAX_QUESTIONS = 120;
+
+// ============================================================================
+// PUBLIC MUTATION
+// ============================================================================
 
 export const create = mutation({
   args: {
@@ -24,6 +46,24 @@ export const create = mutation({
     selectedThemes: v.optional(v.array(v.id('themes'))),
     selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
     selectedGroups: v.optional(v.array(v.id('groups'))),
+    // Pre-computed parent relationships from frontend (optimization to avoid DB reads)
+    groupParents: v.optional(
+      v.record(
+        v.id('groups'),
+        v.object({
+          subthemeId: v.id('subthemes'),
+          themeId: v.id('themes'),
+        }),
+      ),
+    ),
+    subthemeParents: v.optional(
+      v.record(
+        v.id('subthemes'),
+        v.object({
+          themeId: v.id('themes'),
+        }),
+      ),
+    ),
   },
   returns: v.union(
     v.object({
@@ -38,28 +78,33 @@ export const create = mutation({
     }),
   ),
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const user = await getCurrentUserOrThrow(ctx);
 
-    // Use the requested number of questions or default to MAX_QUESTIONS
     const requestedQuestions = args.numQuestions
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
       : MAX_QUESTIONS;
 
-    // Collect questions using simplified logic
-    const questions = await collectQuestions(
+    const selectedThemes = args.selectedThemes || [];
+    const selectedSubthemes = args.selectedSubthemes || [];
+    const selectedGroups = args.selectedGroups || [];
+
+    // Collect questions using optimized strategy
+    const questionIds = await collectQuestionIds(
       ctx,
-      userId._id,
+      user._id,
       args.questionMode,
-      args.selectedThemes || [],
-      args.selectedSubthemes || [],
-      args.selectedGroups || [],
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
       requestedQuestions,
+      args.groupParents,
+      args.subthemeParents,
     );
 
     // Handle no questions found
-    if (questions.length === 0) {
+    if (questionIds.length === 0) {
       const isQuestionModeFiltering = args.questionMode !== 'all';
-      const errorResponse = isQuestionModeFiltering
+      return isQuestionModeFiltering
         ? {
             success: false as const,
             error: 'NO_QUESTIONS_FOUND_AFTER_FILTER' as const,
@@ -72,24 +117,13 @@ export const create = mutation({
             message:
               'Nenhuma questão encontrada com os critérios selecionados. Tente ajustar os filtros ou selecionar temas diferentes.',
           };
-      return errorResponse;
-    }
-
-    // Randomly select questions if we have more than requested
-    let selectedQuestionIds = questions.map(q => q._id);
-    if (selectedQuestionIds.length > requestedQuestions) {
-      selectedQuestionIds = shuffleArray(selectedQuestionIds).slice(
-        0,
-        requestedQuestions,
-      );
     }
 
     // Create quiz name and description
     const quizName =
       args.name || `Custom Quiz - ${new Date().toLocaleDateString()}`;
     const quizDescription =
-      args.description ||
-      `Custom quiz with ${selectedQuestionIds.length} questions`;
+      args.description || `Custom quiz with ${questionIds.length} questions`;
 
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
@@ -101,44 +135,52 @@ export const create = mutation({
     const quizId = await ctx.db.insert('customQuizzes', {
       name: quizName,
       description: quizDescription,
-      questions: selectedQuestionIds,
-      authorId: userId._id,
+      questions: questionIds,
+      authorId: user._id,
       testMode: args.testMode,
       questionMode: args.questionMode,
       selectedThemes: args.selectedThemes,
       selectedSubthemes: args.selectedSubthemes,
       selectedGroups: args.selectedGroups,
-      // Multi-tenancy
       tenantId: defaultApp?._id,
     });
 
     // Create quiz session immediately
     await ctx.db.insert('quizSessions', {
-      userId: userId._id,
+      userId: user._id,
       quizId,
       mode: args.testMode,
       currentQuestionIndex: 0,
       answers: [],
       answerFeedback: [],
       isComplete: false,
-      // Multi-tenancy
       tenantId: defaultApp?._id,
     });
 
     return {
       success: true as const,
       quizId,
-      questionCount: selectedQuestionIds.length,
+      questionCount: questionIds.length,
     };
   },
 });
 
-// Helper functions
+// ============================================================================
+// CORE QUESTION COLLECTION LOGIC
+// ============================================================================
+
+// Type for pre-computed parent relationships
+type GroupParents = Record<
+  Id<'groups'>,
+  { subthemeId: Id<'subthemes'>; themeId: Id<'themes'> }
+>;
+type SubthemeParents = Record<Id<'subthemes'>, { themeId: Id<'themes'> }>;
 
 /**
- * Main function to collect questions based on hierarchy and user preferences
+ * Main entry point for question collection.
+ * Routes to the appropriate strategy based on mode and filters.
  */
-async function collectQuestions(
+async function collectQuestionIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
   questionMode: QuestionMode,
@@ -146,72 +188,90 @@ async function collectQuestions(
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
-): Promise<Doc<'questions'>[]> {
-  console.log(
-    `🚀 Collecting questions: mode=${questionMode}, themes=${selectedThemes.length}, subthemes=${selectedSubthemes.length}, groups=${selectedGroups.length}`,
-  );
-
-  // Step 1: Get base question pool based on question mode
-  if (questionMode === 'all') {
-    // Use aggregate-backed random selection for ultra-fast 'all' mode
-    const questionIds = await collectAllModeQuestionIds(
-      ctx,
-      selectedThemes,
-      selectedSubthemes,
-      selectedGroups,
-      maxQuestions,
-    );
-
-    const docs = await Promise.all(questionIds.map(id => ctx.db.get(id)));
-    const questions = docs.filter((q): q is Doc<'questions'> => q !== null);
-    console.log(
-      `🚀 'all' mode selected ${questions.length} questions via aggregates`,
-    );
-    return questions;
-  }
-
-  const baseQuestions = await getQuestionsByUserMode(ctx, userId, questionMode);
-
-  console.log(
-    `🚀 Base questions from mode '${questionMode}': ${baseQuestions.length}`,
-  );
-
-  // Step 2: Apply hierarchy-based filtering if any filters are selected
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
   const hasFilters =
     selectedThemes.length > 0 ||
     selectedSubthemes.length > 0 ||
     selectedGroups.length > 0;
 
-  if (!hasFilters) {
-    return baseQuestions.slice(0, maxQuestions * 2); // Return more than needed for shuffling
-  }
-
-  const filteredQuestions = await applyHierarchyFilters(
-    ctx,
-    baseQuestions,
-    selectedThemes,
-    selectedSubthemes,
-    selectedGroups,
-  );
-
   console.log(
-    `🚀 Questions after hierarchy filtering: ${filteredQuestions.length}`,
+    `🚀 Collecting questions: mode=${questionMode}, hasFilters=${hasFilters}, max=${maxQuestions}, hasPrecomputedParents=${!!groupParents}`,
   );
-  return filteredQuestions;
+
+  // Route to the appropriate strategy
+  switch (questionMode) {
+    case 'all':
+      return collectAllModeQuestions(
+        ctx,
+        selectedThemes,
+        selectedSubthemes,
+        selectedGroups,
+        maxQuestions,
+        groupParents,
+        subthemeParents,
+      );
+
+    case 'unanswered':
+      return collectUnansweredQuestions(
+        ctx,
+        userId,
+        selectedThemes,
+        selectedSubthemes,
+        selectedGroups,
+        maxQuestions,
+        groupParents,
+        subthemeParents,
+      );
+
+    case 'incorrect':
+      return collectIncorrectQuestions(
+        ctx,
+        userId,
+        selectedThemes,
+        selectedSubthemes,
+        selectedGroups,
+        maxQuestions,
+        groupParents,
+        subthemeParents,
+      );
+
+    case 'bookmarked':
+      return collectBookmarkedQuestions(
+        ctx,
+        userId,
+        selectedThemes,
+        selectedSubthemes,
+        selectedGroups,
+        maxQuestions,
+        groupParents,
+        subthemeParents,
+      );
+
+    default:
+      throw new Error(`Unknown question mode: ${questionMode}`);
+  }
 }
 
+// ============================================================================
+// MODE: ALL - Use aggregates for random selection
+// ============================================================================
+
 /**
- * Aggregate-backed random selection for questionMode 'all'.
- * Respects hierarchy overrides: groups > subthemes > themes.
+ * For 'all' mode, use aggregate-based random selection.
+ * This is ultra-fast and avoids loading question documents.
  */
-async function collectAllModeQuestionIds(
+async function collectAllModeQuestions(
   ctx: QueryCtx | MutationCtx,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
-): Promise<Array<Id<'questions'>>> {
-  // No filters: grab random questions globally
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // No filters: global random selection
   if (
     selectedThemes.length === 0 &&
     selectedSubthemes.length === 0 &&
@@ -222,108 +282,73 @@ async function collectAllModeQuestionIds(
     });
   }
 
-  // Determine overrides and map selected groups by subtheme
-  const overriddenSubthemes = new Set<Id<'subthemes'>>();
-  const overriddenThemesByGroups = new Set<Id<'themes'>>();
-  const groupsBySubtheme = new Map<Id<'subthemes'>, Set<Id<'groups'>>>();
-  let selectedGroupDocs: Array<Doc<'groups'> | null> = [];
-  if (selectedGroups.length > 0) {
-    selectedGroupDocs = await Promise.all(
-      selectedGroups.map(id => ctx.db.get(id)),
-    );
-    for (const g of selectedGroupDocs) {
-      if (g?.subthemeId) {
-        overriddenSubthemes.add(g.subthemeId);
-        if (!groupsBySubtheme.has(g.subthemeId)) {
-          groupsBySubtheme.set(g.subthemeId, new Set());
-        }
-        groupsBySubtheme.get(g.subthemeId)!.add(g._id as Id<'groups'>);
-      }
-    }
+  // With filters: use hierarchy-aware aggregate selection
+  return collectHierarchyFilteredQuestionsViaAggregates(
+    ctx,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    maxQuestions,
+    groupParents,
+    subthemeParents,
+  );
+}
 
-    // Any selected group also overrides its parent theme. Compute themes of selected groups.
-    const uniqueSubthemeIds = [
-      ...new Set(
-        selectedGroupDocs
-          .map(g => g?.subthemeId)
-          .filter(Boolean) as Id<'subthemes'>[],
+/**
+ * Hierarchy-aware aggregate selection for 'all' mode with filters.
+ * Handles hierarchy overrides: groups > subthemes > themes.
+ */
+async function collectHierarchyFilteredQuestionsViaAggregates(
+  ctx: QueryCtx | MutationCtx,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // Compute hierarchy overrides (uses pre-computed parents if available)
+  const { effectiveThemes, effectiveSubthemes, groupsBySubtheme } =
+    await computeEffectiveHierarchy(
+      ctx,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      groupParents,
+      subthemeParents,
+    );
+
+  // Collect IDs from each level in parallel
+  const [groupResults, subthemeResults, themeResults] = await Promise.all([
+    // Groups: always include all selected groups
+    Promise.all(
+      selectedGroups.map(groupId =>
+        ctx.runQuery(api.aggregateQueries.getRandomQuestionsByGroup, {
+          groupId,
+          count: maxQuestions,
+        }),
       ),
-    ];
-    if (uniqueSubthemeIds.length > 0) {
-      const subthemeDocs = await Promise.all(
-        uniqueSubthemeIds.map(id => ctx.db.get(id)),
-      );
-      for (const st of subthemeDocs) {
-        if (st?.themeId) {
-          overriddenThemesByGroups.add(st.themeId);
-        }
-      }
-    }
-  }
-
-  // Themes overridden by selected subthemes
-  const overriddenThemes = new Set<Id<'themes'>>();
-  if (selectedSubthemes.length > 0) {
-    const subthemes = await Promise.all(
-      selectedSubthemes.map(id => ctx.db.get(id)),
-    );
-    for (const s of subthemes) {
-      if (s?.themeId) overriddenThemes.add(s.themeId);
-    }
-  }
-
-  // Apply overrides to selections
-  const effectiveSubthemesSet = new Set(
-    selectedSubthemes.filter(st => !overriddenSubthemes.has(st)),
-  );
-  const effectiveThemes = selectedThemes.filter(
-    th => !overriddenThemes.has(th) && !overriddenThemesByGroups.has(th),
-  );
-
-  // 1) Always include selected groups via random aggregate
-  const groupResults = await Promise.all(
-    selectedGroups.map(groupId =>
-      ctx.runQuery(api.aggregateQueries.getRandomQuestionsByGroup, {
-        groupId,
-        count: maxQuestions,
-      }),
     ),
-  );
 
-  // 2) For each selected subtheme:
-  //    - If it has selected groups, include ONLY the complement (questions in subtheme without those groups)
-  //    - Otherwise include random-by-subtheme aggregate
-  const subthemeResults: Array<Array<Id<'questions'>>> = [];
-  for (const subthemeId of selectedSubthemes) {
-    const selectedGroupsForSubtheme = groupsBySubtheme.get(subthemeId);
-    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0) {
-      // Fetch complement via indexed query
-      const qDocs = await ctx.db
-        .query('questions')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
-        .collect();
-      const complementIds = qDocs
-        .filter(q => !q.groupId || !selectedGroupsForSubtheme.has(q.groupId))
-        .map(q => q._id as Id<'questions'>);
-      subthemeResults.push(complementIds);
-    } else if (effectiveSubthemesSet.has(subthemeId)) {
-      const ids = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestionsBySubtheme,
-        { subthemeId, count: maxQuestions },
-      );
-      subthemeResults.push(ids);
-    }
-  }
-
-  // 3) Include any themes that aren't covered by selected subthemes
-  const themeResults = await Promise.all(
-    effectiveThemes.map(themeId =>
-      ctx.runQuery(api.aggregateQueries.getRandomQuestionsByTheme, {
-        themeId,
-        count: maxQuestions,
-      }),
+    // Subthemes: include complement for overridden ones, full for effective ones
+    collectSubthemeQuestions(
+      ctx,
+      selectedSubthemes,
+      effectiveSubthemes,
+      groupsBySubtheme,
+      maxQuestions,
     ),
-  );
+
+    // Themes: only effective (non-overridden) themes
+    Promise.all(
+      effectiveThemes.map(themeId =>
+        ctx.runQuery(api.aggregateQueries.getRandomQuestionsByTheme, {
+          themeId,
+          count: maxQuestions,
+        }),
+      ),
+    ),
+  ]);
 
   // Combine, dedupe, and downsample
   const combined = [
@@ -331,243 +356,622 @@ async function collectAllModeQuestionIds(
     ...subthemeResults.flat(),
     ...themeResults.flat(),
   ];
+
   const uniqueIds = [...new Set(combined)];
+  console.log(`🚀 'all' mode collected ${uniqueIds.length} unique questions`);
 
-  if (uniqueIds.length <= maxQuestions) return uniqueIds;
-
-  // Fisher-Yates shuffle then slice
-  const shuffled = [...uniqueIds];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled.slice(0, maxQuestions);
+  return uniqueIds.length <= maxQuestions
+    ? uniqueIds
+    : selectRandom(uniqueIds, maxQuestions);
 }
 
+// ============================================================================
+// MODE: UNANSWERED - Query by hierarchy first, then filter answered
+// ============================================================================
+
 /**
- * Get questions filtered by user mode (incorrect, unanswered, bookmarked)
- * OPTIMIZED: For unanswered mode, uses ID-only queries to avoid 16MB limit.
+ * For 'unanswered' mode, we MUST query by hierarchy FIRST.
+ *
+ * CRITICAL: Do NOT use global random selection then post-filter.
+ * That approach fails when the random sample has few matching questions.
+ *
+ * Strategy:
+ * 1. If filters exist: Query questions by hierarchy using indexes
+ * 2. Get user's answered question IDs (fast, uses index)
+ * 3. Filter out answered questions
+ * 4. Randomly select from the remaining
  */
-async function getQuestionsByUserMode(
+async function collectUnansweredQuestions(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
-  questionMode: QuestionMode,
-): Promise<Doc<'questions'>[]> {
-  switch (questionMode) {
-    case 'incorrect': {
-      const incorrectStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user_incorrect', q =>
-          q.eq('userId', userId).eq('isIncorrect', true),
-        )
-        .collect();
-
-      const questions = await Promise.all(
-        incorrectStats.map(stat => ctx.db.get(stat.questionId)),
-      );
-      return questions.filter((q): q is Doc<'questions'> => q !== null);
-    }
-
-    case 'unanswered': {
-      // OPTIMIZED: Get answered question IDs first (lightweight)
-      const answeredStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user_answered', q =>
-          q.eq('userId', userId).eq('hasAnswered', true),
-        )
-        .collect();
-
-      const answeredQuestionIds = new Set<Id<'questions'>>(
-        answeredStats.map(s => s.questionId),
-      );
-
-      // Use aggregate for random ID selection instead of full table scan
-      // This avoids the 16MB limit by not loading all question documents
-      const randomIds: Id<'questions'>[] = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestions,
-        { count: 5000 }, // Get a large pool of random IDs
-      );
-
-      // Filter out answered questions and fetch only the needed documents
-      const unansweredIds = randomIds.filter(
-        id => !answeredQuestionIds.has(id),
-      );
-
-      // Fetch the documents we need (limited set, not full table)
-      const questions = await Promise.all(
-        unansweredIds.slice(0, MAX_QUESTIONS * 2).map(id => ctx.db.get(id)),
-      );
-
-      return questions.filter((q): q is Doc<'questions'> => q !== null);
-    }
-
-    case 'bookmarked': {
-      const bookmarks = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', userId))
-        .collect();
-
-      const questions = await Promise.all(
-        bookmarks.map(bookmark => ctx.db.get(bookmark.questionId)),
-      );
-      return questions.filter((q): q is Doc<'questions'> => q !== null);
-    }
-
-    default: {
-      throw new Error(`Unknown question mode: ${questionMode}`);
-    }
-  }
-}
-
-/**
- * Apply hierarchy-based filtering: Groups override subthemes, subthemes override themes
- */
-async function applyHierarchyFilters(
-  ctx: QueryCtx | MutationCtx,
-  baseQuestions: Doc<'questions'>[],
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
-): Promise<Doc<'questions'>[]> {
-  console.log(
-    `🔧 DEBUG: Starting hierarchy filtering with ${baseQuestions.length} base questions`,
-  );
-  console.log(
-    `🔧 DEBUG: Filters - themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
+  maxQuestions: number,
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // Get user's answered question IDs (lightweight query)
+  const answeredStats = await ctx.db
+    .query('userQuestionStats')
+    .withIndex('by_user_answered', q =>
+      q.eq('userId', userId).eq('hasAnswered', true),
+    )
+    .collect();
+
+  const answeredIds = new Set<Id<'questions'>>(
+    answeredStats.map(s => s.questionId),
   );
 
-  // Sample a few questions to see their structure
-  if (baseQuestions.length > 0) {
-    const sample = baseQuestions.slice(0, 3);
-    console.log(
-      `🔧 DEBUG: Sample questions structure:`,
-      sample.map(q => ({
-        id: q._id,
-        hasThemeId: !!q.themeId,
-        hasSubthemeId: !!q.subthemeId,
-        hasGroupId: !!q.groupId,
-        themeId: q.themeId,
-        subthemeId: q.subthemeId,
-        groupId: q.groupId,
-      })),
-    );
+  console.log(`📊 User has answered ${answeredIds.size} questions`);
+
+  // Get candidate question IDs from hierarchy
+  const candidateIds = await getQuestionIdsByHierarchy(
+    ctx,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    maxQuestions * 3, // Get extra for filtering buffer
+    groupParents,
+    subthemeParents,
+  );
+
+  console.log(`📊 Candidate questions from hierarchy: ${candidateIds.length}`);
+
+  // Filter out answered questions
+  const unansweredIds = candidateIds.filter(id => !answeredIds.has(id));
+
+  console.log(`📊 Unanswered questions after filter: ${unansweredIds.length}`);
+
+  // Randomly select the requested number
+  return unansweredIds.length <= maxQuestions
+    ? shuffleArray(unansweredIds)
+    : selectRandom(unansweredIds, maxQuestions);
+}
+
+// ============================================================================
+// MODE: INCORRECT - Query user stats first, then filter by hierarchy
+// ============================================================================
+
+/**
+ * For 'incorrect' mode, the user's incorrect questions are the primary filter.
+ *
+ * Strategy:
+ * 1. Get user's incorrect question IDs from stats
+ * 2. If filters exist: filter by hierarchy
+ * 3. Randomly select from the remaining
+ */
+async function collectIncorrectQuestions(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<'users'>,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // Get user's incorrect question IDs
+  const incorrectStats = await ctx.db
+    .query('userQuestionStats')
+    .withIndex('by_user_incorrect', q =>
+      q.eq('userId', userId).eq('isIncorrect', true),
+    )
+    .collect();
+
+  console.log(`📊 User has ${incorrectStats.length} incorrect questions`);
+
+  if (incorrectStats.length === 0) {
+    return [];
   }
 
-  const validQuestionIds = new Set<Id<'questions'>>();
+  const hasFilters =
+    selectedThemes.length > 0 ||
+    selectedSubthemes.length > 0 ||
+    selectedGroups.length > 0;
 
-  // Step 1: Process groups (highest priority)
+  if (!hasFilters) {
+    // No filters: just shuffle and select
+    const ids = incorrectStats.map(s => s.questionId);
+    return ids.length <= maxQuestions
+      ? shuffleArray(ids)
+      : selectRandom(ids, maxQuestions);
+  }
+
+  // With filters: use taxonomy data from stats if available, else fetch questions
+  const filteredIds = await filterQuestionsByHierarchy(
+    ctx,
+    incorrectStats,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    groupParents,
+    subthemeParents,
+  );
+
+  console.log(
+    `📊 Incorrect questions after hierarchy filter: ${filteredIds.length}`,
+  );
+
+  return filteredIds.length <= maxQuestions
+    ? shuffleArray(filteredIds)
+    : selectRandom(filteredIds, maxQuestions);
+}
+
+// ============================================================================
+// MODE: BOOKMARKED - Query bookmarks first, then filter by hierarchy
+// ============================================================================
+
+/**
+ * For 'bookmarked' mode, the user's bookmarks are the primary filter.
+ */
+async function collectBookmarkedQuestions(
+  ctx: QueryCtx | MutationCtx,
+  userId: Id<'users'>,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // Get user's bookmarks
+  const bookmarks = await ctx.db
+    .query('userBookmarks')
+    .withIndex('by_user', q => q.eq('userId', userId))
+    .collect();
+
+  console.log(`📊 User has ${bookmarks.length} bookmarks`);
+
+  if (bookmarks.length === 0) {
+    return [];
+  }
+
+  const hasFilters =
+    selectedThemes.length > 0 ||
+    selectedSubthemes.length > 0 ||
+    selectedGroups.length > 0;
+
+  if (!hasFilters) {
+    // No filters: just shuffle and select
+    const ids = bookmarks.map(b => b.questionId);
+    return ids.length <= maxQuestions
+      ? shuffleArray(ids)
+      : selectRandom(ids, maxQuestions);
+  }
+
+  // With filters: use taxonomy data from bookmarks if available
+  const filteredIds = await filterBookmarksByHierarchy(
+    ctx,
+    bookmarks,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    groupParents,
+    subthemeParents,
+  );
+
+  console.log(`📊 Bookmarks after hierarchy filter: ${filteredIds.length}`);
+
+  return filteredIds.length <= maxQuestions
+    ? shuffleArray(filteredIds)
+    : selectRandom(filteredIds, maxQuestions);
+}
+
+// ============================================================================
+// HIERARCHY HELPERS
+// ============================================================================
+
+/**
+ * Compute effective hierarchy after applying overrides.
+ * Groups override subthemes, subthemes override themes.
+ *
+ * OPTIMIZATION: If groupParents and subthemeParents are provided (from frontend),
+ * we skip DB fetches entirely and use the pre-computed parent relationships.
+ */
+async function computeEffectiveHierarchy(
+  ctx: QueryCtx | MutationCtx,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<{
+  effectiveThemes: Id<'themes'>[];
+  effectiveSubthemes: Id<'subthemes'>[];
+  groupsBySubtheme: Map<Id<'subthemes'>, Set<Id<'groups'>>>;
+}> {
+  const overriddenSubthemes = new Set<Id<'subthemes'>>();
+  const overriddenThemes = new Set<Id<'themes'>>();
+  const groupsBySubtheme = new Map<Id<'subthemes'>, Set<Id<'groups'>>>();
+
+  // Process groups to find which subthemes/themes they override
   if (selectedGroups.length > 0) {
-    console.log(`🔧 Processing ${selectedGroups.length} groups`);
-    let groupMatches = 0;
-    baseQuestions.forEach(question => {
-      if (question.groupId && selectedGroups.includes(question.groupId)) {
-        validQuestionIds.add(question._id);
-        groupMatches++;
+    if (groupParents) {
+      // OPTIMIZED PATH: Use pre-computed parent relationships from frontend
+      for (const groupId of selectedGroups) {
+        const parent = groupParents[groupId];
+        if (parent) {
+          overriddenSubthemes.add(parent.subthemeId);
+          overriddenThemes.add(parent.themeId);
+
+          if (!groupsBySubtheme.has(parent.subthemeId)) {
+            groupsBySubtheme.set(parent.subthemeId, new Set());
+          }
+          groupsBySubtheme.get(parent.subthemeId)!.add(groupId);
+        }
       }
-    });
-    console.log(
-      `🔧 DEBUG: Found ${groupMatches} questions matching selected groups`,
-    );
-  }
-
-  // Step 2: Process subthemes (only if not overridden by groups)
-  if (selectedSubthemes.length > 0) {
-    console.log(`🔧 Processing ${selectedSubthemes.length} subthemes`);
-
-    // Build group->subtheme mapping to detect overrides
-    const groupToSubtheme = new Map<Id<'groups'>, Id<'subthemes'>>();
-    if (selectedGroups.length > 0) {
-      const groups = await Promise.all(
+    } else {
+      // FALLBACK: Fetch group documents from DB
+      const groupDocs = await Promise.all(
         selectedGroups.map(id => ctx.db.get(id)),
       );
-      groups.forEach((group, idx) => {
+
+      for (const group of groupDocs) {
         if (group?.subthemeId) {
-          groupToSubtheme.set(selectedGroups[idx], group.subthemeId);
+          overriddenSubthemes.add(group.subthemeId);
+
+          if (!groupsBySubtheme.has(group.subthemeId)) {
+            groupsBySubtheme.set(group.subthemeId, new Set());
+          }
+          groupsBySubtheme.get(group.subthemeId)!.add(group._id);
         }
-      });
-    }
-
-    const overriddenSubthemes = new Set(groupToSubtheme.values());
-    console.log(`🔧 DEBUG: Overridden subthemes by groups:`, [
-      ...overriddenSubthemes,
-    ]);
-
-    let subthemeMatches = 0;
-    baseQuestions.forEach(question => {
-      if (
-        question.subthemeId &&
-        selectedSubthemes.includes(question.subthemeId) && // Include if this subtheme is not overridden by groups OR this question has no group
-        (!overriddenSubthemes.has(question.subthemeId) || !question.groupId)
-      ) {
-        validQuestionIds.add(question._id);
-        subthemeMatches++;
       }
-    });
-    console.log(
-      `🔧 DEBUG: Found ${subthemeMatches} questions matching selected subthemes`,
-    );
+
+      // Get themes overridden by groups (need to fetch subtheme docs)
+      const subthemeIds = [
+        ...new Set(groupDocs.map(g => g?.subthemeId).filter(Boolean)),
+      ] as Id<'subthemes'>[];
+      if (subthemeIds.length > 0) {
+        const subthemeDocs = await Promise.all(
+          subthemeIds.map(id => ctx.db.get(id)),
+        );
+        for (const st of subthemeDocs) {
+          if (st?.themeId) {
+            overriddenThemes.add(st.themeId);
+          }
+        }
+      }
+    }
   }
 
-  // Step 3: Process themes (only if not overridden by subthemes)
-  if (selectedThemes.length > 0) {
-    console.log(`🔧 Processing ${selectedThemes.length} themes`);
-
-    // Build subtheme->theme mapping to detect overrides
-    const subthemeToTheme = new Map<Id<'subthemes'>, Id<'themes'>>();
-    if (selectedSubthemes.length > 0) {
-      const subthemes = await Promise.all(
+  // Process subthemes to find which themes they override
+  if (selectedSubthemes.length > 0) {
+    if (subthemeParents) {
+      // OPTIMIZED PATH: Use pre-computed parent relationships from frontend
+      for (const subthemeId of selectedSubthemes) {
+        const parent = subthemeParents[subthemeId];
+        if (parent) {
+          overriddenThemes.add(parent.themeId);
+        }
+      }
+    } else {
+      // FALLBACK: Fetch subtheme documents from DB
+      const subthemeDocs = await Promise.all(
         selectedSubthemes.map(id => ctx.db.get(id)),
       );
-      subthemes.forEach((subtheme, idx) => {
-        if (subtheme?.themeId) {
-          subthemeToTheme.set(selectedSubthemes[idx], subtheme.themeId);
+      for (const st of subthemeDocs) {
+        if (st?.themeId) {
+          overriddenThemes.add(st.themeId);
         }
-      });
-    }
-
-    const overriddenThemes = new Set(subthemeToTheme.values());
-    console.log(`🔧 DEBUG: Overridden themes by subthemes:`, [
-      ...overriddenThemes,
-    ]);
-
-    let themeMatches = 0;
-    baseQuestions.forEach(question => {
-      if (
-        question.themeId &&
-        selectedThemes.includes(question.themeId) &&
-        !overriddenThemes.has(question.themeId)
-      ) {
-        validQuestionIds.add(question._id);
-        themeMatches++;
       }
-    });
-    console.log(
-      `🔧 DEBUG: Found ${themeMatches} questions matching selected themes`,
-    );
+    }
   }
 
-  const filteredQuestions = baseQuestions.filter(q =>
-    validQuestionIds.has(q._id),
+  // Compute effective selections (non-overridden)
+  const effectiveSubthemes = selectedSubthemes.filter(
+    st => !overriddenSubthemes.has(st),
   );
-  console.log(
-    `🔧 Hierarchy filtering: ${baseQuestions.length} -> ${filteredQuestions.length} questions`,
+  const effectiveThemes = selectedThemes.filter(
+    th => !overriddenThemes.has(th),
   );
 
-  // Debug: Log when no questions match filters
-  if (filteredQuestions.length === 0 && baseQuestions.length > 0) {
-    console.log(
-      `🔧 WARNING: No questions matched hierarchy filters. This suggests an issue with filter criteria.`,
-    );
-    console.log(
-      `🔧 DEBUG: Selected themes: ${selectedThemes.length}, subthemes: ${selectedSubthemes.length}, groups: ${selectedGroups.length}`,
-    );
-  }
-
-  return filteredQuestions;
+  return { effectiveThemes, effectiveSubthemes, groupsBySubtheme };
 }
 
 /**
- * Debug mutation to test question collection without creating a quiz
+ * Collect subtheme questions handling the group override case.
+ * For subthemes with selected groups, only include the complement.
+ */
+async function collectSubthemeQuestions(
+  ctx: QueryCtx | MutationCtx,
+  selectedSubthemes: Id<'subthemes'>[],
+  effectiveSubthemes: Set<Id<'subthemes'>> | Id<'subthemes'>[],
+  groupsBySubtheme: Map<Id<'subthemes'>, Set<Id<'groups'>>>,
+  maxQuestions: number,
+): Promise<Id<'questions'>[][]> {
+  const effectiveSet =
+    effectiveSubthemes instanceof Set
+      ? effectiveSubthemes
+      : new Set(effectiveSubthemes);
+
+  const results: Id<'questions'>[][] = [];
+
+  for (const subthemeId of selectedSubthemes) {
+    const selectedGroupsForSubtheme = groupsBySubtheme.get(subthemeId);
+
+    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0) {
+      // This subtheme has selected groups - include only complement
+      // (questions in subtheme but NOT in any of the selected groups)
+      const qDocs = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .collect();
+
+      const complementIds = qDocs
+        .filter(q => !q.groupId || !selectedGroupsForSubtheme.has(q.groupId))
+        .map(q => q._id);
+
+      results.push(complementIds);
+    } else if (effectiveSet.has(subthemeId)) {
+      // Effective subtheme (not overridden) - use aggregate
+      const ids = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestionsBySubtheme,
+        { subthemeId, count: maxQuestions },
+      );
+      results.push(ids);
+    }
+  }
+
+  return results;
+}
+
+/**
+ * Get question IDs by hierarchy using indexed queries.
+ * This is the core function for filter-first approaches.
+ */
+async function getQuestionIdsByHierarchy(
+  ctx: QueryCtx | MutationCtx,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  maxQuestions: number,
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  const hasFilters =
+    selectedThemes.length > 0 ||
+    selectedSubthemes.length > 0 ||
+    selectedGroups.length > 0;
+
+  // No filters: use global random aggregate
+  if (!hasFilters) {
+    return await ctx.runQuery(api.aggregateQueries.getRandomQuestions, {
+      count: maxQuestions,
+    });
+  }
+
+  // Compute effective hierarchy (uses pre-computed parents if available)
+  const { effectiveThemes, effectiveSubthemes, groupsBySubtheme } =
+    await computeEffectiveHierarchy(
+      ctx,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      groupParents,
+      subthemeParents,
+    );
+
+  const allIds: Id<'questions'>[] = [];
+
+  // Collect from groups (most specific)
+  for (const groupId of selectedGroups) {
+    const docs = await ctx.db
+      .query('questions')
+      .withIndex('by_group', q => q.eq('groupId', groupId))
+      .collect();
+    allIds.push(...docs.map(d => d._id));
+  }
+
+  // Collect from effective subthemes (not overridden by groups)
+  for (const subthemeId of effectiveSubthemes) {
+    // Skip if this subtheme has selected groups
+    if (groupsBySubtheme.has(subthemeId)) {
+      continue;
+    }
+
+    const docs = await ctx.db
+      .query('questions')
+      .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+      .collect();
+    allIds.push(...docs.map(d => d._id));
+  }
+
+  // Collect from effective themes (not overridden by subthemes or groups)
+  for (const themeId of effectiveThemes) {
+    const docs = await ctx.db
+      .query('questions')
+      .withIndex('by_theme', q => q.eq('themeId', themeId))
+      .collect();
+    allIds.push(...docs.map(d => d._id));
+  }
+
+  // Also handle subthemes that have groups selected (get complement)
+  for (const [subthemeId, selectedGroupIds] of groupsBySubtheme.entries()) {
+    // Only if this subtheme was actually selected
+    if (!selectedSubthemes.includes(subthemeId)) {
+      continue;
+    }
+
+    const docs = await ctx.db
+      .query('questions')
+      .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+      .collect();
+
+    // Include questions not in any of the selected groups
+    const complementIds = docs
+      .filter(q => !q.groupId || !selectedGroupIds.has(q.groupId))
+      .map(q => q._id);
+
+    allIds.push(...complementIds);
+  }
+
+  // Dedupe
+  return [...new Set(allIds)];
+}
+
+/**
+ * Filter user stats by hierarchy using taxonomy data from the stats themselves
+ * or fetching question documents if needed.
+ */
+async function filterQuestionsByHierarchy(
+  ctx: QueryCtx | MutationCtx,
+  stats: Array<{
+    questionId: Id<'questions'>;
+    themeId?: Id<'themes'>;
+    subthemeId?: Id<'subthemes'>;
+    groupId?: Id<'groups'>;
+  }>,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // Compute effective hierarchy (uses pre-computed parents if available)
+  const { effectiveThemes, effectiveSubthemes, groupsBySubtheme } =
+    await computeEffectiveHierarchy(
+      ctx,
+      selectedThemes,
+      selectedSubthemes,
+      selectedGroups,
+      groupParents,
+      subthemeParents,
+    );
+
+  const effectiveSubthemesSet = new Set(effectiveSubthemes);
+  const effectiveThemesSet = new Set(effectiveThemes);
+  const selectedGroupsSet = new Set(selectedGroups);
+  const selectedSubthemesSet = new Set(selectedSubthemes);
+
+  const matchingIds: Id<'questions'>[] = [];
+
+  for (const stat of stats) {
+    // Check if taxonomy data is available on the stat
+    const hasLocalTaxonomy =
+      stat.themeId !== undefined ||
+      stat.subthemeId !== undefined ||
+      stat.groupId !== undefined;
+
+    if (hasLocalTaxonomy) {
+      // Use local taxonomy data
+      const matches = checkHierarchyMatch(
+        stat.themeId,
+        stat.subthemeId,
+        stat.groupId,
+        effectiveThemesSet,
+        effectiveSubthemesSet,
+        selectedGroupsSet,
+        selectedSubthemesSet,
+        groupsBySubtheme,
+      );
+
+      if (matches) {
+        matchingIds.push(stat.questionId);
+      }
+    } else {
+      // Fallback: fetch question to get taxonomy
+      const question = await ctx.db.get(stat.questionId);
+      if (!question) continue;
+
+      const matches = checkHierarchyMatch(
+        question.themeId,
+        question.subthemeId,
+        question.groupId,
+        effectiveThemesSet,
+        effectiveSubthemesSet,
+        selectedGroupsSet,
+        selectedSubthemesSet,
+        groupsBySubtheme,
+      );
+
+      if (matches) {
+        matchingIds.push(stat.questionId);
+      }
+    }
+  }
+
+  return matchingIds;
+}
+
+/**
+ * Filter bookmarks by hierarchy.
+ */
+async function filterBookmarksByHierarchy(
+  ctx: QueryCtx | MutationCtx,
+  bookmarks: Array<{
+    questionId: Id<'questions'>;
+    themeId?: Id<'themes'>;
+    subthemeId?: Id<'subthemes'>;
+    groupId?: Id<'groups'>;
+  }>,
+  selectedThemes: Id<'themes'>[],
+  selectedSubthemes: Id<'subthemes'>[],
+  selectedGroups: Id<'groups'>[],
+  groupParents?: GroupParents,
+  subthemeParents?: SubthemeParents,
+): Promise<Id<'questions'>[]> {
+  // Reuse the same logic as filterQuestionsByHierarchy
+  return filterQuestionsByHierarchy(
+    ctx,
+    bookmarks,
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+    groupParents,
+    subthemeParents,
+  );
+}
+
+/**
+ * Check if a question matches the hierarchy filters.
+ */
+function checkHierarchyMatch(
+  themeId: Id<'themes'> | undefined,
+  subthemeId: Id<'subthemes'> | undefined,
+  groupId: Id<'groups'> | undefined,
+  effectiveThemes: Set<Id<'themes'>>,
+  effectiveSubthemes: Set<Id<'subthemes'>>,
+  selectedGroups: Set<Id<'groups'>>,
+  selectedSubthemes: Set<Id<'subthemes'>>,
+  groupsBySubtheme: Map<Id<'subthemes'>, Set<Id<'groups'>>>,
+): boolean {
+  // Check group match (highest priority)
+  if (groupId && selectedGroups.has(groupId)) {
+    return true;
+  }
+
+  // Check subtheme match
+  if (subthemeId && effectiveSubthemes.has(subthemeId)) {
+    return true;
+  }
+
+  // Check subtheme complement match (subtheme selected but has groups, question not in those groups)
+  if (subthemeId && selectedSubthemes.has(subthemeId)) {
+    const selectedGroupsForSubtheme = groupsBySubtheme.get(subthemeId);
+    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0) {
+      // This subtheme has selected groups
+      // Question matches if it's NOT in any of those groups
+      if (!groupId || !selectedGroupsForSubtheme.has(groupId)) {
+        return true;
+      }
+    }
+  }
+
+  // Check theme match (lowest priority)
+  if (themeId && effectiveThemes.has(themeId)) {
+    return true;
+  }
+
+  return false;
+}
+
+// ============================================================================
+// DEBUG MUTATION
+// ============================================================================
+
+/**
+ * Debug mutation to test question collection without creating a quiz.
  */
 export const debugQuestionCollection = mutation({
   args: {
@@ -584,41 +988,32 @@ export const debugQuestionCollection = mutation({
   },
   returns: v.object({
     questionMode: v.string(),
-    totalQuestionsInDB: v.number(),
-    baseQuestionsFound: v.number(),
     hasFilters: v.boolean(),
     filtersApplied: v.object({
       themes: v.number(),
       subthemes: v.number(),
       groups: v.number(),
     }),
-    finalQuestionCount: v.number(),
-    sampleQuestions: v.array(
-      v.object({
-        id: v.string(),
-        hasThemeId: v.boolean(),
-        hasSubthemeId: v.boolean(),
-        hasGroupId: v.boolean(),
-      }),
-    ),
+    questionsCollected: v.number(),
+    executionTimeMs: v.number(),
   }),
   handler: async (ctx, args) => {
-    const userId = await getCurrentUserOrThrow(ctx);
+    const user = await getCurrentUserOrThrow(ctx);
     const maxQuestions = args.maxQuestions || 50;
 
-    // Get total questions in DB for reference
-    const allQuestionsInDB = await ctx.db.query('questions').collect();
+    const startTime = Date.now();
 
-    // Test the collection logic
-    const questions = await collectQuestions(
+    const questionIds = await collectQuestionIds(
       ctx,
-      userId._id,
+      user._id,
       args.questionMode,
       args.selectedThemes || [],
       args.selectedSubthemes || [],
       args.selectedGroups || [],
       maxQuestions,
     );
+
+    const executionTimeMs = Date.now() - startTime;
 
     const hasFilters =
       (args.selectedThemes?.length || 0) > 0 ||
@@ -627,33 +1022,14 @@ export const debugQuestionCollection = mutation({
 
     return {
       questionMode: args.questionMode,
-      totalQuestionsInDB: allQuestionsInDB.length,
-      baseQuestionsFound: questions.length,
       hasFilters,
       filtersApplied: {
         themes: args.selectedThemes?.length || 0,
         subthemes: args.selectedSubthemes?.length || 0,
         groups: args.selectedGroups?.length || 0,
       },
-      finalQuestionCount: questions.length,
-      sampleQuestions: questions.slice(0, 5).map(q => ({
-        id: q._id,
-        hasThemeId: !!q.themeId,
-        hasSubthemeId: !!q.subthemeId,
-        hasGroupId: !!q.groupId,
-      })),
+      questionsCollected: questionIds.length,
+      executionTimeMs,
     };
   },
 });
-
-/**
- * Randomly shuffle an array using Fisher-Yates algorithm
- */
-function shuffleArray<T>(array: T[]): T[] {
-  const shuffled = [...array];
-  for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
-    [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
-  }
-  return shuffled;
-}
