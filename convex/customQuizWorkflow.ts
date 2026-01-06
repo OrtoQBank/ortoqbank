@@ -545,7 +545,8 @@ export const sampleAndFilterByMode = internalMutation({
     // Check each candidate against the mode filter
     const validIds: Id<'questions'>[] = [];
 
-    if (args.questionMode === 'unanswered') {
+    switch (args.questionMode) {
+    case 'unanswered': {
       // For unanswered: check userQuestionStats for each candidate
       for (const questionId of candidateIds) {
         if (validIds.length >= args.targetCount) break;
@@ -562,7 +563,10 @@ export const sampleAndFilterByMode = internalMutation({
           validIds.push(questionId);
         }
       }
-    } else if (args.questionMode === 'incorrect') {
+    
+    break;
+    }
+    case 'incorrect': {
       // For incorrect: check if question is in user's incorrect stats
       for (const questionId of candidateIds) {
         if (validIds.length >= args.targetCount) break;
@@ -578,7 +582,10 @@ export const sampleAndFilterByMode = internalMutation({
           validIds.push(questionId);
         }
       }
-    } else if (args.questionMode === 'bookmarked') {
+    
+    break;
+    }
+    case 'bookmarked': {
       // For bookmarked: check if question is in user's bookmarks
       for (const questionId of candidateIds) {
         if (validIds.length >= args.targetCount) break;
@@ -594,6 +601,10 @@ export const sampleAndFilterByMode = internalMutation({
           validIds.push(questionId);
         }
       }
+    
+    break;
+    }
+    // No default
     }
 
     // Exhausted if we checked all candidates but didn't find enough
@@ -860,23 +871,7 @@ export const quizCreationWorkflow = workflow.define({
       // SCENARIO A: Mode 'all' - Use aggregate-based random selection
       // =====================================================================
       if (jobData.input.questionMode === 'all') {
-        if (!hasFilters) {
-          // Fast path: No filters, just get random questions from global pool
-          await step.runMutation(
-            internal.customQuizWorkflow.updateCollectionProgress,
-            {
-              jobId: args.jobId,
-              progress: 10,
-              message: 'Selecionando questões aleatórias...',
-            },
-            { name: 'progress_random' },
-          );
-
-          questionIds = await step.runQuery(
-            api.aggregateQueries.getRandomQuestions,
-            { count: maxQuestions },
-          );
-        } else {
+        if (hasFilters) {
           // Filters applied: Collect ALL matching questions, then random sample
           await step.runMutation(
             internal.customQuizWorkflow.updateCollectionProgress,
@@ -931,6 +926,22 @@ export const quizCreationWorkflow = workflow.define({
 
           // Deduplicate and shuffle
           questionIds = [...new Set(allIds)];
+        } else {
+          // Fast path: No filters, just get random questions from global pool
+          await step.runMutation(
+            internal.customQuizWorkflow.updateCollectionProgress,
+            {
+              jobId: args.jobId,
+              progress: 10,
+              message: 'Selecionando questões aleatórias...',
+            },
+            { name: 'progress_random' },
+          );
+
+          questionIds = await step.runQuery(
+            api.aggregateQueries.getRandomQuestions,
+            { count: maxQuestions },
+          );
         }
       }
       // =====================================================================
@@ -1000,7 +1011,8 @@ export const quizCreationWorkflow = workflow.define({
           { name: 'progress_mode' },
         );
 
-        if (jobData.input.questionMode === 'unanswered') {
+        switch (jobData.input.questionMode) {
+        case 'unanswered': {
           // Get all answered IDs for this user (paginated)
           let answerCursor: string | null = null;
           const answeredIds = new Set<Id<'questions'>>();
@@ -1024,7 +1036,10 @@ export const quizCreationWorkflow = workflow.define({
 
           // Filter out answered questions
           questionIds = uniqueHierarchyIds.filter(id => !answeredIds.has(id));
-        } else if (jobData.input.questionMode === 'incorrect') {
+        
+        break;
+        }
+        case 'incorrect': {
           // Get all incorrect IDs for this user (paginated)
           let incorrectCursor: string | null = null;
           const incorrectIds = new Set<Id<'questions'>>();
@@ -1052,7 +1067,10 @@ export const quizCreationWorkflow = workflow.define({
 
           // Keep only incorrect questions from hierarchy
           questionIds = uniqueHierarchyIds.filter(id => incorrectIds.has(id));
-        } else if (jobData.input.questionMode === 'bookmarked') {
+        
+        break;
+        }
+        case 'bookmarked': {
           // Get all bookmarked IDs for this user (paginated)
           let bookmarkCursor: string | null = null;
           const bookmarkedIds = new Set<Id<'questions'>>();
@@ -1080,6 +1098,10 @@ export const quizCreationWorkflow = workflow.define({
 
           // Keep only bookmarked questions from hierarchy
           questionIds = uniqueHierarchyIds.filter(id => bookmarkedIds.has(id));
+        
+        break;
+        }
+        // No default
         }
       }
       // =====================================================================
