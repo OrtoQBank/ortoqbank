@@ -334,9 +334,10 @@ export const collectFilteredQuestionsBatch = internalMutation({
     ) {
       const subthemeId = args.selectedSubthemes[currentIndex];
 
-      // Skip if overridden by groups
+      // Skip if overridden by groups - reset cursor to avoid stale pagination
       if (overriddenSubthemes.has(subthemeId)) {
         currentIndex++;
+        nextCursor = null; // Clear cursor when skipping to next subtheme
         if (currentIndex >= args.selectedSubthemes.length) {
           currentLevel = 'themes';
           currentIndex = 0;
@@ -368,9 +369,10 @@ export const collectFilteredQuestionsBatch = internalMutation({
     ) {
       const themeId = args.selectedThemes[currentIndex];
 
-      // Skip if overridden by subthemes
+      // Skip if overridden by subthemes - reset cursor to avoid stale pagination
       if (overriddenThemes.has(themeId)) {
         currentIndex++;
+        nextCursor = null; // Clear cursor when skipping to next theme
       } else {
         const result = await ctx.db
           .query('questions')
