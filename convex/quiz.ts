@@ -5,18 +5,30 @@ import { query } from './_generated/server';
 import { mutation } from './triggers';
 
 // Helper to fetch question content from questionContent table
+// Falls back to deprecated fields on the question itself if content not migrated yet
 async function fetchQuestionContent(
   ctx: any,
   questionId: Id<'questions'>,
-): Promise<{ questionTextString: string; alternatives: string[] } | null> {
+  question?: Doc<'questions'> | null,
+): Promise<{ questionTextString: string; alternatives: string[] }> {
+  // First try the new questionContent table
   const content = await ctx.db
     .query('questionContent')
     .withIndex('by_question', (q: any) => q.eq('questionId', questionId))
     .first();
-  if (!content) return null;
+
+  if (content) {
+    return {
+      questionTextString: content.questionTextString,
+      alternatives: content.alternatives,
+    };
+  }
+
+  // Fallback to deprecated fields on the question itself (for non-migrated questions)
+  const questionDoc = question || (await ctx.db.get(questionId));
   return {
-    questionTextString: content.questionTextString,
-    alternatives: content.alternatives,
+    questionTextString: questionDoc?.questionTextString || '',
+    alternatives: questionDoc?.alternatives || [],
   };
 }
 
@@ -81,20 +93,21 @@ export const getQuizData = query({
     if (!quiz) throw new Error('Quiz not found');
 
     // Get all questions with content from questionContent table
+    // Falls back to deprecated fields on question if not migrated
     const safeQuestions: SafeQuestion[] = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
         if (!question) throw new Error('Question not found');
 
-        // Fetch heavy content from questionContent table
-        const content = await fetchQuestionContent(ctx, questionId);
+        // Fetch heavy content (with fallback to deprecated fields)
+        const content = await fetchQuestionContent(ctx, questionId, question);
 
         return {
           _id: question._id,
           _creationTime: question._creationTime,
           title: question.title,
-          questionTextString: content?.questionTextString || '',
-          alternatives: content?.alternatives || [],
+          questionTextString: content.questionTextString,
+          alternatives: content.alternatives,
           questionCode: question.questionCode,
         };
       }),
@@ -118,26 +131,27 @@ export type ResultsQuestion = {
 };
 
 // Lightweight version for quiz results - fetches content from questionContent table
+// Falls back to deprecated fields on question if not migrated
 export const getQuizDataForResults = query({
   args: { quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')) },
   handler: async (ctx, args) => {
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
-    // Get question data with content from questionContent table
+    // Get question data with content (with fallback to deprecated fields)
     const lightweightQuestions: ResultsQuestion[] = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
         if (!question) throw new Error('Question not found');
 
-        // Fetch heavy content from questionContent table
-        const content = await fetchQuestionContent(ctx, questionId);
+        // Fetch heavy content (with fallback to deprecated fields)
+        const content = await fetchQuestionContent(ctx, questionId, question);
 
         return {
           _id: question._id,
           _creationTime: question._creationTime,
-          questionTextString: content?.questionTextString || '',
-          alternatives: content?.alternatives || [],
+          questionTextString: content.questionTextString,
+          alternatives: content.alternatives,
           correctAlternativeIndex: question.correctAlternativeIndex,
           questionCode: question.questionCode,
         };

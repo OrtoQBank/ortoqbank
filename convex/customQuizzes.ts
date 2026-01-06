@@ -1,22 +1,34 @@
 import { v } from 'convex/values';
 
-import { Id } from './_generated/dataModel';
+import { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
 
 // Helper to fetch question content from questionContent table
+// Falls back to deprecated fields on the question itself if content not migrated yet
 async function fetchQuestionContent(
   ctx: any,
   questionId: Id<'questions'>,
-): Promise<{ questionTextString: string; alternatives: string[] } | null> {
+  question?: Doc<'questions'> | null,
+): Promise<{ questionTextString: string; alternatives: string[] }> {
+  // First try the new questionContent table
   const content = await ctx.db
     .query('questionContent')
     .withIndex('by_question', (q: any) => q.eq('questionId', questionId))
     .first();
-  if (!content) return null;
+
+  if (content) {
+    return {
+      questionTextString: content.questionTextString,
+      alternatives: content.alternatives,
+    };
+  }
+
+  // Fallback to deprecated fields on the question itself (for non-migrated questions)
+  const questionDoc = question || (await ctx.db.get(questionId));
   return {
-    questionTextString: content.questionTextString,
-    alternatives: content.alternatives,
+    questionTextString: questionDoc?.questionTextString || '',
+    alternatives: questionDoc?.alternatives || [],
   };
 }
 
@@ -108,6 +120,7 @@ export const getById = query({
 });
 
 // Lightweight version for quiz results - fetches content from questionContent table
+// Falls back to deprecated fields on question if not migrated
 export const getByIdForResults = query({
   args: { id: v.id('customQuizzes') },
   handler: async (ctx, { id }) => {
@@ -123,20 +136,20 @@ export const getByIdForResults = query({
       throw new Error('Not authorized to access this quiz');
     }
 
-    // Get question data with content from questionContent table
+    // Get question data with content (with fallback to deprecated fields)
     const lightweightQuestions = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
         if (!question) return null;
 
-        // Fetch heavy content from questionContent table
-        const content = await fetchQuestionContent(ctx, questionId);
+        // Fetch heavy content (with fallback to deprecated fields)
+        const content = await fetchQuestionContent(ctx, questionId, question);
 
         return {
           _id: question._id,
           _creationTime: question._creationTime,
-          questionTextString: content?.questionTextString || '',
-          alternatives: content?.alternatives || [],
+          questionTextString: content.questionTextString,
+          alternatives: content.alternatives,
           correctAlternativeIndex: question.correctAlternativeIndex,
           questionCode: question.questionCode,
         };

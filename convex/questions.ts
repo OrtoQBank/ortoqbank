@@ -249,10 +249,22 @@ export const getById = query({
       ? await context.db.get(question.subthemeId)
       : undefined;
 
+    // Fetch content from questionContent table (the new normalized table)
+    const content = await context.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', arguments_.id))
+      .first();
+
     return {
       ...question,
       theme,
       subtheme,
+      // Merge content from questionContent table (overrides deprecated fields from questions table)
+      ...(content && {
+        questionTextString: content.questionTextString,
+        explanationTextString: content.explanationTextString,
+        alternatives: content.alternatives,
+      }),
     };
   },
 });
