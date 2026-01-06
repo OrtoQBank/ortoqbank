@@ -8,19 +8,19 @@ import { Button } from '@/components/ui/button';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
-import { FeedbackModal } from '../../criar-teste/_components/form/modals/FeedbackModal';
-import { NameModal } from '../../criar-teste/_components/form/modals/NameModal';
-import { QuestionCountSelector } from '../../criar-teste/_components/form/QuestionCountSelector';
-import { QuestionModeSelector } from '../../criar-teste/_components/form/QuestionModeSelector';
-import { SubthemeSelector } from '../../criar-teste/_components/form/SubthemeSelector';
-import { TestModeSelector } from '../../criar-teste/_components/form/TestModeSelector';
-import { ThemeSelector } from '../../criar-teste/_components/form/ThemeSelector';
-import { useTestFormState } from '../../criar-teste/_components/hooks/useTestFormState';
-import { type TestFormData } from '../../criar-teste/_components/schema';
+import { FeedbackModal } from './form/modals/FeedbackModal';
+import { NameModal } from './form/modals/NameModal';
+import { QuestionCountSelector } from './form/QuestionCountSelector';
+import { QuestionModeSelector } from './form/QuestionModeSelector';
+import { SubthemeSelector } from './form/SubthemeSelector';
+import { TestModeSelector } from './form/TestModeSelector';
+import { ThemeSelector } from './form/ThemeSelector';
 import { useQuizCreationJob } from './hooks/useQuizCreationJob';
+import { useTestFormState } from './hooks/useTestFormState';
 import { ProgressOverlay } from './ProgressOverlay';
+import { type TestFormData } from './schema';
 
-export default function TestFormV2() {
+export default function TestForm() {
   const router = useRouter();
   const [showNameModal, setShowNameModal] = useState(false);
   const [formData, setFormData] = useState<TestFormData | undefined>();
@@ -335,16 +335,6 @@ export default function TestFormV2() {
           state={submissionState}
           message={resultMessage}
         />
-
-        {/* V2 Badge */}
-        <div className="mb-6 flex items-center gap-2">
-          <span className="inline-flex items-center rounded-full bg-blue-100 px-3 py-1 text-xs font-medium text-blue-800">
-            V2 - Workflow com Progresso
-          </span>
-          <span className="text-sm text-gray-500">
-            Esta versão usa workflow assíncrono com acompanhamento em tempo real
-          </span>
-        </div>
 
         <div className="space-y-12 sm:space-y-14">
           {/* Test Mode Section */}

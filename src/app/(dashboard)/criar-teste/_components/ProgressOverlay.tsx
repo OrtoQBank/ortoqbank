@@ -1,7 +1,7 @@
 'use client';
 
-import { AnimatePresence,motion } from 'framer-motion';
-import { CheckCircle2, Loader2,XCircle } from 'lucide-react';
+import { AnimatePresence, motion } from 'framer-motion';
+import { CheckCircle2, Loader2, XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -36,7 +36,7 @@ export function ProgressOverlay({
   useEffect(() => {
     if (status === 'completed' && quizId) {
       const timer = setTimeout(() => {
-        router.push(`/criar-teste-v2/${quizId}`);
+        router.push(`/criar-teste/${quizId}`);
       }, 2000);
       return () => clearTimeout(timer);
     }

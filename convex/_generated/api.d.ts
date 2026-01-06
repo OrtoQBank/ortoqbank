@@ -8,48 +8,47 @@
  * @module
  */
 
-import type * as aggregateQueries from "../aggregateQueries.js";
-import type * as aggregateRepairs from "../aggregateRepairs.js";
-import type * as aggregateWorkflows from "../aggregateWorkflows.js";
-import type * as aggregates from "../aggregates.js";
-import type * as asaas from "../asaas.js";
-import type * as bookmark from "../bookmark.js";
-import type * as clerkActions from "../clerkActions.js";
-import type * as crons from "../crons.js";
-import type * as customQuizWorkflow from "../customQuizWorkflow.js";
-import type * as customQuizzes from "../customQuizzes.js";
-import type * as customQuizzesCreation from "../customQuizzesCreation.js";
-import type * as groups from "../groups.js";
-import type * as http from "../http.js";
-import type * as init from "../init.js";
-import type * as invoices from "../invoices.js";
-import type * as migrations from "../migrations.js";
-import type * as payments from "../payments.js";
-import type * as presetQuizzes from "../presetQuizzes.js";
-import type * as pricingPlans from "../pricingPlans.js";
-import type * as promoCoupons from "../promoCoupons.js";
-import type * as questionErrorReport from "../questionErrorReport.js";
-import type * as questions from "../questions.js";
-import type * as questionsAggregateSync from "../questionsAggregateSync.js";
-import type * as quiz from "../quiz.js";
-import type * as quizSessions from "../quizSessions.js";
-import type * as retrier from "../retrier.js";
-import type * as subthemes from "../subthemes.js";
-import type * as termsActions from "../termsActions.js";
-import type * as themes from "../themes.js";
-import type * as triggers from "../triggers.js";
-import type * as userAccess from "../userAccess.js";
-import type * as userStats from "../userStats.js";
-import type * as userStatsCounts from "../userStatsCounts.js";
-import type * as users from "../users.js";
-import type * as utils from "../utils.js";
-import type * as waitlist from "../waitlist.js";
+import type * as aggregateQueries from '../aggregateQueries.js';
+import type * as aggregateRepairs from '../aggregateRepairs.js';
+import type * as aggregateWorkflows from '../aggregateWorkflows.js';
+import type * as aggregates from '../aggregates.js';
+import type * as asaas from '../asaas.js';
+import type * as bookmark from '../bookmark.js';
+import type * as clerkActions from '../clerkActions.js';
+import type * as crons from '../crons.js';
+import type * as customQuizWorkflow from '../customQuizWorkflow.js';
+import type * as customQuizzes from '../customQuizzes.js';
+import type * as groups from '../groups.js';
+import type * as http from '../http.js';
+import type * as init from '../init.js';
+import type * as invoices from '../invoices.js';
+import type * as migrations from '../migrations.js';
+import type * as payments from '../payments.js';
+import type * as presetQuizzes from '../presetQuizzes.js';
+import type * as pricingPlans from '../pricingPlans.js';
+import type * as promoCoupons from '../promoCoupons.js';
+import type * as questionErrorReport from '../questionErrorReport.js';
+import type * as questions from '../questions.js';
+import type * as questionsAggregateSync from '../questionsAggregateSync.js';
+import type * as quiz from '../quiz.js';
+import type * as quizSessions from '../quizSessions.js';
+import type * as retrier from '../retrier.js';
+import type * as subthemes from '../subthemes.js';
+import type * as termsActions from '../termsActions.js';
+import type * as themes from '../themes.js';
+import type * as triggers from '../triggers.js';
+import type * as userAccess from '../userAccess.js';
+import type * as userStats from '../userStats.js';
+import type * as userStatsCounts from '../userStatsCounts.js';
+import type * as users from '../users.js';
+import type * as utils from '../utils.js';
+import type * as waitlist from '../waitlist.js';
 
 import type {
   ApiFromModules,
   FilterApi,
   FunctionReference,
-} from "convex/server";
+} from 'convex/server';
 
 declare const fullApi: ApiFromModules<{
   aggregateQueries: typeof aggregateQueries;
@@ -62,7 +61,6 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   customQuizWorkflow: typeof customQuizWorkflow;
   customQuizzes: typeof customQuizzes;
-  customQuizzesCreation: typeof customQuizzesCreation;
   groups: typeof groups;
   http: typeof http;
   init: typeof init;
@@ -100,7 +98,7 @@ declare const fullApi: ApiFromModules<{
  */
 export declare const api: FilterApi<
   typeof fullApi,
-  FunctionReference<any, "public">
+  FunctionReference<any, 'public'>
 >;
 
 /**
@@ -113,20 +111,20 @@ export declare const api: FilterApi<
  */
 export declare const internal: FilterApi<
   typeof fullApi,
-  FunctionReference<any, "internal">
+  FunctionReference<any, 'internal'>
 >;
 
 export declare const components: {
   rateLimiter: {
     lib: {
       checkRateLimit: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           config:
             | {
                 capacity?: number;
-                kind: "token bucket";
+                kind: 'token bucket';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -135,7 +133,7 @@ export declare const components: {
               }
             | {
                 capacity?: number;
-                kind: "fixed window";
+                kind: 'fixed window';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -151,20 +149,20 @@ export declare const components: {
         { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
       >;
       clearAll: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { before?: number },
         null
       >;
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+      getServerTime: FunctionReference<'mutation', 'internal', {}, number>;
       getValue: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           config:
             | {
                 capacity?: number;
-                kind: "token bucket";
+                kind: 'token bucket';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -173,7 +171,7 @@ export declare const components: {
               }
             | {
                 capacity?: number;
-                kind: "fixed window";
+                kind: 'fixed window';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -188,7 +186,7 @@ export declare const components: {
           config:
             | {
                 capacity?: number;
-                kind: "token bucket";
+                kind: 'token bucket';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -197,7 +195,7 @@ export declare const components: {
               }
             | {
                 capacity?: number;
-                kind: "fixed window";
+                kind: 'fixed window';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -210,13 +208,13 @@ export declare const components: {
         }
       >;
       rateLimit: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           config:
             | {
                 capacity?: number;
-                kind: "token bucket";
+                kind: 'token bucket';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -225,7 +223,7 @@ export declare const components: {
               }
             | {
                 capacity?: number;
-                kind: "fixed window";
+                kind: 'fixed window';
                 maxReserved?: number;
                 period: number;
                 rate: number;
@@ -241,21 +239,21 @@ export declare const components: {
         { ok: true; retryAfter?: number } | { ok: false; retryAfter: number }
       >;
       resetRateLimit: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key?: string; name: string },
         null
       >;
     };
     time: {
-      getServerTime: FunctionReference<"mutation", "internal", {}, number>;
+      getServerTime: FunctionReference<'mutation', 'internal', {}, number>;
     };
   };
   migrations: {
     lib: {
       cancel: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { name: string },
         {
           batchSize?: number;
@@ -267,12 +265,12 @@ export declare const components: {
           name: string;
           next?: Array<string>;
           processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+          state: 'inProgress' | 'success' | 'failed' | 'canceled' | 'unknown';
         }
       >;
       cancelAll: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { sinceTs?: number },
         Array<{
           batchSize?: number;
@@ -284,18 +282,18 @@ export declare const components: {
           name: string;
           next?: Array<string>;
           processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+          state: 'inProgress' | 'success' | 'failed' | 'canceled' | 'unknown';
         }>
       >;
       clearAll: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { before?: number },
         null
       >;
       getStatus: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { limit?: number; names?: Array<string> },
         Array<{
           batchSize?: number;
@@ -307,12 +305,12 @@ export declare const components: {
           name: string;
           next?: Array<string>;
           processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+          state: 'inProgress' | 'success' | 'failed' | 'canceled' | 'unknown';
         }>
       >;
       migrate: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           batchSize?: number;
           cursor?: string | null;
@@ -332,7 +330,7 @@ export declare const components: {
           name: string;
           next?: Array<string>;
           processed: number;
-          state: "inProgress" | "success" | "failed" | "canceled" | "unknown";
+          state: 'inProgress' | 'success' | 'failed' | 'canceled' | 'unknown';
         }
       >;
     };
@@ -340,21 +338,21 @@ export declare const components: {
   workflow: {
     event: {
       create: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { name: string; workflowId: string },
         string
       >;
       send: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           eventId?: string;
           name?: string;
           result:
-            | { kind: "success"; returnValue: any }
-            | { error: string; kind: "failed" }
-            | { kind: "canceled" };
+            | { kind: 'success'; returnValue: any }
+            | { error: string; kind: 'failed' }
+            | { kind: 'canceled' };
           workflowId?: string;
           workpoolOptions?: {
             defaultRetryBehavior?: {
@@ -362,7 +360,7 @@ export declare const components: {
               initialBackoffMs: number;
               maxAttempts: number;
             };
-            logLevel?: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            logLevel?: 'DEBUG' | 'TRACE' | 'INFO' | 'REPORT' | 'WARN' | 'ERROR';
             maxParallelism?: number;
             retryActionsByDefault?: boolean;
           };
@@ -372,8 +370,8 @@ export declare const components: {
     };
     journal: {
       load: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { shortCircuit?: boolean; workflowId: string },
         {
           blocked?: boolean;
@@ -385,15 +383,15 @@ export declare const components: {
                   args: any;
                   argsSize: number;
                   completedAt?: number;
-                  functionType: "query" | "mutation" | "action";
+                  functionType: 'query' | 'mutation' | 'action';
                   handle: string;
                   inProgress: boolean;
-                  kind?: "function";
+                  kind?: 'function';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                   workId?: string;
                 }
@@ -403,12 +401,12 @@ export declare const components: {
                   completedAt?: number;
                   handle: string;
                   inProgress: boolean;
-                  kind: "workflow";
+                  kind: 'workflow';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                   workflowId?: string;
                 }
@@ -418,18 +416,18 @@ export declare const components: {
                   completedAt?: number;
                   eventId?: string;
                   inProgress: boolean;
-                  kind: "event";
+                  kind: 'event';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                 };
             stepNumber: number;
             workflowId: string;
           }>;
-          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+          logLevel: 'DEBUG' | 'TRACE' | 'INFO' | 'REPORT' | 'WARN' | 'ERROR';
           ok: boolean;
           workflow: {
             _creationTime: number;
@@ -440,9 +438,9 @@ export declare const components: {
             name?: string;
             onComplete?: { context?: any; fnHandle: string };
             runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
+              | { kind: 'success'; returnValue: any }
+              | { error: string; kind: 'failed' }
+              | { kind: 'canceled' };
             startedAt?: any;
             state?: any;
             workflowHandle: string;
@@ -450,8 +448,8 @@ export declare const components: {
         }
       >;
       startSteps: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           generationNumber: number;
           steps: Array<{
@@ -464,15 +462,15 @@ export declare const components: {
                   args: any;
                   argsSize: number;
                   completedAt?: number;
-                  functionType: "query" | "mutation" | "action";
+                  functionType: 'query' | 'mutation' | 'action';
                   handle: string;
                   inProgress: boolean;
-                  kind?: "function";
+                  kind?: 'function';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                   workId?: string;
                 }
@@ -482,12 +480,12 @@ export declare const components: {
                   completedAt?: number;
                   handle: string;
                   inProgress: boolean;
-                  kind: "workflow";
+                  kind: 'workflow';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                   workflowId?: string;
                 }
@@ -497,12 +495,12 @@ export declare const components: {
                   completedAt?: number;
                   eventId?: string;
                   inProgress: boolean;
-                  kind: "event";
+                  kind: 'event';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                 };
           }>;
@@ -513,7 +511,7 @@ export declare const components: {
               initialBackoffMs: number;
               maxAttempts: number;
             };
-            logLevel?: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+            logLevel?: 'DEBUG' | 'TRACE' | 'INFO' | 'REPORT' | 'WARN' | 'ERROR';
             maxParallelism?: number;
             retryActionsByDefault?: boolean;
           };
@@ -526,15 +524,15 @@ export declare const components: {
                 args: any;
                 argsSize: number;
                 completedAt?: number;
-                functionType: "query" | "mutation" | "action";
+                functionType: 'query' | 'mutation' | 'action';
                 handle: string;
                 inProgress: boolean;
-                kind?: "function";
+                kind?: 'function';
                 name: string;
                 runResult?:
-                  | { kind: "success"; returnValue: any }
-                  | { error: string; kind: "failed" }
-                  | { kind: "canceled" };
+                  | { kind: 'success'; returnValue: any }
+                  | { error: string; kind: 'failed' }
+                  | { kind: 'canceled' };
                 startedAt: number;
                 workId?: string;
               }
@@ -544,12 +542,12 @@ export declare const components: {
                 completedAt?: number;
                 handle: string;
                 inProgress: boolean;
-                kind: "workflow";
+                kind: 'workflow';
                 name: string;
                 runResult?:
-                  | { kind: "success"; returnValue: any }
-                  | { error: string; kind: "failed" }
-                  | { kind: "canceled" };
+                  | { kind: 'success'; returnValue: any }
+                  | { error: string; kind: 'failed' }
+                  | { kind: 'canceled' };
                 startedAt: number;
                 workflowId?: string;
               }
@@ -559,12 +557,12 @@ export declare const components: {
                 completedAt?: number;
                 eventId?: string;
                 inProgress: boolean;
-                kind: "event";
+                kind: 'event';
                 name: string;
                 runResult?:
-                  | { kind: "success"; returnValue: any }
-                  | { error: string; kind: "failed" }
-                  | { kind: "canceled" };
+                  | { kind: 'success'; returnValue: any }
+                  | { error: string; kind: 'failed' }
+                  | { kind: 'canceled' };
                 startedAt: number;
               };
           stepNumber: number;
@@ -574,33 +572,33 @@ export declare const components: {
     };
     workflow: {
       cancel: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { workflowId: string },
         null
       >;
       cleanup: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { workflowId: string },
         boolean
       >;
       complete: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           generationNumber: number;
           runResult:
-            | { kind: "success"; returnValue: any }
-            | { error: string; kind: "failed" }
-            | { kind: "canceled" };
+            | { kind: 'success'; returnValue: any }
+            | { error: string; kind: 'failed' }
+            | { kind: 'canceled' };
           workflowId: string;
         },
         null
       >;
       create: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           maxParallelism?: number;
           onComplete?: { context?: any; fnHandle: string };
@@ -612,8 +610,8 @@ export declare const components: {
         string
       >;
       getStatus: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { workflowId: string },
         {
           inProgress: Array<{
@@ -624,15 +622,15 @@ export declare const components: {
                   args: any;
                   argsSize: number;
                   completedAt?: number;
-                  functionType: "query" | "mutation" | "action";
+                  functionType: 'query' | 'mutation' | 'action';
                   handle: string;
                   inProgress: boolean;
-                  kind?: "function";
+                  kind?: 'function';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                   workId?: string;
                 }
@@ -642,12 +640,12 @@ export declare const components: {
                   completedAt?: number;
                   handle: string;
                   inProgress: boolean;
-                  kind: "workflow";
+                  kind: 'workflow';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                   workflowId?: string;
                 }
@@ -657,18 +655,18 @@ export declare const components: {
                   completedAt?: number;
                   eventId?: string;
                   inProgress: boolean;
-                  kind: "event";
+                  kind: 'event';
                   name: string;
                   runResult?:
-                    | { kind: "success"; returnValue: any }
-                    | { error: string; kind: "failed" }
-                    | { kind: "canceled" };
+                    | { kind: 'success'; returnValue: any }
+                    | { error: string; kind: 'failed' }
+                    | { kind: 'canceled' };
                   startedAt: number;
                 };
             stepNumber: number;
             workflowId: string;
           }>;
-          logLevel: "DEBUG" | "TRACE" | "INFO" | "REPORT" | "WARN" | "ERROR";
+          logLevel: 'DEBUG' | 'TRACE' | 'INFO' | 'REPORT' | 'WARN' | 'ERROR';
           workflow: {
             _creationTime: number;
             _id: string;
@@ -678,9 +676,9 @@ export declare const components: {
             name?: string;
             onComplete?: { context?: any; fnHandle: string };
             runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
+              | { kind: 'success'; returnValue: any }
+              | { error: string; kind: 'failed' }
+              | { kind: 'canceled' };
             startedAt?: any;
             state?: any;
             workflowHandle: string;
@@ -688,10 +686,10 @@ export declare const components: {
         }
       >;
       listSteps: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
           paginationOpts: {
             cursor: string | null;
             endCursor?: string | null;
@@ -709,20 +707,20 @@ export declare const components: {
             args: any;
             completedAt?: number;
             eventId?: string;
-            kind: "function" | "workflow" | "event";
+            kind: 'function' | 'workflow' | 'event';
             name: string;
             nestedWorkflowId?: string;
             runResult?:
-              | { kind: "success"; returnValue: any }
-              | { error: string; kind: "failed" }
-              | { kind: "canceled" };
+              | { kind: 'success'; returnValue: any }
+              | { error: string; kind: 'failed' }
+              | { kind: 'canceled' };
             startedAt: number;
             stepId: string;
             stepNumber: number;
             workId?: string;
             workflowId: string;
           }>;
-          pageStatus?: "SplitRecommended" | "SplitRequired" | null;
+          pageStatus?: 'SplitRecommended' | 'SplitRequired' | null;
           splitCursor?: string | null;
         }
       >;
@@ -731,27 +729,27 @@ export declare const components: {
   actionRetrier: {
     public: {
       cancel: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { runId: string },
         boolean
       >;
       cleanup: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { runId: string },
         any
       >;
       start: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           functionArgs: any;
           functionHandle: string;
           options: {
             base: number;
             initialBackoffMs: number;
-            logLevel: "DEBUG" | "INFO" | "WARN" | "ERROR";
+            logLevel: 'DEBUG' | 'INFO' | 'WARN' | 'ERROR';
             maxFailures: number;
             onComplete?: string;
             runAfter?: number;
@@ -761,16 +759,16 @@ export declare const components: {
         string
       >;
       status: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { runId: string },
-        | { type: "inProgress" }
+        | { type: 'inProgress' }
         | {
             result:
-              | { returnValue: any; type: "success" }
-              | { error: string; type: "failed" }
-              | { type: "canceled" };
-            type: "completed";
+              | { returnValue: any; type: 'success' }
+              | { error: string; type: 'failed' }
+              | { type: 'canceled' };
+            type: 'completed';
           }
       >;
     };
@@ -778,32 +776,32 @@ export declare const components: {
   questionCountTotal: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -815,33 +813,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -850,30 +848,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -884,8 +882,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -898,44 +896,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -947,8 +945,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -964,32 +962,32 @@ export declare const components: {
   questionCountByTheme: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -1001,33 +999,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -1036,30 +1034,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1070,8 +1068,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1084,44 +1082,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1133,8 +1131,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1150,32 +1148,32 @@ export declare const components: {
   questionCountBySubtheme: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -1187,33 +1185,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -1222,30 +1220,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1256,8 +1254,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1270,44 +1268,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1319,8 +1317,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1336,32 +1334,32 @@ export declare const components: {
   questionCountByGroup: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -1373,33 +1371,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -1408,30 +1406,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1442,8 +1440,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1456,44 +1454,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1505,8 +1503,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1522,32 +1520,32 @@ export declare const components: {
   randomQuestions: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -1559,33 +1557,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -1594,30 +1592,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1628,8 +1626,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1642,44 +1640,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1691,8 +1689,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1708,32 +1706,32 @@ export declare const components: {
   randomQuestionsByTheme: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -1745,33 +1743,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -1780,30 +1778,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1814,8 +1812,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -1828,44 +1826,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1877,8 +1875,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -1894,32 +1892,32 @@ export declare const components: {
   randomQuestionsBySubtheme: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -1931,33 +1929,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -1966,30 +1964,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -2000,8 +1998,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -2014,44 +2012,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -2063,8 +2061,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -2080,32 +2078,32 @@ export declare const components: {
   randomQuestionsByGroup: {
     btree: {
       aggregateBetween: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any },
         { count: number; sum: number }
       >;
       aggregateBetweenBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { queries: Array<{ k1?: any; k2?: any; namespace?: any }> },
         Array<{ count: number; sum: number }>
       >;
       atNegativeOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; k2?: any; namespace?: any; offset: number },
         { k: any; s: number; v: any }
       >;
       atOffsetBatch: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           queries: Array<{
             k1?: any;
@@ -2117,33 +2115,33 @@ export declare const components: {
         Array<{ k: any; s: number; v: any }>
       >;
       get: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { key: any; namespace?: any },
         null | { k: any; s: number; v: any }
       >;
       offset: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k1?: any; key: any; namespace?: any },
         number
       >;
       offsetUntil: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { k2?: any; key: any; namespace?: any },
         number
       >;
       paginate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         {
           cursor?: string;
           k1?: any;
           k2?: any;
           limit: number;
           namespace?: any;
-          order: "asc" | "desc";
+          order: 'asc' | 'desc';
         },
         {
           cursor: string;
@@ -2152,30 +2150,30 @@ export declare const components: {
         }
       >;
       paginateNamespaces: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { cursor?: string; limit: number },
         { cursor: string; isDone: boolean; page: Array<any> }
       >;
       validate: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any },
         any
       >;
     };
     inspect: {
-      display: FunctionReference<"query", "internal", { namespace?: any }, any>;
-      dump: FunctionReference<"query", "internal", { namespace?: any }, string>;
+      display: FunctionReference<'query', 'internal', { namespace?: any }, any>;
+      dump: FunctionReference<'query', 'internal', { namespace?: any }, string>;
       inspectNode: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { namespace?: any; node?: string },
         null
       >;
       listTreeNodes: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -2186,8 +2184,8 @@ export declare const components: {
         }>
       >;
       listTrees: FunctionReference<
-        "query",
-        "internal",
+        'query',
+        'internal',
         { take?: number },
         Array<{
           _creationTime: number;
@@ -2200,44 +2198,44 @@ export declare const components: {
     };
     public: {
       clear: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       delete_: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         null
       >;
       deleteIfExists: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any },
         any
       >;
       init: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { maxNodeSize?: number; namespace?: any; rootLazy?: boolean },
         null
       >;
       insert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { key: any; namespace?: any; summand?: number; value: any },
         null
       >;
       makeRootLazy: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         { namespace?: any },
         null
       >;
       replace: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;
@@ -2249,8 +2247,8 @@ export declare const components: {
         null
       >;
       replaceOrInsert: FunctionReference<
-        "mutation",
-        "internal",
+        'mutation',
+        'internal',
         {
           currentKey: any;
           namespace?: any;

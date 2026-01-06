@@ -183,8 +183,8 @@ if (counts) {
 ## ❓ What About Unanswered Questions?
 
 - **For counts**: Total questions - `totalAnswered` from counts table
-- **For quiz generation**: Still use existing efficient approach in
-  `customQuizzesCreation.ts`
+- **For quiz generation**: Use durable workflow approach in
+  `customQuizWorkflow.ts` with real-time progress tracking
 
 ---
 
