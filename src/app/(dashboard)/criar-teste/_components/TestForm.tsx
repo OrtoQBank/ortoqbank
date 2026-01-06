@@ -15,9 +15,7 @@ import { QuestionModeSelector } from './form/QuestionModeSelector';
 import { SubthemeSelector } from './form/SubthemeSelector';
 import { TestModeSelector } from './form/TestModeSelector';
 import { ThemeSelector } from './form/ThemeSelector';
-import { useQuizCreationJob } from './hooks/useQuizCreationJob';
 import { useTestFormState } from './hooks/useTestFormState';
-import { ProgressOverlay } from './ProgressOverlay';
 import { type TestFormData } from './schema';
 
 export default function TestForm() {
@@ -25,7 +23,7 @@ export default function TestForm() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [formData, setFormData] = useState<TestFormData | undefined>();
   const [submissionState, setSubmissionState] = useState<
-    'idle' | 'loading' | 'success' | 'error' | 'no-questions'
+    'idle' | 'loading' | 'success' | 'error' | 'no-questions' | 'validation-error'
   >('idle');
   const [resultMessage, setResultMessage] = useState<{
     title: string;
@@ -34,23 +32,15 @@ export default function TestForm() {
     title: '',
     description: '',
   });
+  const [successData, setSuccessData] = useState<{
+    quizId: string;
+    questionCount: number;
+  } | null>(null);
 
-  // V2: Use the workflow mutation instead of the synchronous one
-  const createWithWorkflow = useMutation(
-    api.customQuizWorkflow.createWithWorkflow,
-  );
+  // Use the direct mutation instead of the workflow
+  const createQuiz = useMutation(api.customQuizCreation.create);
 
-  // Job progress tracking
-  const {
-    jobStatus,
-    isActive: isJobActive,
-    isCompleted,
-    isFailed,
-    startWatching,
-    reset: resetJob,
-  } = useQuizCreationJob();
-
-  // Custom hook for form state and logic (reused from v1)
+  // Custom hook for form state and logic
   const {
     form,
     handleSubmit,
@@ -61,37 +51,6 @@ export default function TestForm() {
     isAuthenticated,
     isLoading,
   } = useTestFormState();
-
-  // Build hierarchy maps from hierarchicalData
-  const buildHierarchyMaps = useCallback(() => {
-    if (!hierarchicalData) {
-      return {
-        groupToSubtheme: {} as Record<Id<'groups'>, Id<'subthemes'>>,
-        subthemeToTheme: {} as Record<Id<'subthemes'>, Id<'themes'>>,
-      };
-    }
-
-    const groupToSubtheme: Record<Id<'groups'>, Id<'subthemes'>> = {};
-    const subthemeToTheme: Record<Id<'subthemes'>, Id<'themes'>> = {};
-
-    // Build group -> subtheme mapping
-    for (const group of hierarchicalData.groups || []) {
-      if (group.subthemeId) {
-        groupToSubtheme[group._id as Id<'groups'>] =
-          group.subthemeId as Id<'subthemes'>;
-      }
-    }
-
-    // Build subtheme -> theme mapping
-    for (const subtheme of hierarchicalData.subthemes || []) {
-      if (subtheme.themeId) {
-        subthemeToTheme[subtheme._id as Id<'subthemes'>] =
-          subtheme.themeId as Id<'themes'>;
-      }
-    }
-
-    return { groupToSubtheme, subthemeToTheme };
-  }, [hierarchicalData]);
 
   const onSubmit = async (data: TestFormData) => {
     setFormData(data);
@@ -105,11 +64,8 @@ export default function TestForm() {
       try {
         setSubmissionState('loading');
 
-        // Build hierarchy maps from the already-loaded hierarchicalData
-        const { groupToSubtheme, subthemeToTheme } = buildHierarchyMaps();
-
-        // V2: Use the workflow mutation with pre-computed hierarchy maps
-        const result = await createWithWorkflow({
+        // Use the direct mutation (no workflow)
+        const result = await createQuiz({
           name: testName,
           description: `Teste criado em ${new Date().toLocaleDateString()}`,
           testMode: formData.testMode,
@@ -118,14 +74,29 @@ export default function TestForm() {
           selectedThemes: formData.selectedThemes as Id<'themes'>[],
           selectedSubthemes: formData.selectedSubthemes as Id<'subthemes'>[],
           selectedGroups: formData.selectedGroups as Id<'groups'>[],
-          // OPTIMIZED: Pass pre-computed hierarchy relationships
-          groupToSubtheme,
-          subthemeToTheme,
         });
 
-        // Start watching the job for progress updates
-        startWatching(result.jobId);
         setShowNameModal(false);
+
+        // Handle result based on success flag
+        if (result.success) {
+          setSuccessData({
+            quizId: result.quizId,
+            questionCount: result.questionCount,
+          });
+          setResultMessage({
+            title: 'Quiz criado com sucesso!',
+            description: `Seu teste foi criado com ${result.questionCount} questões.`,
+          });
+          setSubmissionState('success');
+        } else {
+          // No questions found
+          setSubmissionState('no-questions');
+          setResultMessage({
+            title: 'Nenhuma questão encontrada',
+            description: result.message,
+          });
+        }
       } catch (error) {
         console.error('Erro ao criar quiz:', error);
         setSubmissionState('error');
@@ -144,13 +115,7 @@ export default function TestForm() {
         setShowNameModal(false);
       }
     },
-    [
-      formData,
-      createWithWorkflow,
-      mapQuestionMode,
-      buildHierarchyMaps,
-      startWatching,
-    ],
+    [formData, createQuiz, mapQuestionMode, router],
   );
 
   // Memoized form handlers (same as v1)
@@ -262,12 +227,6 @@ export default function TestForm() {
     [hierarchicalData?.groups],
   );
 
-  // Handle progress overlay close on error
-  const handleProgressClose = useCallback(() => {
-    resetJob();
-    setSubmissionState('idle');
-  }, [resetJob]);
-
   // Show loading state while authentication is being checked
   if (!isAuthenticated) {
     return (
@@ -280,25 +239,31 @@ export default function TestForm() {
     );
   }
 
-  const isProcessing = isJobActive || submissionState === 'loading';
+  const isProcessing = submissionState === 'loading';
 
   return (
     <>
-      {/* Progress Overlay for workflow tracking */}
-      <ProgressOverlay
-        isVisible={isJobActive || isCompleted || isFailed}
-        status={jobStatus?.status || 'pending'}
-        progress={jobStatus?.progress || 0}
-        progressMessage={jobStatus?.progressMessage}
-        quizId={jobStatus?.quizId}
-        questionCount={jobStatus?.questionCount}
-        error={jobStatus?.error}
-        errorMessage={jobStatus?.errorMessage}
-        onClose={handleProgressClose}
-      />
-
       <form
         onSubmit={e => {
+          const currentValues = form.getValues();
+          const questionMode = currentValues.questionMode;
+          const hasFilters =
+            (currentValues.selectedThemes?.length || 0) > 0 ||
+            (currentValues.selectedSubthemes?.length || 0) > 0 ||
+            (currentValues.selectedGroups?.length || 0) > 0;
+
+          // For "all" and "unanswered" modes, require at least one filter
+          if ((questionMode === 'all' || questionMode === 'unanswered') && !hasFilters) {
+            e.preventDefault();
+            setSubmissionState('validation-error');
+            setResultMessage({
+              title: 'Seleção obrigatória',
+              description:
+                'Para os modos "Todas" e "Não respondidas", você deve selecionar pelo menos um tema, subtema ou grupo.',
+            });
+            return;
+          }
+
           const currentQuestionCount = getCurrentQuestionCount();
           if (!isLoading && currentQuestionCount === 0) {
             e.preventDefault();
@@ -322,18 +287,28 @@ export default function TestForm() {
 
         <FeedbackModal
           isOpen={
-            submissionState === 'error' || submissionState === 'no-questions'
+            submissionState === 'error' ||
+            submissionState === 'no-questions' ||
+            submissionState === 'validation-error' ||
+            submissionState === 'success'
           }
           onClose={() => {
             if (
               submissionState === 'error' ||
-              submissionState === 'no-questions'
+              submissionState === 'no-questions' ||
+              submissionState === 'validation-error'
             ) {
               setSubmissionState('idle');
             }
           }}
           state={submissionState}
           message={resultMessage}
+          questionCount={successData?.questionCount}
+          onStartQuiz={
+            successData
+              ? () => router.push(`/criar-teste/${successData.quizId}`)
+              : undefined
+          }
         />
 
         <div className="space-y-12 sm:space-y-14">
