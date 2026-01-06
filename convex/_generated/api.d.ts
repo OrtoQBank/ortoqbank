@@ -23,6 +23,7 @@ import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
 import type * as invoices from "../invoices.js";
+import type * as lib_shuffle from "../lib/shuffle.js";
 import type * as migrations from "../migrations.js";
 import type * as payments from "../payments.js";
 import type * as presetQuizzes from "../presetQuizzes.js";
@@ -67,6 +68,7 @@ declare const fullApi: ApiFromModules<{
   http: typeof http;
   init: typeof init;
   invoices: typeof invoices;
+  "lib/shuffle": typeof lib_shuffle;
   migrations: typeof migrations;
   payments: typeof payments;
   presetQuizzes: typeof presetQuizzes;

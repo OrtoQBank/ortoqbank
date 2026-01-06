@@ -64,6 +64,36 @@ export default function TestForm() {
       try {
         setSubmissionState('loading');
 
+        // Build pre-computed parent relationships from cached hierarchicalData
+        // This eliminates DB reads in the backend for computing effective hierarchy
+        const groupParents: Record<
+          string,
+          { subthemeId: Id<'subthemes'>; themeId: Id<'themes'> }
+        > = {};
+        const subthemeParents: Record<string, { themeId: Id<'themes'> }> = {};
+
+        if (hierarchicalData) {
+          // Build subtheme -> themeId lookup
+          const subthemeToTheme = new Map<string, Id<'themes'>>();
+          for (const subtheme of hierarchicalData.subthemes || []) {
+            subthemeToTheme.set(subtheme._id, subtheme.themeId as Id<'themes'>);
+            subthemeParents[subtheme._id] = {
+              themeId: subtheme.themeId as Id<'themes'>,
+            };
+          }
+
+          // Build group -> (subthemeId, themeId) lookup
+          for (const group of hierarchicalData.groups || []) {
+            const themeId = subthemeToTheme.get(group.subthemeId);
+            if (themeId) {
+              groupParents[group._id] = {
+                subthemeId: group.subthemeId as Id<'subthemes'>,
+                themeId,
+              };
+            }
+          }
+        }
+
         // Use the direct mutation (no workflow)
         const result = await createQuiz({
           name: testName,
@@ -74,6 +104,15 @@ export default function TestForm() {
           selectedThemes: formData.selectedThemes as Id<'themes'>[],
           selectedSubthemes: formData.selectedSubthemes as Id<'subthemes'>[],
           selectedGroups: formData.selectedGroups as Id<'groups'>[],
+          // Pre-computed parent relationships (optimization)
+          groupParents: groupParents as Record<
+            Id<'groups'>,
+            { subthemeId: Id<'subthemes'>; themeId: Id<'themes'> }
+          >,
+          subthemeParents: subthemeParents as Record<
+            Id<'subthemes'>,
+            { themeId: Id<'themes'> }
+          >,
         });
 
         setShowNameModal(false);
@@ -115,7 +154,7 @@ export default function TestForm() {
         setShowNameModal(false);
       }
     },
-    [formData, createQuiz, mapQuestionMode, router],
+    [formData, createQuiz, mapQuestionMode, hierarchicalData],
   );
 
   // Memoized form handlers (same as v1)
