@@ -202,7 +202,7 @@ async function collectQuestionIds(
 
   // Route to the appropriate strategy
   switch (questionMode) {
-    case 'all':
+    case 'all': {
       return collectAllModeQuestions(
         ctx,
         selectedThemes,
@@ -212,8 +212,9 @@ async function collectQuestionIds(
         groupParents,
         subthemeParents,
       );
+    }
 
-    case 'unanswered':
+    case 'unanswered': {
       return collectUnansweredQuestions(
         ctx,
         userId,
@@ -224,8 +225,9 @@ async function collectQuestionIds(
         groupParents,
         subthemeParents,
       );
+    }
 
-    case 'incorrect':
+    case 'incorrect': {
       return collectIncorrectQuestions(
         ctx,
         userId,
@@ -236,8 +238,9 @@ async function collectQuestionIds(
         groupParents,
         subthemeParents,
       );
+    }
 
-    case 'bookmarked':
+    case 'bookmarked': {
       return collectBookmarkedQuestions(
         ctx,
         userId,
@@ -248,9 +251,11 @@ async function collectQuestionIds(
         groupParents,
         subthemeParents,
       );
+    }
 
-    default:
+    default: {
       throw new Error(`Unknown question mode: ${questionMode}`);
+    }
   }
 }
 
@@ -949,13 +954,11 @@ function checkHierarchyMatch(
   // Check subtheme complement match (subtheme selected but has groups, question not in those groups)
   if (subthemeId && selectedSubthemes.has(subthemeId)) {
     const selectedGroupsForSubtheme = groupsBySubtheme.get(subthemeId);
-    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0) {
-      // This subtheme has selected groups
+    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0 && // This subtheme has selected groups
       // Question matches if it's NOT in any of those groups
-      if (!groupId || !selectedGroupsForSubtheme.has(groupId)) {
+      (!groupId || !selectedGroupsForSubtheme.has(groupId))) {
         return true;
       }
-    }
   }
 
   // Check theme match (lowest priority)
