@@ -115,7 +115,7 @@ export const submitAnswerAndProgress = mutation({
       v.literal(0),
       v.literal(1),
       v.literal(2),
-      v.literal(3),  
+      v.literal(3),
       v.literal(4),
       v.literal(5),
     ),
@@ -148,7 +148,7 @@ export const submitAnswerAndProgress = mutation({
       throw new Error('Session out of sync: question index out of bounds');
     }
     const currentQuestion = await ctx.db.get(currentQuestionId);
-    
+
     if (!currentQuestion) throw new Error('Question not found');
 
     // 3. Pre-compute values for efficient session update
@@ -180,13 +180,20 @@ export const submitAnswerAndProgress = mutation({
 
     // 4b. If quiz is complete, insert into lightweight summary table for efficient queries
     if (isQuizComplete) {
-      await ctx.db.insert('completedQuizSummaries', {
-        tenantId: session.tenantId,
-        userId: userId._id,
-        quizId: args.quizId,
-        sessionId: session._id,
-        completedAt: Date.now(),
-      });
+      const existingSummary = await ctx.db
+        .query('completedQuizSummaries')
+        .withIndex('by_session', q => q.eq('sessionId', session._id))
+        .first();
+
+      if (!existingSummary) {
+        await ctx.db.insert('completedQuizSummaries', {
+          tenantId: session.tenantId,
+          userId: userId._id,
+          quizId: args.quizId,
+          sessionId: session._id,
+          completedAt: Date.now(),
+        });
+      }
     }
 
     // 5. Schedule user stats update asynchronously (non-blocking)
