@@ -59,9 +59,9 @@ export function FeedbackModal({
                 Quiz pronto
               </DialogTitle>
               <DialogDescription className="text-muted-foreground text-center text-sm">
-                {questionCount !== undefined
-                  ? `${questionCount} questões selecionadas`
-                  : message.description}
+                {questionCount === undefined
+                  ? message.description
+                  : `${questionCount} questões selecionadas`}
               </DialogDescription>
               {onStartQuiz && (
                 <Button
