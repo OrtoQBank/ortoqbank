@@ -42,4 +42,3 @@ export default function QuizPageV2() {
 
   return <Quiz quizId={id} mode={mode} />;
 }
-

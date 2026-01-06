@@ -76,7 +76,7 @@ function BookmarkedSubthemeCount({ subthemeId }: { subthemeId: string }) {
     userCountsForQuizCreation.bySubtheme[subthemeId]?.bookmarked || 0;
 
   return (
-    <span className="ml-1 rounded-full bg-brand-blue/10 px-1.5 py-0.5 text-xs text-brand-blue">
+    <span className="bg-brand-blue/10 text-brand-blue ml-1 rounded-full px-1.5 py-0.5 text-xs">
       {count}
     </span>
   );
@@ -166,7 +166,7 @@ function BookmarkedGroupCount({ groupId }: { groupId: string }) {
   const count = userCountsForQuizCreation.byGroup[groupId]?.bookmarked || 0;
 
   return (
-    <span className="ml-1 rounded-full bg-brand-blue/10 px-1.5 py-0.5 text-xs text-brand-blue">
+    <span className="bg-brand-blue/10 text-brand-blue ml-1 rounded-full px-1.5 py-0.5 text-xs">
       {count}
     </span>
   );

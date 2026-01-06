@@ -1,17 +1,17 @@
 import {
-    BookOpenIcon,
-    FileTextIcon,
-    type LucideIcon,
-    UserCircleIcon,
+  BookOpenIcon,
+  FileTextIcon,
+  type LucideIcon,
+  UserCircleIcon,
 } from 'lucide-react';
 import Link from 'next/link';
 
 import {
-    SidebarGroup,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    useSidebar,
+  SidebarGroup,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
 } from '../ui/sidebar';
 
 interface MenuItem {

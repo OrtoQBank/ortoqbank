@@ -69,13 +69,17 @@ export function useQuestionForm({
           title: '',
           questionTextString: JSON.stringify({
             type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }],
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: '' }] },
+            ],
           }),
           alternatives: ['', '', '', ''],
           correctAlternativeIndex: undefined,
           explanationTextString: JSON.stringify({
             type: 'doc',
-            content: [{ type: 'paragraph', content: [{ type: 'text', text: '' }] }],
+            content: [
+              { type: 'paragraph', content: [{ type: 'text', text: '' }] },
+            ],
           }),
           themeId: '',
           subthemeId: undefined,

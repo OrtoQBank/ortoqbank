@@ -24,7 +24,7 @@ export const create = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
     return await ctx.db.insert('presetQuizzes', {

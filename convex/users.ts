@@ -28,14 +28,16 @@ export const current = query({
       termsAccepted: v.optional(v.boolean()),
       onboardingCompleted: v.optional(v.boolean()),
       role: v.optional(v.string()),
-      status: v.optional(v.union(
-        v.literal("invited"),
-        v.literal("active"), 
-        v.literal("suspended"),
-        v.literal("expired")
-      )),
+      status: v.optional(
+        v.union(
+          v.literal('invited'),
+          v.literal('active'),
+          v.literal('suspended'),
+          v.literal('expired'),
+        ),
+      ),
     }),
-    v.null()
+    v.null(),
   ),
   handler: async context => {
     return await getCurrentUser(context);
@@ -163,12 +165,14 @@ async function userByClerkUserId(context: QueryContext, clerkUserId: string) {
 
 // Função para verificar se o usuário atual é admin
 // Agora usa dados do banco de dados ao invés do JWT token
-export async function requireAdmin(context: QueryContext | MutationCtx): Promise<void> {
+export async function requireAdmin(
+  context: QueryContext | MutationCtx,
+): Promise<void> {
   const user = await getCurrentUser(context);
   if (!user) {
     throw new Error('Unauthorized: Authentication required');
   }
-  
+
   if (user.role !== 'admin') {
     throw new Error('Unauthorized: Admin access required');
   }
@@ -178,7 +182,7 @@ export async function requireAdmin(context: QueryContext | MutationCtx): Promise
 export const getCurrentUserRole = query({
   args: {},
   returns: v.union(v.string(), v.null()),
-  handler: async (ctx) => {
+  handler: async ctx => {
     const user = await getCurrentUser(ctx);
     return user?.role || null;
   },
@@ -196,21 +200,20 @@ export const hasRole = query({
 
 // Função para definir o papel de um usuário (apenas admins podem usar)
 export const setUserRole = mutation({
-  args: { 
+  args: {
     userId: v.id('users'),
-    role: v.optional(v.string())
+    role: v.optional(v.string()),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     // Verifica se o usuário atual é admin
     await requireAdmin(ctx);
-    
+
     // Atualiza o papel do usuário
     await ctx.db.patch(args.userId, { role: args.role });
     return null;
   },
 });
-
 
 // Add this function to check if a user has paid access
 export const checkUserPaid = query({
@@ -300,99 +303,101 @@ export const completeOnboarding = mutation({
 // Query for admin to get all users with their roles (for admin interface)
 export const getAllUsersForAdmin = query({
   args: { limit: v.optional(v.number()) },
-  returns: v.array(v.object({
-    _id: v.id('users'),
-    _creationTime: v.number(),
-    firstName: v.optional(v.string()),
-    lastName: v.optional(v.string()),
-    email: v.string(),
-    imageUrl: v.optional(v.string()),
-    clerkUserId: v.string(),
-    paid: v.optional(v.boolean()),
-    paymentId: v.optional(v.union(v.string(), v.number())),
-    testeId: v.optional(v.string()),
-    paymentDate: v.optional(v.string()),
-    paymentStatus: v.optional(v.string()),
-    termsAccepted: v.optional(v.boolean()),
-    onboardingCompleted: v.optional(v.boolean()),
-    role: v.optional(v.string()),
-    status: v.optional(v.union(
-      v.literal("invited"),
-      v.literal("active"), 
-      v.literal("suspended"),
-      v.literal("expired")
-    )),
-  })),
+  returns: v.array(
+    v.object({
+      _id: v.id('users'),
+      _creationTime: v.number(),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      imageUrl: v.optional(v.string()),
+      clerkUserId: v.string(),
+      paid: v.optional(v.boolean()),
+      paymentId: v.optional(v.union(v.string(), v.number())),
+      testeId: v.optional(v.string()),
+      paymentDate: v.optional(v.string()),
+      paymentStatus: v.optional(v.string()),
+      termsAccepted: v.optional(v.boolean()),
+      onboardingCompleted: v.optional(v.boolean()),
+      role: v.optional(v.string()),
+      status: v.optional(
+        v.union(
+          v.literal('invited'),
+          v.literal('active'),
+          v.literal('suspended'),
+          v.literal('expired'),
+        ),
+      ),
+    }),
+  ),
   handler: async (ctx, args) => {
     // Verify admin access
     await requireAdmin(ctx);
-    
+
     const limit = args.limit || 50; // Default limit
-    
-    return await ctx.db
-      .query('users')
-      .order('desc')
-      .take(limit);
+
+    return await ctx.db.query('users').order('desc').take(limit);
   },
 });
 
 // Query for admin to search users by email/name with their roles
 export const searchUsersForAdmin = query({
-  args: { 
+  args: {
     searchQuery: v.string(),
-    limit: v.optional(v.number()) 
+    limit: v.optional(v.number()),
   },
-  returns: v.array(v.object({
-    _id: v.id('users'),
-    _creationTime: v.number(),
-    firstName: v.optional(v.string()),
-    lastName: v.optional(v.string()),
-    email: v.string(),
-    imageUrl: v.optional(v.string()),
-    clerkUserId: v.string(),
-    paid: v.optional(v.boolean()),
-    paymentId: v.optional(v.union(v.string(), v.number())),
-    testeId: v.optional(v.string()),
-    paymentDate: v.optional(v.string()),
-    paymentStatus: v.optional(v.string()),
-    termsAccepted: v.optional(v.boolean()),
-    onboardingCompleted: v.optional(v.boolean()),
-    role: v.optional(v.string()),
-    status: v.optional(v.union(
-      v.literal("invited"),
-      v.literal("active"), 
-      v.literal("suspended"),
-      v.literal("expired")
-    )),
-  })),
+  returns: v.array(
+    v.object({
+      _id: v.id('users'),
+      _creationTime: v.number(),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      email: v.string(),
+      imageUrl: v.optional(v.string()),
+      clerkUserId: v.string(),
+      paid: v.optional(v.boolean()),
+      paymentId: v.optional(v.union(v.string(), v.number())),
+      testeId: v.optional(v.string()),
+      paymentDate: v.optional(v.string()),
+      paymentStatus: v.optional(v.string()),
+      termsAccepted: v.optional(v.boolean()),
+      onboardingCompleted: v.optional(v.boolean()),
+      role: v.optional(v.string()),
+      status: v.optional(
+        v.union(
+          v.literal('invited'),
+          v.literal('active'),
+          v.literal('suspended'),
+          v.literal('expired'),
+        ),
+      ),
+    }),
+  ),
   handler: async (ctx, args) => {
     // Verify admin access
     await requireAdmin(ctx);
-    
+
     const limit = args.limit || 50; // Default limit
     const query = args.searchQuery.toLowerCase();
-    
+
     // Get all users and filter by email/name in memory
     // For better performance, consider adding search indexes in the future
-    const allUsers = await ctx.db
-      .query('users')
-      .order('desc')
-      .collect();
-    
+    const allUsers = await ctx.db.query('users').order('desc').collect();
+
     const filteredUsers = allUsers.filter(user => {
       const email = user.email?.toLowerCase() || '';
       const firstName = user.firstName?.toLowerCase() || '';
       const lastName = user.lastName?.toLowerCase() || '';
       const fullName = `${firstName} ${lastName}`.trim();
-      
-      return email.includes(query) || 
-             firstName.includes(query) || 
-             lastName.includes(query) ||
-             fullName.includes(query);
+
+      return (
+        email.includes(query) ||
+        firstName.includes(query) ||
+        lastName.includes(query) ||
+        fullName.includes(query)
+      );
     });
-    
+
     return filteredUsers.slice(0, limit);
   },
 });
-
-

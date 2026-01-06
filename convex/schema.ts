@@ -8,9 +8,9 @@ export default defineSchema({
 
   // Apps table - defines each tenant/app in the ecosystem
   apps: defineTable({
-    slug: v.string(),           // "teot", "derma" - used in subdomain
-    name: v.string(),           // "OrtoQBank TEOT"
-    domain: v.string(),         // "teot.ortoqbank.com"
+    slug: v.string(), // "teot", "derma" - used in subdomain
+    name: v.string(), // "OrtoQBank TEOT"
+    domain: v.string(), // "teot.ortoqbank.com"
     description: v.optional(v.string()),
     logoUrl: v.optional(v.string()),
     isActive: v.boolean(),
@@ -29,7 +29,7 @@ export default defineSchema({
     role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
     grantedAt: v.number(),
     expiresAt: v.optional(v.number()),
-    grantedBy: v.optional(v.id('users')),  // Admin who granted access
+    grantedBy: v.optional(v.id('users')), // Admin who granted access
   })
     .index('by_user', ['userId'])
     .index('by_user_app', ['userId', 'appId'])
@@ -57,12 +57,14 @@ export default defineSchema({
     termsAccepted: v.optional(v.boolean()),
     onboardingCompleted: v.optional(v.boolean()),
     role: v.optional(v.string()),
-    status: v.optional(v.union(
-      v.literal("invited"),
-      v.literal("active"),
-      v.literal("suspended"),
-      v.literal("expired")
-    )),
+    status: v.optional(
+      v.union(
+        v.literal('invited'),
+        v.literal('active'),
+        v.literal('suspended'),
+        v.literal('expired'),
+      ),
+    ),
     // Year-based access control
     hasActiveYearAccess: v.optional(v.boolean()),
   })
@@ -77,7 +79,7 @@ export default defineSchema({
 
   themes: defineTable({
     // Multi-tenancy
-    tenantId: v.optional(v.id('apps')),  // Optional during migration, required after
+    tenantId: v.optional(v.id('apps')), // Optional during migration, required after
     name: v.string(),
     prefix: v.optional(v.string()),
     displayOrder: v.optional(v.number()),
@@ -115,55 +117,68 @@ export default defineSchema({
   // Load this only when viewing/editing a question, not for lists
   questionContent: defineTable({
     questionId: v.id('questions'),
-    questionTextString: v.string(),      // Rich text JSON (heavy)
-    explanationTextString: v.string(),   // Rich text JSON (heavy)
-    alternatives: v.array(v.string()),   // Answer options
+    questionTextString: v.string(), // Rich text JSON (heavy)
+    explanationTextString: v.string(), // Rich text JSON (heavy)
+    alternatives: v.array(v.string()), // Answer options
     // Legacy fields (for migration - will be removed after migration complete)
     questionText: v.optional(v.any()),
     explanationText: v.optional(v.any()),
-  })
-    .index('by_question', ['questionId']),
+  }).index('by_question', ['questionId']),
 
   // Questions - Light metadata for lists, filtering, aggregates
   questions: defineTable({
     // Multi-tenancy
-    tenantId: v.optional(v.id('apps')),  // Optional during migration, required after
-    
+    tenantId: v.optional(v.id('apps')), // Optional during migration, required after
+
     // Metadata (light)
     title: v.string(),
     normalizedTitle: v.string(),
     questionCode: v.optional(v.string()),
     orderedNumberId: v.optional(v.number()),
-    
+
     // Taxonomy IDs (for filtering/aggregates)
     themeId: v.id('themes'),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
-    
+
     // DENORMALIZED: Taxonomy names (for display - no extra fetches needed)
     themeName: v.optional(v.string()),
     subthemeName: v.optional(v.string()),
     groupName: v.optional(v.string()),
-    
+
     // Quiz essentials (keep in main table for quiz generation)
     correctAlternativeIndex: v.number(),
-    alternativeCount: v.optional(v.number()),  // Just the count, not full content
-    
+    alternativeCount: v.optional(v.number()), // Just the count, not full content
+
     // Other metadata
     authorId: v.optional(v.id('users')),
     isPublic: v.optional(v.boolean()),
-    
+
     // Migration tracking
-    contentMigrated: v.optional(v.boolean()),  // True when content moved to questionContent table
-    
-    // Legacy fields - KEPT DURING MIGRATION (will be removed after migration)
-    // These will be moved to questionContent table
-    questionText: v.optional(v.any()),
-    explanationText: v.optional(v.any()),
-    questionTextString: v.optional(v.string()),  // Made optional for new questions
-    explanationTextString: v.optional(v.string()),  // Made optional for new questions
-    alternatives: v.optional(v.array(v.string())),  // Made optional for new questions
-    
+    contentMigrated: v.optional(v.boolean()), // True when content moved to questionContent table
+
+    // ==========================================================================
+    // DEPRECATED FIELDS - TO BE REMOVED AFTER MIGRATION
+    // ==========================================================================
+    // These fields are being migrated to the questionContent table.
+    //
+    // MIGRATION STATUS:
+    // 1. ✅ All READ operations now use questionContent table
+    // 2. ✅ All WRITE operations now write to questionContent table only
+    // 3. ⏳ Run removeHeavyContentFromQuestions migration to clear this data
+    // 4. ⏳ After migration completes, remove these field definitions
+    //
+    // TO COMPLETE MIGRATION:
+    // 1. Run: npx convex run migrations:runRemoveHeavyContentMigration
+    // 2. Verify all questions work correctly
+    // 3. Remove the deprecated field definitions below
+    // ==========================================================================
+    questionText: v.optional(v.any()), // DEPRECATED: Use questionContent.questionTextString
+    explanationText: v.optional(v.any()), // DEPRECATED: Use questionContent.explanationTextString
+    questionTextString: v.optional(v.string()), // DEPRECATED: Use questionContent.questionTextString
+    explanationTextString: v.optional(v.string()), // DEPRECATED: Use questionContent.explanationTextString
+    alternatives: v.optional(v.array(v.string())), // DEPRECATED: Use questionContent.alternatives
+
     // Legacy taxonomy fields (for migration cleanup only)
     TaxThemeId: v.optional(v.string()),
     TaxSubthemeId: v.optional(v.string()),
@@ -317,10 +332,18 @@ export default defineSchema({
     .index('by_user_answered', ['userId', 'hasAnswered'])
     .index('by_tenant', ['tenantId'])
     .index('by_tenant_and_user', ['tenantId', 'userId'])
-    .index('by_tenant_and_user_incorrect', ['tenantId', 'userId', 'isIncorrect'])
+    .index('by_tenant_and_user_incorrect', [
+      'tenantId',
+      'userId',
+      'isIncorrect',
+    ])
     // Compound indexes for taxonomy-filtered queries (enables efficient filtered quiz creation)
     .index('by_user_theme_incorrect', ['userId', 'themeId', 'isIncorrect'])
-    .index('by_user_subtheme_incorrect', ['userId', 'subthemeId', 'isIncorrect'])
+    .index('by_user_subtheme_incorrect', [
+      'userId',
+      'subthemeId',
+      'isIncorrect',
+    ])
     .index('by_user_group_incorrect', ['userId', 'groupId', 'isIncorrect']),
 
   // Table for pre-computed user statistics counts (Performance optimization)
@@ -412,7 +435,13 @@ export default defineSchema({
     buttonText: v.string(),
     // Extended fields for product identification and access control
     productId: v.string(), // e.g., "ortoqbank_2025", "ortoqbank_2026", "premium_pack" - REQUIRED
-    category: v.optional(v.union(v.literal("year_access"), v.literal("premium_pack"), v.literal("addon"))),
+    category: v.optional(
+      v.union(
+        v.literal('year_access'),
+        v.literal('premium_pack'),
+        v.literal('addon'),
+      ),
+    ),
     year: v.optional(v.number()), // 2025, 2026, 2027, etc. - kept for productId naming/identification
     // Pricing (converted to numbers for calculations)
     regularPriceNum: v.optional(v.number()),
@@ -422,20 +451,20 @@ export default defineSchema({
     isActive: v.optional(v.boolean()),
     displayOrder: v.optional(v.number()),
   })
-    .index("by_product_id", ["productId"])
-    .index("by_category", ["category"])
-    .index("by_year", ["year"])
-    .index("by_tenant", ["tenantId"])
-    .index("by_active", ["isActive"]),
+    .index('by_product_id', ['productId'])
+    .index('by_category', ['category'])
+    .index('by_year', ['year'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_active', ['isActive']),
 
   // User Products - Junction table for user-product relationships
   userProducts: defineTable({
-    userId: v.id("users"),
-    pricingPlanId: v.id("pricingPlans"), // Reference to pricingPlans table
+    userId: v.id('users'),
+    pricingPlanId: v.id('pricingPlans'), // Reference to pricingPlans table
     productId: v.string(), // Reference to pricingPlans.productId for easy lookup
     // Purchase info
     purchaseDate: v.number(),
-    paymentGateway: v.union(v.literal("mercadopago"), v.literal("asaas")),
+    paymentGateway: v.union(v.literal('mercadopago'), v.literal('asaas')),
     paymentId: v.string(),
     purchasePrice: v.number(),
     couponUsed: v.optional(v.string()),
@@ -446,24 +475,24 @@ export default defineSchema({
     accessExpiresAt: v.optional(v.number()),
     // Status
     status: v.union(
-      v.literal("active"),
-      v.literal("expired"),
-      v.literal("suspended"),
-      v.literal("refunded")
+      v.literal('active'),
+      v.literal('expired'),
+      v.literal('suspended'),
+      v.literal('refunded'),
     ),
     // Metadata
     checkoutId: v.optional(v.string()), // Link to pendingOrders
     notes: v.optional(v.string()),
   })
-    .index("by_user", ["userId"])
-    .index("by_user_product", ["userId", "productId"])
-    .index("by_user_pricing_plan", ["userId", "pricingPlanId"])
-    .index("by_user_status", ["userId", "status"])
-    .index("by_product", ["productId"])
-    .index("by_pricing_plan", ["pricingPlanId"])
-    .index("by_payment_id", ["paymentId"])
-    .index("by_status", ["status"])
-    .index("by_expiration", ["accessExpiresAt"]),
+    .index('by_user', ['userId'])
+    .index('by_user_product', ['userId', 'productId'])
+    .index('by_user_pricing_plan', ['userId', 'pricingPlanId'])
+    .index('by_user_status', ['userId', 'status'])
+    .index('by_product', ['productId'])
+    .index('by_pricing_plan', ['pricingPlanId'])
+    .index('by_payment_id', ['paymentId'])
+    .index('by_status', ['status'])
+    .index('by_expiration', ['accessExpiresAt']),
 
   // Pending orders - tracks checkout sessions and payment lifecycle
   pendingOrders: defineTable({
@@ -493,11 +522,13 @@ export default defineSchema({
     finalPrice: v.number(),
 
     // PIX payment data (for displaying QR code)
-    pixData: v.optional(v.object({
-      qrPayload: v.optional(v.string()), // PIX copy-paste code
-      qrCodeBase64: v.optional(v.string()), // QR code image as base64
-      expirationDate: v.optional(v.string()), // When the PIX QR code expires
-    })),
+    pixData: v.optional(
+      v.object({
+        qrPayload: v.optional(v.string()), // PIX copy-paste code
+        qrCodeBase64: v.optional(v.string()), // QR code image as base64
+        expirationDate: v.optional(v.string()), // When the PIX QR code expires
+      }),
+    ),
 
     // Coupon info
     couponCode: v.optional(v.string()), // Coupon code used (if any)
@@ -506,11 +537,11 @@ export default defineSchema({
 
     // State management
     status: v.union(
-      v.literal("pending"), // Order created, waiting for payment
-      v.literal("paid"), // Payment confirmed
-      v.literal("provisioned"), // Access granted
-      v.literal("completed"), // Fully processed
-      v.literal("failed") // Payment failed or expired
+      v.literal('pending'), // Order created, waiting for payment
+      v.literal('paid'), // Payment confirmed
+      v.literal('provisioned'), // Access granted
+      v.literal('completed'), // Fully processed
+      v.literal('failed'), // Payment failed or expired
     ),
 
     // Timestamps
@@ -519,11 +550,11 @@ export default defineSchema({
     provisionedAt: v.optional(v.number()), // When access was granted
     expiresAt: v.number(), // When this order expires (7 days)
   })
-    .index("by_email", ["email"])
-    .index("by_user_id", ["userId"])
-    .index("by_status", ["status"])
-    .index("by_asaas_payment", ["asaasPaymentId"])
-    .index("by_external_reference", ["externalReference"]),
+    .index('by_email', ['email'])
+    .index('by_user_id', ['userId'])
+    .index('by_status', ['status'])
+    .index('by_asaas_payment', ['asaasPaymentId'])
+    .index('by_external_reference', ['externalReference']),
 
   // Invoices - tracks nota fiscal (invoice) generation for paid orders
   // IMPORTANT: For installment payments, ONE invoice is generated with the TOTAL value
@@ -532,11 +563,11 @@ export default defineSchema({
     asaasPaymentId: v.string(),
     asaasInvoiceId: v.optional(v.string()), // Set when invoice is successfully created
     status: v.union(
-      v.literal("pending"),     // Invoice generation scheduled
-      v.literal("processing"),  // Being generated by Asaas
-      v.literal("issued"),      // Successfully issued
-      v.literal("failed"),      // Generation failed
-      v.literal("cancelled")    // Cancelled
+      v.literal('pending'), // Invoice generation scheduled
+      v.literal('processing'), // Being generated by Asaas
+      v.literal('issued'), // Successfully issued
+      v.literal('failed'), // Generation failed
+      v.literal('cancelled'), // Cancelled
     ),
     municipalServiceId: v.string(), // Service ID from Asaas
     serviceDescription: v.string(),
@@ -558,10 +589,10 @@ export default defineSchema({
     createdAt: v.number(),
     issuedAt: v.optional(v.number()),
   })
-    .index("by_order", ["orderId"])
-    .index("by_payment", ["asaasPaymentId"])
-    .index("by_status", ["status"])
-    .index("by_asaas_invoice", ["asaasInvoiceId"]),
+    .index('by_order', ['orderId'])
+    .index('by_payment', ['asaasPaymentId'])
+    .index('by_status', ['status'])
+    .index('by_asaas_invoice', ['asaasInvoiceId']),
 
   // Email invitations - tracks Clerk invitation emails sent after payment
   emailInvitations: defineTable({
@@ -569,10 +600,10 @@ export default defineSchema({
     email: v.string(),
     customerName: v.string(),
     status: v.union(
-      v.literal("pending"),     // About to send
-      v.literal("sent"),        // Successfully sent
-      v.literal("failed"),      // Failed after all retries
-      v.literal("accepted")     // User registered
+      v.literal('pending'), // About to send
+      v.literal('sent'), // Successfully sent
+      v.literal('failed'), // Failed after all retries
+      v.literal('accepted'), // User registered
     ),
     clerkInvitationId: v.optional(v.string()),
     errorMessage: v.optional(v.string()),
@@ -582,9 +613,9 @@ export default defineSchema({
     retryCount: v.optional(v.number()),
     retrierRunId: v.optional(v.string()), // Track the retrier run ID
   })
-    .index("by_order", ["orderId"])
-    .index("by_email", ["email"])
-    .index("by_status", ["status"]),
+    .index('by_order', ['orderId'])
+    .index('by_email', ['email'])
+    .index('by_status', ['status']),
 
   // Waitlist - tracks users interested in OrtoClub TEOT
   waitlist: defineTable({
@@ -595,24 +626,24 @@ export default defineSchema({
     whatsapp: v.string(),
     instagram: v.optional(v.string()),
     residencyLevel: v.union(
-      v.literal("R1"),
-      v.literal("R2"),
-      v.literal("R3"),
-      v.literal("Já concluí")
+      v.literal('R1'),
+      v.literal('R2'),
+      v.literal('R3'),
+      v.literal('Já concluí'),
     ),
     subspecialty: v.union(
-      v.literal("Pediátrica"),
-      v.literal("Tumor"),
-      v.literal("Quadril"),
-      v.literal("Joelho"),
-      v.literal("Ombro e Cotovelo"),
-      v.literal("Mão"),
-      v.literal("Coluna"),
-      v.literal("Pé e Tornozelo")
+      v.literal('Pediátrica'),
+      v.literal('Tumor'),
+      v.literal('Quadril'),
+      v.literal('Joelho'),
+      v.literal('Ombro e Cotovelo'),
+      v.literal('Mão'),
+      v.literal('Coluna'),
+      v.literal('Pé e Tornozelo'),
     ),
   })
-    .index("by_email", ["email"])
-    .index("by_tenant", ["tenantId"]),
+    .index('by_email', ['email'])
+    .index('by_tenant', ['tenantId']),
 
   // Question Error Reports - tracks user-reported issues with questions
   questionErrorReports: defineTable({
@@ -629,21 +660,21 @@ export default defineSchema({
     screenshotStorageId: v.optional(v.id('_storage')),
     // Status management
     status: v.union(
-      v.literal("pending"),
-      v.literal("reviewed"),
-      v.literal("resolved"),
-      v.literal("dismissed")
+      v.literal('pending'),
+      v.literal('reviewed'),
+      v.literal('resolved'),
+      v.literal('dismissed'),
     ),
     // Admin review
     reviewedBy: v.optional(v.id('users')),
     reviewedAt: v.optional(v.number()),
     reviewNotes: v.optional(v.string()),
   })
-    .index("by_question", ["questionId"])
-    .index("by_reporter", ["reporterId"])
-    .index("by_status", ["status"])
-    .index("by_tenant", ["tenantId"])
-    .index("by_tenant_and_status", ["tenantId", "status"]),
+    .index('by_question', ['questionId'])
+    .index('by_reporter', ['reporterId'])
+    .index('by_status', ['status'])
+    .index('by_tenant', ['tenantId'])
+    .index('by_tenant_and_status', ['tenantId', 'status']),
 
   // =============================================================================
   // QUIZ CREATION WORKFLOW TABLES
@@ -661,7 +692,7 @@ export default defineSchema({
       v.literal('selecting_questions'),
       v.literal('creating_quiz'),
       v.literal('completed'),
-      v.literal('failed')
+      v.literal('failed'),
     ),
     progress: v.number(), // 0-100
     progressMessage: v.optional(v.string()),
@@ -674,7 +705,7 @@ export default defineSchema({
         v.literal('all'),
         v.literal('unanswered'),
         v.literal('incorrect'),
-        v.literal('bookmarked')
+        v.literal('bookmarked'),
       ),
       numQuestions: v.optional(v.number()),
       selectedThemes: v.optional(v.array(v.id('themes'))),

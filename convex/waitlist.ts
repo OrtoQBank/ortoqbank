@@ -10,20 +10,20 @@ export const createWaitlistEntry = mutation({
     whatsapp: v.string(),
     instagram: v.optional(v.string()),
     residencyLevel: v.union(
-      v.literal("R1"),
-      v.literal("R2"),
-      v.literal("R3"),
-      v.literal("Já concluí")
+      v.literal('R1'),
+      v.literal('R2'),
+      v.literal('R3'),
+      v.literal('Já concluí'),
     ),
     subspecialty: v.union(
-      v.literal("Pediátrica"),
-      v.literal("Tumor"),
-      v.literal("Quadril"),
-      v.literal("Joelho"),
-      v.literal("Ombro e Cotovelo"),
-      v.literal("Mão"),
-      v.literal("Coluna"),
-      v.literal("Pé e Tornozelo")
+      v.literal('Pediátrica'),
+      v.literal('Tumor'),
+      v.literal('Quadril'),
+      v.literal('Joelho'),
+      v.literal('Ombro e Cotovelo'),
+      v.literal('Mão'),
+      v.literal('Coluna'),
+      v.literal('Pé e Tornozelo'),
     ),
   },
   returns: v.union(v.id('waitlist'), v.literal('email_already_exists')),
@@ -31,7 +31,7 @@ export const createWaitlistEntry = mutation({
     // Check if email already exists
     const existingEntry = await ctx.db
       .query('waitlist')
-      .withIndex('by_email', (q) => q.eq('email', args.email))
+      .withIndex('by_email', q => q.eq('email', args.email))
       .first();
 
     if (existingEntry) {
@@ -41,7 +41,7 @@ export const createWaitlistEntry = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
     // Create the waitlist entry
@@ -73,24 +73,24 @@ export const list = query({
       whatsapp: v.string(),
       instagram: v.optional(v.string()),
       residencyLevel: v.union(
-        v.literal("R1"),
-        v.literal("R2"),
-        v.literal("R3"),
-        v.literal("Já concluí")
+        v.literal('R1'),
+        v.literal('R2'),
+        v.literal('R3'),
+        v.literal('Já concluí'),
       ),
       subspecialty: v.union(
-        v.literal("Pediátrica"),
-        v.literal("Tumor"),
-        v.literal("Quadril"),
-        v.literal("Joelho"),
-        v.literal("Ombro e Cotovelo"),
-        v.literal("Mão"),
-        v.literal("Coluna"),
-        v.literal("Pé e Tornozelo")
+        v.literal('Pediátrica'),
+        v.literal('Tumor'),
+        v.literal('Quadril'),
+        v.literal('Joelho'),
+        v.literal('Ombro e Cotovelo'),
+        v.literal('Mão'),
+        v.literal('Coluna'),
+        v.literal('Pé e Tornozelo'),
       ),
-    })
+    }),
   ),
-  handler: async (ctx) => {
+  handler: async ctx => {
     // Require admin access to list waitlist entries
     await requireAdmin(ctx);
 

@@ -439,9 +439,9 @@ export async function _internalDeleteQuestion(
   // Delete associated questionContent record first
   const questionContent = await ctx.db
     .query('questionContent')
-    .withIndex('by_question', (q) => q.eq('questionId', id))
+    .withIndex('by_question', q => q.eq('questionId', id))
     .first();
-  
+
   if (questionContent) {
     await ctx.db.delete(questionContent._id);
     console.log(`Deleted questionContent for question ${id}`);

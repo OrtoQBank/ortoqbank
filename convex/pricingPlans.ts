@@ -6,60 +6,65 @@ import { requireAdmin } from './users';
 export const getPricingPlans = query({
   args: {},
   returns: v.array(v.any()),
-  handler: async (ctx) => {
+  handler: async ctx => {
     return await ctx.db.query('pricingPlans').order('asc').collect();
   },
 });
 
 export const savePricingPlan = mutation({
-    args: {
-      id: v.optional(v.id('pricingPlans')), // Se não fornecido, cria novo
-      name: v.string(),
-      badge: v.string(),
-      originalPrice: v.optional(v.string()), // Marketing strikethrough price
-      price: v.string(),
-      installments: v.string(),
-      installmentDetails: v.string(),
-      description: v.string(),
-      features: v.array(v.string()),
-      buttonText: v.string(),
-      // Extended fields for product identification
-      productId: v.string(), // Required since schema now requires it
-      category: v.optional(v.union(v.literal("year_access"), v.literal("premium_pack"), v.literal("addon"))),
-      year: v.optional(v.number()),
-      regularPriceNum: v.optional(v.number()),
-      pixPriceNum: v.optional(v.number()),
-      accessYears: v.optional(v.array(v.number())),
-      isActive: v.optional(v.boolean()),
-      displayOrder: v.optional(v.number()),
-    },
-    returns: v.id('pricingPlans'),
-    handler: async (ctx, args) => {
-      // Verificação de admin usando a função existente do users.ts
-      await requireAdmin(ctx);
-      
-      const { id, ...planData } = args;
-      
-      if (id) {
-        // Editar plano existente
-        await ctx.db.patch(id, planData);
-        return id;
-      } else {
-        // Get default tenant for multi-tenancy
-        const defaultApp = await ctx.db
-          .query('apps')
-          .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
-          .first();
+  args: {
+    id: v.optional(v.id('pricingPlans')), // Se não fornecido, cria novo
+    name: v.string(),
+    badge: v.string(),
+    originalPrice: v.optional(v.string()), // Marketing strikethrough price
+    price: v.string(),
+    installments: v.string(),
+    installmentDetails: v.string(),
+    description: v.string(),
+    features: v.array(v.string()),
+    buttonText: v.string(),
+    // Extended fields for product identification
+    productId: v.string(), // Required since schema now requires it
+    category: v.optional(
+      v.union(
+        v.literal('year_access'),
+        v.literal('premium_pack'),
+        v.literal('addon'),
+      ),
+    ),
+    year: v.optional(v.number()),
+    regularPriceNum: v.optional(v.number()),
+    pixPriceNum: v.optional(v.number()),
+    accessYears: v.optional(v.array(v.number())),
+    isActive: v.optional(v.boolean()),
+    displayOrder: v.optional(v.number()),
+  },
+  returns: v.id('pricingPlans'),
+  handler: async (ctx, args) => {
+    // Verificação de admin usando a função existente do users.ts
+    await requireAdmin(ctx);
 
-        // Criar novo plano
-        return await ctx.db.insert('pricingPlans', {
-          ...planData,
-          tenantId: defaultApp?._id,
-        });
-      }
-    },
-  });
-  
+    const { id, ...planData } = args;
+
+    if (id) {
+      // Editar plano existente
+      await ctx.db.patch(id, planData);
+      return id;
+    } else {
+      // Get default tenant for multi-tenancy
+      const defaultApp = await ctx.db
+        .query('apps')
+        .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
+        .first();
+
+      // Criar novo plano
+      return await ctx.db.insert('pricingPlans', {
+        ...planData,
+        tenantId: defaultApp?._id,
+      });
+    }
+  },
+});
 
 export const removePricingPlan = mutation({
   args: { id: v.id('pricingPlans') },
@@ -67,7 +72,7 @@ export const removePricingPlan = mutation({
   handler: async (ctx, args) => {
     // Verificação de admin usando a função existente do users.ts
     await requireAdmin(ctx);
-    
+
     await ctx.db.delete(args.id);
     return null;
   },
@@ -79,10 +84,10 @@ export const removePricingPlan = mutation({
 export const getActiveProducts = query({
   args: {},
   returns: v.array(v.any()),
-  handler: async (ctx) => {
+  handler: async ctx => {
     return await ctx.db
-      .query("pricingPlans")
-      .withIndex("by_active", (q) => q.eq("isActive", true))
+      .query('pricingPlans')
+      .withIndex('by_active', q => q.eq('isActive', true))
       .collect();
   },
 });
@@ -95,8 +100,8 @@ export const getByProductId = query({
   returns: v.union(v.any(), v.null()),
   handler: async (ctx, args) => {
     return await ctx.db
-      .query("pricingPlans")
-      .withIndex("by_product_id", (q) => q.eq("productId", args.productId))
+      .query('pricingPlans')
+      .withIndex('by_product_id', q => q.eq('productId', args.productId))
       .unique();
   },
 });
@@ -106,17 +111,17 @@ export const getByProductId = query({
  */
 export const grantProductAccess = internalMutation({
   args: {
-    userId: v.id("users"),
-    pricingPlanId: v.id("pricingPlans"),
+    userId: v.id('users'),
+    pricingPlanId: v.id('pricingPlans'),
     productId: v.string(),
     paymentId: v.string(),
-    paymentGateway: v.literal("asaas"),
+    paymentGateway: v.literal('asaas'),
     purchasePrice: v.number(),
     couponUsed: v.optional(v.string()),
     discountAmount: v.optional(v.number()),
     checkoutId: v.optional(v.string()),
   },
-  returns: v.id("userProducts"),
+  returns: v.id('userProducts'),
   handler: async (ctx, args) => {
     // Get pricing plan details to calculate expiration
     const pricingPlan = await ctx.db.get(args.pricingPlanId);
@@ -126,15 +131,24 @@ export const grantProductAccess = internalMutation({
 
     const now = Date.now();
     // Calculate expiration as December 31, 23:59:59.999 of the latest year in accessYears
-    const accessExpiresAt = pricingPlan.accessYears && pricingPlan.accessYears.length > 0
-      ? new Date(Math.max(...pricingPlan.accessYears), 11, 31, 23, 59, 59, 999).getTime()
-      : undefined;
+    const accessExpiresAt =
+      pricingPlan.accessYears && pricingPlan.accessYears.length > 0
+        ? new Date(
+            Math.max(...pricingPlan.accessYears),
+            11,
+            31,
+            23,
+            59,
+            59,
+            999,
+          ).getTime()
+        : undefined;
 
     // Check if user already has this product
     const existingAccess = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user_product", (q) => 
-        q.eq("userId", args.userId).eq("productId", args.productId)
+      .query('userProducts')
+      .withIndex('by_user_product', q =>
+        q.eq('userId', args.userId).eq('productId', args.productId),
       )
       .unique();
 
@@ -144,7 +158,7 @@ export const grantProductAccess = internalMutation({
         hasAccess: true,
         accessGrantedAt: now,
         accessExpiresAt: accessExpiresAt,
-        status: "active",
+        status: 'active',
         paymentId: args.paymentId,
         purchasePrice: args.purchasePrice,
         paymentGateway: args.paymentGateway,
@@ -153,16 +167,16 @@ export const grantProductAccess = internalMutation({
         checkoutId: args.checkoutId,
         pricingPlanId: args.pricingPlanId,
       });
-      
+
       // Set user's active year access flag
       await ctx.db.patch(args.userId, {
         hasActiveYearAccess: true,
       });
-      
+
       return existingAccess._id;
     } else {
       // Create new access
-      const userProductId = await ctx.db.insert("userProducts", {
+      const userProductId = await ctx.db.insert('userProducts', {
         userId: args.userId,
         pricingPlanId: args.pricingPlanId,
         productId: args.productId,
@@ -175,15 +189,15 @@ export const grantProductAccess = internalMutation({
         hasAccess: true,
         accessGrantedAt: now,
         accessExpiresAt,
-        status: "active",
+        status: 'active',
         checkoutId: args.checkoutId,
       });
-      
+
       // Set user's active year access flag
       await ctx.db.patch(args.userId, {
         hasActiveYearAccess: true,
       });
-      
+
       return userProductId;
     }
   },
@@ -201,19 +215,21 @@ export const revokeProductAccess = internalMutation({
   handler: async (ctx, args) => {
     // Find all user products with this payment ID
     const userProducts = await ctx.db
-      .query("userProducts")
-      .withIndex("by_payment_id", (q) => q.eq("paymentId", args.paymentId))
+      .query('userProducts')
+      .withIndex('by_payment_id', q => q.eq('paymentId', args.paymentId))
       .collect();
 
     for (const userProduct of userProducts) {
       await ctx.db.patch(userProduct._id, {
         hasAccess: false,
-        status: "refunded",
-        notes: args.reason || "Payment refunded",
+        status: 'refunded',
+        notes: args.reason || 'Payment refunded',
       });
     }
 
-    console.log(`Revoked access for ${userProducts.length} products (payment: ${args.paymentId})`);
+    console.log(
+      `Revoked access for ${userProducts.length} products (payment: ${args.paymentId})`,
+    );
     return null;
   },
 });

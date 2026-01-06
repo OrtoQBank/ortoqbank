@@ -34,7 +34,7 @@ export function TermsProvider({ children }: TermsProviderProps) {
       setIsAccepting(true);
       // Use the backend mutation to set terms acceptance
       await setTermsAccepted({ accepted: true });
-      
+
       // Modal will close automatically when backend updates termsAccepted
     } catch (error) {
       console.error('Error accepting terms:', error);

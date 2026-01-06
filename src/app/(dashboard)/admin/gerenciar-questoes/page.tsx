@@ -218,14 +218,10 @@ export default function GerenciarQuestoes() {
                     <Button
                       variant="destructive"
                       size="sm"
-                      onClick={() =>
-                        handleDelete(question._id, question.title)
-                      }
+                      onClick={() => handleDelete(question._id, question.title)}
                       disabled={deletingId === question._id}
                     >
-                      {deletingId === question._id
-                        ? 'Excluindo...'
-                        : 'Excluir'}
+                      {deletingId === question._id ? 'Excluindo...' : 'Excluir'}
                     </Button>
                   </TableCell>
                 </TableRow>

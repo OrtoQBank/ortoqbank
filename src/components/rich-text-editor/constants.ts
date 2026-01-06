@@ -5,4 +5,3 @@ export const IMAGE_OPTIMIZATION = {
   MAX_WIDTH: 500, // 500px max width for content images
   MAX_FILE_SIZE_MB: 5, // Maximum file size before compression (in MB)
 } as const;
-

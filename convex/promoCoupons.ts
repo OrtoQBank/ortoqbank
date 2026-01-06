@@ -97,10 +97,14 @@ export const create = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
-    return await ctx.db.insert('coupons', { ...args, code, tenantId: defaultApp?._id });
+    return await ctx.db.insert('coupons', {
+      ...args,
+      code,
+      tenantId: defaultApp?._id,
+    });
   },
 });
 
@@ -179,7 +183,7 @@ export const validateAndApplyCoupon = query({
   ),
   handler: async (ctx, args) => {
     const code = args.code.toUpperCase().trim();
-    
+
     if (!code) {
       return {
         isValid: false,
@@ -227,7 +231,9 @@ export const validateAndApplyCoupon = query({
     // Log usage stats for monitoring
     if (coupon.maxUses !== undefined) {
       const currentUses = coupon.currentUses || 0;
-      console.log(`Coupon ${code} usage: ${currentUses}/${coupon.maxUses} (tracking only)`);
+      console.log(
+        `Coupon ${code} usage: ${currentUses}/${coupon.maxUses} (tracking only)`,
+      );
     }
 
     // Track per-user usage for analytics (but don't block)
@@ -235,12 +241,14 @@ export const validateAndApplyCoupon = query({
       const cleanCpf = args.userCpf.replaceAll(/\D/g, '');
       const userUsageCount = await ctx.db
         .query('couponUsage')
-        .withIndex('by_coupon_user', q => 
-          q.eq('couponCode', code).eq('userCpf', cleanCpf)
+        .withIndex('by_coupon_user', q =>
+          q.eq('couponCode', code).eq('userCpf', cleanCpf),
         )
         .collect();
-      
-      console.log(`Coupon ${code} user usage (CPF: ${cleanCpf}): ${userUsageCount.length}/${coupon.maxUsesPerUser} (tracking only)`);
+
+      console.log(
+        `Coupon ${code} user usage (CPF: ${cleanCpf}): ${userUsageCount.length}/${coupon.maxUsesPerUser} (tracking only)`,
+      );
     }
 
     // Calculate discount

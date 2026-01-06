@@ -34,7 +34,6 @@ export function QuestionDisplay({
           </div>
 
           <div>
-            
             <div className="mt-4 space-y-2">
               {question.alternatives?.map(
                 (alternative: string, index: number) => (
@@ -66,7 +65,7 @@ export function QuestionDisplay({
 
           <div>
             <h2 className="mb-4 font-semibold">Explicação:</h2>
-            <div className="mt-6 rounded-lg border border-brand-blue/20 bg-brand-blue/10 p-4">
+            <div className="border-brand-blue/20 bg-brand-blue/10 mt-6 rounded-lg border p-4">
               <div className="prose mt-2 max-w-none">
                 <QuestionContent
                   stringContent={question.explanationTextString}

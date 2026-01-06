@@ -7,7 +7,13 @@ import { Suspense, useEffect, useState } from 'react';
 
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from '@/components/ui/card';
 
 import { api } from '../../../../convex/_generated/api';
 
@@ -20,7 +26,7 @@ function PaymentProcessingContent() {
   // Real-time payment status - no polling needed!
   const paymentStatus = useQuery(
     api.payments.checkPaymentStatus,
-    pendingOrderId ? { pendingOrderId } : 'skip'
+    pendingOrderId ? { pendingOrderId } : 'skip',
   );
 
   useEffect(() => {
@@ -57,17 +63,15 @@ function PaymentProcessingContent() {
 
   if (!pendingOrderId) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
+            <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
             <CardTitle className="text-red-600">Erro</CardTitle>
             <CardDescription>ID do pedido não encontrado</CardDescription>
           </CardHeader>
           <CardContent className="text-center">
-            <Button onClick={() => router.push('/')}>
-              Voltar ao Início
-            </Button>
+            <Button onClick={() => router.push('/')}>Voltar ao Início</Button>
           </CardContent>
         </Card>
       </div>
@@ -76,11 +80,13 @@ function PaymentProcessingContent() {
 
   if (paymentStatus?.status === 'failed') {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <Card className="max-w-md w-full">
+      <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+        <Card className="w-full max-w-md">
           <CardHeader className="text-center">
-            <AlertCircle className="w-12 h-12 text-red-500 mx-auto mb-4" />
-            <CardTitle className="text-red-600">Pagamento Não Encontrado</CardTitle>
+            <AlertCircle className="mx-auto mb-4 h-12 w-12 text-red-500" />
+            <CardTitle className="text-red-600">
+              Pagamento Não Encontrado
+            </CardTitle>
             <CardDescription>
               Não foi possível encontrar informações sobre este pagamento
             </CardDescription>
@@ -88,7 +94,8 @@ function PaymentProcessingContent() {
           <CardContent className="space-y-4">
             <Alert>
               <AlertDescription>
-                Verifique se o pagamento foi processado corretamente ou tente novamente.
+                Verifique se o pagamento foi processado corretamente ou tente
+                novamente.
               </AlertDescription>
             </Alert>
             <div className="flex flex-col gap-2">
@@ -106,29 +113,43 @@ function PaymentProcessingContent() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-      <Card className="max-w-md w-full">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+      <Card className="w-full max-w-md">
         <CardHeader className="text-center">
           <div className="relative">
-            <Loader2 className="w-12 h-12 text-brand-blue mx-auto mb-4 animate-spin" />
-            <Clock className="w-6 h-6 text-brand-blue/30 absolute top-3 left-1/2 transform -translate-x-1/2" />
+            <Loader2 className="text-brand-blue mx-auto mb-4 h-12 w-12 animate-spin" />
+            <Clock className="text-brand-blue/30 absolute top-3 left-1/2 h-6 w-6 -translate-x-1/2 transform" />
           </div>
-          <CardTitle className="text-brand-blue">Processando Pagamento</CardTitle>
+          <CardTitle className="text-brand-blue">
+            Processando Pagamento
+          </CardTitle>
           <CardDescription>
             Aguarde enquanto confirmamos seu pagamento...
           </CardDescription>
         </CardHeader>
-        
+
         <CardContent className="space-y-6">
           {/* Payment Info */}
           {paymentStatus?.orderDetails && (
-            <div className="bg-brand-blue/10 p-4 rounded-lg">
-              <h3 className="font-semibold text-brand-blue mb-2">Detalhes do Pedido</h3>
-              <div className="space-y-1 text-sm text-brand-blue/90">
-                <p><strong>Email:</strong> {paymentStatus.orderDetails.email}</p>
-                <p><strong>Produto:</strong> {paymentStatus.orderDetails.productId}</p>
-                <p><strong>Valor:</strong> R$ {paymentStatus.orderDetails.finalPrice.toFixed(2)}</p>
-                <p><strong>ID do Pedido:</strong> {pendingOrderId}</p>
+            <div className="bg-brand-blue/10 rounded-lg p-4">
+              <h3 className="text-brand-blue mb-2 font-semibold">
+                Detalhes do Pedido
+              </h3>
+              <div className="text-brand-blue/90 space-y-1 text-sm">
+                <p>
+                  <strong>Email:</strong> {paymentStatus.orderDetails.email}
+                </p>
+                <p>
+                  <strong>Produto:</strong>{' '}
+                  {paymentStatus.orderDetails.productId}
+                </p>
+                <p>
+                  <strong>Valor:</strong> R${' '}
+                  {paymentStatus.orderDetails.finalPrice.toFixed(2)}
+                </p>
+                <p>
+                  <strong>ID do Pedido:</strong> {pendingOrderId}
+                </p>
               </div>
             </div>
           )}
@@ -136,15 +157,18 @@ function PaymentProcessingContent() {
           {/* Status Messages */}
           <div className="space-y-3">
             <div className="flex items-center space-x-3 text-sm">
-              <div className="w-2 h-2 bg-brand-blue/100 rounded-full animate-pulse"></div>
+              <div className="bg-brand-blue/100 h-2 w-2 animate-pulse rounded-full"></div>
               <span>Aguardando confirmação do pagamento...</span>
             </div>
-            
-            <div className="text-xs text-gray-500 space-y-1">
+
+            <div className="space-y-1 text-xs text-gray-500">
               <p>• Para PIX: A confirmação pode levar alguns minutos</p>
               <p>• Para Cartão: A confirmação é quase imediata</p>
               <p>• Você será redirecionado automaticamente quando confirmado</p>
-              <p>• Esta página atualiza em tempo real - sem necessidade de recarregar</p>
+              <p>
+                • Esta página atualiza em tempo real - sem necessidade de
+                recarregar
+              </p>
             </div>
           </div>
 
@@ -154,10 +178,13 @@ function PaymentProcessingContent() {
               <Clock className="h-4 w-4" />
               <AlertDescription>
                 <div className="space-y-2">
-                  <p><strong>Está demorando mais que o esperado?</strong></p>
+                  <p>
+                    <strong>Está demorando mais que o esperado?</strong>
+                  </p>
                   <p className="text-sm">
-                    Se você já confirmou o pagamento PIX, a confirmação pode levar alguns minutos.
-                    Esta página detectará automaticamente quando o pagamento for confirmado.
+                    Se você já confirmou o pagamento PIX, a confirmação pode
+                    levar alguns minutos. Esta página detectará automaticamente
+                    quando o pagamento for confirmado.
                   </p>
                 </div>
               </AlertDescription>
@@ -166,8 +193,8 @@ function PaymentProcessingContent() {
 
           {/* Action Buttons */}
           <div className="flex flex-col gap-2">
-            <Button 
-              variant="outline" 
+            <Button
+              variant="outline"
               onClick={() => router.push('/')}
               className="w-full"
             >
@@ -182,7 +209,13 @@ function PaymentProcessingContent() {
 
 export default function PaymentProcessingPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          Carregando...
+        </div>
+      }
+    >
       <PaymentProcessingContent />
     </Suspense>
   );

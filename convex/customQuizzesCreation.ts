@@ -94,7 +94,7 @@ export const create = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
     // Create the custom quiz
@@ -346,6 +346,7 @@ async function collectAllModeQuestionIds(
 
 /**
  * Get questions filtered by user mode (incorrect, unanswered, bookmarked)
+ * OPTIMIZED: For unanswered mode, uses ID-only queries to avoid 16MB limit.
  */
 async function getQuestionsByUserMode(
   ctx: QueryCtx | MutationCtx,
@@ -368,14 +369,36 @@ async function getQuestionsByUserMode(
     }
 
     case 'unanswered': {
-      const allQuestions = await ctx.db.query('questions').collect();
+      // OPTIMIZED: Get answered question IDs first (lightweight)
       const answeredStats = await ctx.db
         .query('userQuestionStats')
-        .withIndex('by_user', q => q.eq('userId', userId))
+        .withIndex('by_user_answered', q =>
+          q.eq('userId', userId).eq('hasAnswered', true),
+        )
         .collect();
 
-      const answeredQuestionIds = new Set(answeredStats.map(s => s.questionId));
-      return allQuestions.filter(q => !answeredQuestionIds.has(q._id));
+      const answeredQuestionIds = new Set<Id<'questions'>>(
+        answeredStats.map(s => s.questionId),
+      );
+
+      // Use aggregate for random ID selection instead of full table scan
+      // This avoids the 16MB limit by not loading all question documents
+      const randomIds: Id<'questions'>[] = await ctx.runQuery(
+        api.aggregateQueries.getRandomQuestions,
+        { count: 5000 }, // Get a large pool of random IDs
+      );
+
+      // Filter out answered questions and fetch only the needed documents
+      const unansweredIds = randomIds.filter(
+        id => !answeredQuestionIds.has(id),
+      );
+
+      // Fetch the documents we need (limited set, not full table)
+      const questions = await Promise.all(
+        unansweredIds.slice(0, MAX_QUESTIONS * 2).map(id => ctx.db.get(id)),
+      );
+
+      return questions.filter((q): q is Doc<'questions'> => q !== null);
     }
 
     case 'bookmarked': {

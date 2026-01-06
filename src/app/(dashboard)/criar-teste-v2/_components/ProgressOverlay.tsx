@@ -1,7 +1,7 @@
 'use client';
 
-import { motion, AnimatePresence } from 'framer-motion';
-import { CheckCircle2, XCircle, Loader2 } from 'lucide-react';
+import { AnimatePresence,motion } from 'framer-motion';
+import { CheckCircle2, Loader2,XCircle } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
@@ -44,7 +44,7 @@ export function ProgressOverlay({
 
   const getStatusIcon = () => {
     switch (status) {
-      case 'completed':
+      case 'completed': {
         return (
           <motion.div
             initial={{ scale: 0 }}
@@ -54,7 +54,8 @@ export function ProgressOverlay({
             <CheckCircle2 className="h-16 w-16 text-emerald-500" />
           </motion.div>
         );
-      case 'failed':
+      }
+      case 'failed': {
         return (
           <motion.div
             initial={{ scale: 0 }}
@@ -64,31 +65,39 @@ export function ProgressOverlay({
             <XCircle className="h-16 w-16 text-red-500" />
           </motion.div>
         );
-      default:
-        return (
-          <Loader2 className="h-16 w-16 animate-spin text-brand-blue" />
-        );
+      }
+      default: {
+        return <Loader2 className="text-brand-blue h-16 w-16 animate-spin" />;
+      }
     }
   };
 
   const getStatusTitle = () => {
     switch (status) {
-      case 'pending':
+      case 'pending': {
         return 'Iniciando...';
-      case 'collecting_questions':
+      }
+      case 'collecting_questions': {
         return 'Coletando questões';
-      case 'applying_filters':
+      }
+      case 'applying_filters': {
         return 'Aplicando filtros';
-      case 'selecting_questions':
+      }
+      case 'selecting_questions': {
         return 'Selecionando questões';
-      case 'creating_quiz':
+      }
+      case 'creating_quiz': {
         return 'Criando quiz';
-      case 'completed':
+      }
+      case 'completed': {
         return 'Quiz criado com sucesso!';
-      case 'failed':
+      }
+      case 'failed': {
         return 'Erro ao criar quiz';
-      default:
+      }
+      default: {
         return 'Processando...';
+      }
     }
   };
 
@@ -134,7 +143,7 @@ export function ProgressOverlay({
                   </div>
                   <div className="h-2 w-full overflow-hidden rounded-full bg-gray-200">
                     <motion.div
-                      className="h-full bg-gradient-to-r from-brand-blue to-blue-400"
+                      className="from-brand-blue h-full bg-gradient-to-r to-blue-400"
                       initial={{ width: 0 }}
                       animate={{ width: `${progress}%` }}
                       transition={{ duration: 0.3 }}
@@ -159,4 +168,3 @@ export function ProgressOverlay({
     </AnimatePresence>
   );
 }
-

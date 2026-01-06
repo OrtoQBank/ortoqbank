@@ -6,7 +6,7 @@ import {
   internalAction,
   internalMutation,
   mutation,
-  query
+  query,
 } from './_generated/server';
 import { retrier } from './retrier';
 
@@ -73,9 +73,12 @@ export const createPendingOrder = mutation({
   }),
   handler: async (ctx, args) => {
     // Get pricing plan to determine correct price
-    const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
-      productId: args.productId,
-    });
+    const pricingPlan: any = await ctx.runQuery(
+      api.pricingPlans.getByProductId,
+      {
+        productId: args.productId,
+      },
+    );
 
     if (!pricingPlan || !pricingPlan.isActive) {
       console.error(args);
@@ -84,7 +87,8 @@ export const createPendingOrder = mutation({
 
     // Base prices from the pricing plan (set by admin)
     const regularPrice = pricingPlan.regularPriceNum || 0;
-    const pixPrice = pricingPlan.pixPriceNum || pricingPlan.regularPriceNum || 0;
+    const pixPrice =
+      pricingPlan.pixPriceNum || pricingPlan.regularPriceNum || 0;
 
     if (regularPrice <= 0 || pixPrice <= 0) {
       throw new Error('Invalid product price');
@@ -99,24 +103,30 @@ export const createPendingOrder = mutation({
     // Apply coupon if provided (applies to the selected payment method's price)
     if (args.couponCode && args.couponCode.trim()) {
       // Validate coupon with user CPF for usage tracking
-      const couponResult: any = await ctx.runQuery(api.promoCoupons.validateAndApplyCoupon, {
-        code: args.couponCode,
-        originalPrice: basePrice,
-        userCpf: args.cpf.replaceAll(/\D/g, ''),
-      });
+      const couponResult: any = await ctx.runQuery(
+        api.promoCoupons.validateAndApplyCoupon,
+        {
+          code: args.couponCode,
+          originalPrice: basePrice,
+          userCpf: args.cpf.replaceAll(/\D/g, ''),
+        },
+      );
 
       if (couponResult.isValid) {
         finalPrice = couponResult.finalPrice;
         couponDiscount = couponResult.discountAmount;
         appliedCouponCode = args.couponCode.toUpperCase();
-        console.log(`✅ Applied coupon ${appliedCouponCode}: -R$ ${couponDiscount}`);
+        console.log(
+          `✅ Applied coupon ${appliedCouponCode}: -R$ ${couponDiscount}`,
+        );
       } else {
         throw new Error(couponResult.errorMessage || 'Cupom inválido');
       }
     }
 
     // Calculate PIX savings (difference between regular and PIX price)
-    const pixDiscount = args.paymentMethod === 'PIX' ? (regularPrice - pixPrice) : 0;
+    const pixDiscount =
+      args.paymentMethod === 'PIX' ? regularPrice - pixPrice : 0;
 
     // Round to 2 decimal places
     finalPrice = Math.round(finalPrice * 100) / 100;
@@ -153,7 +163,9 @@ export const createPendingOrder = mutation({
     });
 
     console.log(`📝 Created pending order ${pendingOrderId}`);
-    console.log(`💰 Price breakdown: Method=${args.paymentMethod}, Base R$ ${basePrice}, Coupon R$ ${couponDiscount}, Final R$ ${finalPrice}`);
+    console.log(
+      `💰 Price breakdown: Method=${args.paymentMethod}, Base R$ ${basePrice}, Coupon R$ ${couponDiscount}, Final R$ ${finalPrice}`,
+    );
 
     return {
       pendingOrderId,
@@ -176,11 +188,13 @@ export const linkPaymentToOrder = mutation({
     pendingOrderId: v.id('pendingOrders'),
     asaasPaymentId: v.string(),
     installmentCount: v.optional(v.number()), // Number of credit card installments
-    pixData: v.optional(v.object({
-      qrPayload: v.optional(v.string()),
-      qrCodeBase64: v.optional(v.string()),
-      expirationDate: v.optional(v.string()),
-    })),
+    pixData: v.optional(
+      v.object({
+        qrPayload: v.optional(v.string()),
+        qrCodeBase64: v.optional(v.string()),
+        expirationDate: v.optional(v.string()),
+      }),
+    ),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
@@ -191,7 +205,9 @@ export const linkPaymentToOrder = mutation({
       pixData: args.pixData,
     });
 
-    console.log(`🔗 Linked payment ${args.asaasPaymentId} to order ${args.pendingOrderId}`);
+    console.log(
+      `🔗 Linked payment ${args.asaasPaymentId} to order ${args.pendingOrderId}`,
+    );
     if (args.installmentCount && args.installmentCount > 1) {
       console.log(`💳 Installment payment: ${args.installmentCount}x`);
     }
@@ -219,124 +235,145 @@ export const processAsaasWebhook = internalAction({
     console.log(`Processing AsaaS webhook: ${event} for payment ${payment.id}`);
 
     // Handle payment confirmation
-    if ((event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') && (payment.status === 'RECEIVED' || payment.status === 'CONFIRMED')) {
+    if (
+      (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') &&
+      (payment.status === 'RECEIVED' || payment.status === 'CONFIRMED')
+    ) {
+      // Use externalReference to find the pending order
+      const pendingOrderId = payment.externalReference;
+      if (!pendingOrderId) {
+        console.error(`No externalReference found in payment ${payment.id}`);
+        return null;
+      }
 
-        // Use externalReference to find the pending order
-        const pendingOrderId = payment.externalReference;
-        if (!pendingOrderId) {
-          console.error(`No externalReference found in payment ${payment.id}`);
-          return null;
-        }
-
-        // SECURITY: Verify payment amount matches order amount
-        const pendingOrder = await ctx.runQuery(api.payments.getPendingOrderById, {
+      // SECURITY: Verify payment amount matches order amount
+      const pendingOrder = (await ctx.runQuery(
+        api.payments.getPendingOrderById,
+        {
           orderId: pendingOrderId,
-        }) as PendingOrderWithInstallments | null;
+        },
+      )) as PendingOrderWithInstallments | null;
 
-        if (!pendingOrder) {
-          console.error(`Order not found: ${pendingOrderId}`);
-          return null;
-        }
+      if (!pendingOrder) {
+        console.error(`Order not found: ${pendingOrderId}`);
+        return null;
+      }
 
-        // Check if payment amount matches expected amount (with small tolerance for rounding)
-        const tolerance = 0.02; // 2 cents tolerance
+      // Check if payment amount matches expected amount (with small tolerance for rounding)
+      const tolerance = 0.02; // 2 cents tolerance
 
-        // IMPORTANT: Asaas creates SEPARATE payment records for each installment
-        // So for a 2x payment, we receive 2 separate webhooks with individual installment amounts
-        const installmentNumber = payment.installmentNumber;
-        const installmentGroupId = payment.installment;
-        const isInstallmentPayment = !!installmentNumber && !!installmentGroupId;
+      // IMPORTANT: Asaas creates SEPARATE payment records for each installment
+      // So for a 2x payment, we receive 2 separate webhooks with individual installment amounts
+      const installmentNumber = payment.installmentNumber;
+      const installmentGroupId = payment.installment;
+      const isInstallmentPayment = !!installmentNumber && !!installmentGroupId;
 
-        console.log(`💰 Payment verification:`, {
-          paymentId: payment.id,
-          paymentValue: payment.value,
-          installmentNumber,
-          installmentGroupId,
-          isInstallmentPayment,
-          expectedOrderAmount: pendingOrder.finalPrice,
-          orderInstallmentCount: pendingOrder.installmentCount,
-        });
+      console.log(`💰 Payment verification:`, {
+        paymentId: payment.id,
+        paymentValue: payment.value,
+        installmentNumber,
+        installmentGroupId,
+        isInstallmentPayment,
+        expectedOrderAmount: pendingOrder.finalPrice,
+        orderInstallmentCount: pendingOrder.installmentCount,
+      });
 
-        if (isInstallmentPayment) {
-          // Verify installment amount if we have the installment count stored
-          const storedInstallmentCount = pendingOrder.installmentCount;
-          if (storedInstallmentCount && storedInstallmentCount > 1) {
-            const expectedInstallmentValue = pendingOrder.finalPrice / storedInstallmentCount;
-            const actualInstallmentValue = payment.value || 0;
+      if (isInstallmentPayment) {
+        // Verify installment amount if we have the installment count stored
+        const storedInstallmentCount = pendingOrder.installmentCount;
+        if (storedInstallmentCount && storedInstallmentCount > 1) {
+          const expectedInstallmentValue =
+            pendingOrder.finalPrice / storedInstallmentCount;
+          const actualInstallmentValue = payment.value || 0;
 
-            // Allow small rounding differences (Asaas may round differently)
-            if (Math.abs(actualInstallmentValue - expectedInstallmentValue) > tolerance) {
-              console.error(`🚨 SECURITY ALERT: Installment amount mismatch!`, {
-                orderId: pendingOrderId,
-                paymentId: payment.id,
-                orderTotal: pendingOrder.finalPrice,
-                installmentCount: storedInstallmentCount,
-                expectedPerInstallment: expectedInstallmentValue,
-                actualPerInstallment: actualInstallmentValue,
-                difference: actualInstallmentValue - expectedInstallmentValue,
-              });
-
-              // Don't process - this is a potential fraud attempt
-              return null;
-            }
-
-            console.log(`✅ Installment ${installmentNumber}/${storedInstallmentCount} verified: R$ ${actualInstallmentValue}`);
-          } else {
-            // No stored installment count - log warning but proceed (trust Asaas)
-            console.log(`⚠️ Processing installment ${installmentNumber} without stored installment count (installment group: ${installmentGroupId})`);
-            console.log(`   Payment value: R$ ${payment.value} (this is 1 installment)`);
-            console.log(`   Expected order total: R$ ${pendingOrder.finalPrice}`);
-          }
-
-          // For installment payments, only CONFIRM THE ORDER on the FIRST installment
-          // Invoice is generated only once for the first installment with the TOTAL value
-          if (installmentNumber !== 1) {
-            console.log(`⏭️ Skipping installment ${installmentNumber} - order and invoice already processed on first installment`);
-            return null; // Don't confirm order or generate invoice again
-          }
-
-          console.log(`✅ Processing first installment - will confirm order and generate single invoice with total value`);
-        } else {
-          // For single payments, verify the amount exactly
-          const paidAmount = payment.value || payment.totalValue || 0;
-          const expectedAmount = pendingOrder.finalPrice;
-
-          if (Math.abs(paidAmount - expectedAmount) > tolerance) {
-            console.error(`🚨 SECURITY ALERT: Payment amount mismatch!`, {
+          // Allow small rounding differences (Asaas may round differently)
+          if (
+            Math.abs(actualInstallmentValue - expectedInstallmentValue) >
+            tolerance
+          ) {
+            console.error(`🚨 SECURITY ALERT: Installment amount mismatch!`, {
               orderId: pendingOrderId,
               paymentId: payment.id,
-              expected: expectedAmount,
-              paid: paidAmount,
-              difference: paidAmount - expectedAmount,
+              orderTotal: pendingOrder.finalPrice,
+              installmentCount: storedInstallmentCount,
+              expectedPerInstallment: expectedInstallmentValue,
+              actualPerInstallment: actualInstallmentValue,
+              difference: actualInstallmentValue - expectedInstallmentValue,
             });
 
-            // Don't process the payment - this is a potential fraud attempt
+            // Don't process - this is a potential fraud attempt
             return null;
           }
 
-          console.log(`✅ Payment amount verified: R$ ${paidAmount} matches order R$ ${expectedAmount}`);
+          console.log(
+            `✅ Installment ${installmentNumber}/${storedInstallmentCount} verified: R$ ${actualInstallmentValue}`,
+          );
+        } else {
+          // No stored installment count - log warning but proceed (trust Asaas)
+          console.log(
+            `⚠️ Processing installment ${installmentNumber} without stored installment count (installment group: ${installmentGroupId})`,
+          );
+          console.log(
+            `   Payment value: R$ ${payment.value} (this is 1 installment)`,
+          );
+          console.log(`   Expected order total: R$ ${pendingOrder.finalPrice}`);
         }
 
-        const order = await ctx.runMutation(internal.payments.confirmPayment, {
-          pendingOrderId,
-          asaasPaymentId: payment.id,
-        });
+        // For installment payments, only CONFIRM THE ORDER on the FIRST installment
+        // Invoice is generated only once for the first installment with the TOTAL value
+        if (installmentNumber !== 1) {
+          console.log(
+            `⏭️ Skipping installment ${installmentNumber} - order and invoice already processed on first installment`,
+          );
+          return null; // Don't confirm order or generate invoice again
+        }
 
-        // Send Clerk invitation email
-        if (order) {
-          try {
-            await ctx.runAction(internal.payments.sendClerkInvitation, {
-              email: order.email,
-              orderId: pendingOrderId,
-              customerName: order.name,
-            });
-            console.log(`📧 Sent Clerk invitation to ${order.email}`);
-          } catch (emailError) {
-            console.error('Failed to send Clerk invitation:', emailError);
-            // Don't fail the whole process if email fails
-          }
+        console.log(
+          `✅ Processing first installment - will confirm order and generate single invoice with total value`,
+        );
+      } else {
+        // For single payments, verify the amount exactly
+        const paidAmount = payment.value || payment.totalValue || 0;
+        const expectedAmount = pendingOrder.finalPrice;
+
+        if (Math.abs(paidAmount - expectedAmount) > tolerance) {
+          console.error(`🚨 SECURITY ALERT: Payment amount mismatch!`, {
+            orderId: pendingOrderId,
+            paymentId: payment.id,
+            expected: expectedAmount,
+            paid: paidAmount,
+            difference: paidAmount - expectedAmount,
+          });
+
+          // Don't process the payment - this is a potential fraud attempt
+          return null;
+        }
+
+        console.log(
+          `✅ Payment amount verified: R$ ${paidAmount} matches order R$ ${expectedAmount}`,
+        );
+      }
+
+      const order = await ctx.runMutation(internal.payments.confirmPayment, {
+        pendingOrderId,
+        asaasPaymentId: payment.id,
+      });
+
+      // Send Clerk invitation email
+      if (order) {
+        try {
+          await ctx.runAction(internal.payments.sendClerkInvitation, {
+            email: order.email,
+            orderId: pendingOrderId,
+            customerName: order.name,
+          });
+          console.log(`📧 Sent Clerk invitation to ${order.email}`);
+        } catch (emailError) {
+          console.error('Failed to send Clerk invitation:', emailError);
+          // Don't fail the whole process if email fails
         }
       }
+    }
 
     return null;
   },
@@ -355,7 +392,7 @@ export const confirmPayment = internalMutation({
       email: v.string(),
       name: v.string(),
     }),
-    v.null()
+    v.null(),
   ),
   handler: async (ctx, args) => {
     // Find the pending order
@@ -366,7 +403,11 @@ export const confirmPayment = internalMutation({
       return null;
     }
 
-    if (order.status === 'paid' || order.status === 'provisioned' || order.status === 'completed') {
+    if (
+      order.status === 'paid' ||
+      order.status === 'provisioned' ||
+      order.status === 'completed'
+    ) {
       console.log(`Order ${args.pendingOrderId} already processed, skipping`);
       return {
         email: order.email,
@@ -424,7 +465,9 @@ export const confirmPayment = internalMutation({
           currentUses: currentUses + 1,
         });
 
-        console.log(`📊 Confirmed coupon usage: ${order.couponCode} (${currentUses + 1}/${coupon.maxUses || '∞'})`);
+        console.log(
+          `📊 Confirmed coupon usage: ${order.couponCode} (${currentUses + 1}/${coupon.maxUses || '∞'})`,
+        );
       }
     }
 
@@ -468,13 +511,16 @@ export const maybeProvisionAccess = internalMutation({
     const hasPayment = order.status === 'paid';
     const hasUser = !!order.userId;
 
-    console.log(`🔍 Checking provisioning readiness for order ${args.orderId}:`, {
-      status: order.status,
-      hasPayment,
-      hasUser,
-      userId: order.userId,
-      paidAt: order.paidAt,
-    });
+    console.log(
+      `🔍 Checking provisioning readiness for order ${args.orderId}:`,
+      {
+        status: order.status,
+        hasPayment,
+        hasUser,
+        userId: order.userId,
+        paidAt: order.paidAt,
+      },
+    );
 
     if (!hasPayment || !hasUser) {
       console.log(`⏸️ Order ${args.orderId} not ready for provisioning:`, {
@@ -507,17 +553,20 @@ export const maybeProvisionAccess = internalMutation({
         status: 'completed',
       });
 
-      console.log(`✅ Successfully provisioned access for order ${args.orderId}`);
-
+      console.log(
+        `✅ Successfully provisioned access for order ${args.orderId}`,
+      );
     } catch (error) {
-      console.error(`Error provisioning access for order ${args.orderId}:`, error);
+      console.error(
+        `Error provisioning access for order ${args.orderId}:`,
+        error,
+      );
       // Don't throw - let it retry later
     }
 
     return null;
   },
 });
-
 
 /**
  * Claim order by email (called from Clerk webhook)
@@ -534,15 +583,15 @@ export const claimOrderByEmail = mutation({
   handler: async (ctx, args) => {
     // Query by email index only (avoid using .filter() per Convex guidelines)
     const order = await ctx.db
-      .query("pendingOrders")
-      .withIndex("by_email", (q) => q.eq("email", args.email))
+      .query('pendingOrders')
+      .withIndex('by_email', q => q.eq('email', args.email))
       .first();
 
     // Check status in TypeScript after retrieval
     if (!order || order.status !== 'paid') {
       return {
         success: true,
-        message: 'No paid orders found for this email.'
+        message: 'No paid orders found for this email.',
       };
     }
 
@@ -561,7 +610,7 @@ export const claimOrderByEmail = mutation({
 
     return {
       success: true,
-      message: 'Order claimed successfully!'
+      message: 'Order claimed successfully!',
     };
   },
 });
@@ -578,13 +627,18 @@ export const sendClerkInvitation = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     // Create pending invitation record
-    const invitationId = await ctx.runMutation(internal.payments.createEmailInvitation, {
-      orderId: args.orderId as Id<'pendingOrders'>,
-      email: args.email,
-      customerName: args.customerName,
-    });
+    const invitationId = await ctx.runMutation(
+      internal.payments.createEmailInvitation,
+      {
+        orderId: args.orderId as Id<'pendingOrders'>,
+        email: args.email,
+        customerName: args.customerName,
+      },
+    );
 
-    console.log(`📧 Starting email invitation for ${args.email} (order: ${args.orderId})`);
+    console.log(
+      `📧 Starting email invitation for ${args.email} (order: ${args.orderId})`,
+    );
 
     // Run with retrier - this will automatically retry on failure
     try {
@@ -602,12 +656,15 @@ export const sendClerkInvitation = internalAction({
           initialBackoffMs: 1000,
           base: 2,
           maxFailures: 3,
-        }
+        },
       );
     } catch (error) {
       // This only happens if all retries fail
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`❌ Failed to send invitation after all retries: ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
+      console.error(
+        `❌ Failed to send invitation after all retries: ${errorMessage}`,
+      );
 
       await ctx.runMutation(internal.payments.updateEmailInvitationFailure, {
         invitationId,
@@ -640,12 +697,14 @@ export const sendClerkInvitationAttempt = internalAction({
       throw new Error('CLERK_SECRET_KEY not configured');
     }
 
-    console.log(`📤 Attempt ${args.attemptNumber}: Sending Clerk invitation to ${args.email}`);
+    console.log(
+      `📤 Attempt ${args.attemptNumber}: Sending Clerk invitation to ${args.email}`,
+    );
 
     const response = await fetch('https://api.clerk.com/v1/invitations', {
       method: 'POST',
       headers: {
-        'Authorization': `Bearer ${CLERK_SECRET_KEY}`,
+        Authorization: `Bearer ${CLERK_SECRET_KEY}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
@@ -664,7 +723,9 @@ export const sendClerkInvitationAttempt = internalAction({
     }
 
     const invitation = await response.json();
-    console.log(`✅ Attempt ${args.attemptNumber} succeeded: Invitation ${invitation.id} sent to ${args.email}`);
+    console.log(
+      `✅ Attempt ${args.attemptNumber} succeeded: Invitation ${invitation.id} sent to ${args.email}`,
+    );
 
     // Update success status
     await ctx.runMutation(internal.payments.updateEmailInvitationSuccess, {
@@ -685,28 +746,42 @@ export const checkPaymentStatus = query({
     pendingOrderId: v.string(),
   },
   returns: v.object({
-    status: v.union(v.literal('pending'), v.literal('confirmed'), v.literal('failed')),
-    orderDetails: v.optional(v.object({
-      email: v.string(),
-      productId: v.string(),
-      finalPrice: v.number(),
-    })),
-    pixData: v.optional(v.object({
-      qrPayload: v.optional(v.string()),
-      qrCodeBase64: v.optional(v.string()),
-      expirationDate: v.optional(v.string()),
-    })),
+    status: v.union(
+      v.literal('pending'),
+      v.literal('confirmed'),
+      v.literal('failed'),
+    ),
+    orderDetails: v.optional(
+      v.object({
+        email: v.string(),
+        productId: v.string(),
+        finalPrice: v.number(),
+      }),
+    ),
+    pixData: v.optional(
+      v.object({
+        qrPayload: v.optional(v.string()),
+        qrCodeBase64: v.optional(v.string()),
+        expirationDate: v.optional(v.string()),
+      }),
+    ),
   }),
   handler: async (ctx, args) => {
     try {
       // Find the order by ID
-      const order = await ctx.db.get(args.pendingOrderId as Id<'pendingOrders'>);
+      const order = await ctx.db.get(
+        args.pendingOrderId as Id<'pendingOrders'>,
+      );
 
       if (!order) {
         return { status: 'failed' as const };
       }
 
-      if (order.status === 'paid' || order.status === 'provisioned' || order.status === 'completed') {
+      if (
+        order.status === 'paid' ||
+        order.status === 'provisioned' ||
+        order.status === 'completed'
+      ) {
         return {
           status: 'confirmed' as const,
           orderDetails: {
@@ -877,7 +952,7 @@ export const findSentInvitationByEmail = query({
     v.object({
       _id: v.id('emailInvitations'),
     }),
-    v.null()
+    v.null(),
   ),
   handler: async (ctx, args) => {
     // Query by email index only (avoid using .filter() per Convex guidelines)

@@ -7,7 +7,7 @@ import {
   FilePlusIcon,
   FolderCogIcon,
   SettingsIcon,
-  Users
+  Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';

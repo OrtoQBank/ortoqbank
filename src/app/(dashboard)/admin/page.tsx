@@ -18,10 +18,7 @@ export default function AdminDashboard() {
   const [loadingUsers, setLoadingUsers] = useState<Set<Id<'users'>>>(new Set());
 
   // Fetch users from backend database instead of Clerk
-  const usersFromAll = useQuery(
-    api.users.getAllUsersForAdmin,
-    { limit: 20 },
-  );
+  const usersFromAll = useQuery(api.users.getAllUsersForAdmin, { limit: 20 });
 
   const users = usersFromAll;
 
@@ -121,7 +118,7 @@ export default function AdminDashboard() {
                 <div className="flex flex-wrap gap-2">
                   <button
                     onClick={() => handleSetRole(user._id, 'admin')}
-                    className="inline-flex h-8 items-center rounded-md border border-transparent bg-brand-blue px-3 text-xs font-medium text-white hover:bg-brand-blue/90 focus:ring-2 focus:ring-brand-blue focus:ring-offset-2 focus:outline-none disabled:opacity-50"
+                    className="bg-brand-blue hover:bg-brand-blue/90 focus:ring-brand-blue inline-flex h-8 items-center rounded-md border border-transparent px-3 text-xs font-medium text-white focus:ring-2 focus:ring-offset-2 focus:outline-none disabled:opacity-50"
                     disabled={role === 'admin' || loadingUsers.has(user._id)}
                   >
                     {loadingUsers.has(user._id)
@@ -159,4 +156,3 @@ export default function AdminDashboard() {
     </div>
   );
 }
-

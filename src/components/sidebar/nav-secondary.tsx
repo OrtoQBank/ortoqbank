@@ -2,12 +2,12 @@ import { FileClockIcon, type LucideIcon, PenSquareIcon } from 'lucide-react';
 import Link from 'next/link';
 
 import {
-    SidebarGroup,
-    SidebarGroupLabel,
-    SidebarMenu,
-    SidebarMenuButton,
-    SidebarMenuItem,
-    useSidebar,
+  SidebarGroup,
+  SidebarGroupLabel,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+  useSidebar,
 } from '../ui/sidebar';
 
 interface MenuItem {

@@ -13,14 +13,13 @@ export default function About() {
     <section id="sobre" className="bg-brand-blue/5 py-8 md:py-12">
       <div className="container mx-auto px-4">
         <div className="mx-auto mb-12 max-w-3xl text-center">
-          <h2 className="mb-4 text-3xl font-bold text-brand-blue md:text-4xl lg:text-5xl">
+          <h2 className="text-brand-blue mb-4 text-3xl font-bold md:text-4xl lg:text-5xl">
             Sobre o OrtoQBank
           </h2>
-          <div className="mx-auto mb-6 h-1 w-20 rounded-full bg-brand-blue"></div>
-          
-      
+          <div className="bg-brand-blue mx-auto mb-6 h-1 w-20 rounded-full"></div>
+
           <p className="text-lg leading-relaxed text-gray-700">
-            <span className="mb-3 block text-xl font-bold text-brand-blue">
+            <span className="text-brand-blue mb-3 block text-xl font-bold">
               NOSSA METODOLOGIA
             </span>
             Criamos um método validado nas provas mais concorridas do universo
@@ -31,27 +30,26 @@ export default function About() {
           </p>
         </div>
 
-            {/* Video Section */}
-            <div className="mx-auto mb-8 aspect-video max-w-2xl overflow-hidden rounded-lg shadow-lg">
-            <iframe 
-              width="100%" 
-              height="100%" 
-              src="https://imagekit.io/player/embed/4hmtj9yu8/VID-20251008-WA0049-min.mp4?controls=true&autoplay=false&loop=false&background=%23000000&updatedAt=1759967892697&thumbnail=https%3A%2F%2Fik.imagekit.io%2F4hmtj9yu8%2FVID-20251008-WA0049-min.mp4%2Fik-thumbnail.jpg%3FupdatedAt%3D1759967892697&updatedAt=1759967892697" 
-              title="ImageKit video player" 
-              sandbox="allow-scripts allow-same-origin"
-              allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
-              loading="lazy"
-              style={{ border: 0 }}
-              className="h-full w-full"
-            />
-          </div>
-
+        {/* Video Section */}
+        <div className="mx-auto mb-8 aspect-video max-w-2xl overflow-hidden rounded-lg shadow-lg">
+          <iframe
+            width="100%"
+            height="100%"
+            src="https://imagekit.io/player/embed/4hmtj9yu8/VID-20251008-WA0049-min.mp4?controls=true&autoplay=false&loop=false&background=%23000000&updatedAt=1759967892697&thumbnail=https%3A%2F%2Fik.imagekit.io%2F4hmtj9yu8%2FVID-20251008-WA0049-min.mp4%2Fik-thumbnail.jpg%3FupdatedAt%3D1759967892697&updatedAt=1759967892697"
+            title="ImageKit video player"
+            sandbox="allow-scripts allow-same-origin"
+            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share; fullscreen"
+            loading="lazy"
+            style={{ border: 0 }}
+            className="h-full w-full"
+          />
+        </div>
 
         <div className="space-y-6">
           {/* First row - 3 cards */}
           <div className="grid gap-6 md:grid-cols-3">
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue">
+              <div className="bg-brand-blue/10 text-brand-blue mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
                 <FileText className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -59,13 +57,13 @@ export default function About() {
               </h3>
               <p className="text-center text-gray-600">
                 Um banco de questões completo com gabaritos direcionados por
-                especialistas da USP, baseados na bibliografia da SBOT mas com os
-                insights diferenciais dos professores.
+                especialistas da USP, baseados na bibliografia da SBOT mas com
+                os insights diferenciais dos professores.
               </p>
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue">
+              <div className="bg-brand-blue/10 text-brand-blue mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
                 <Smartphone className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -73,12 +71,13 @@ export default function About() {
               </h3>
               <p className="text-center text-gray-600">
                 Plataforma responsiva para computador, tablet e celular,
-                permitindo que você estude em qualquer lugar e a qualquer momento.
+                permitindo que você estude em qualquer lugar e a qualquer
+                momento.
               </p>
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue">
+              <div className="bg-brand-blue/10 text-brand-blue mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
                 <Lightbulb className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
@@ -94,20 +93,21 @@ export default function About() {
           {/* Second row - 2 cards centered */}
           <div className="mx-auto grid max-w-3xl gap-6 md:grid-cols-2">
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue">
+              <div className="bg-brand-blue/10 text-brand-blue mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
                 <BarChart3 className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">
                 Análise de Desempenho
               </h3>
               <p className="text-center text-gray-600">
-                Acompanhe seu progresso com estatísticas detalhadas e identifique
-                áreas que precisam de mais atenção para maximizar seu aprendizado.
+                Acompanhe seu progresso com estatísticas detalhadas e
+                identifique áreas que precisam de mais atenção para maximizar
+                seu aprendizado.
               </p>
             </div>
 
             <div className="rounded-lg border border-gray-100 bg-white p-6 shadow-lg transition-shadow duration-300 hover:shadow-xl">
-              <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-brand-blue/10 text-brand-blue">
+              <div className="bg-brand-blue/10 text-brand-blue mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full">
                 <BookOpen className="h-7 w-7" />
               </div>
               <h3 className="mb-3 text-center text-xl font-bold">

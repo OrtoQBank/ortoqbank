@@ -366,8 +366,8 @@ function ResetStatsButton() {
         <DialogHeader>
           <DialogTitle>Confirmar reset de estatísticas</DialogTitle>
           <DialogDescription>
-            Tem certeza de que deseja zerar todas as suas estatísticas de respostas?
-            Esta ação não pode ser desfeita.
+            Tem certeza de que deseja zerar todas as suas estatísticas de
+            respostas? Esta ação não pode ser desfeita.
             <br />
             <br />
             <strong>Nota:</strong> Suas questões salvas não serão afetadas.

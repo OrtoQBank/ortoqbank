@@ -47,7 +47,7 @@ export const submitReport = mutation({
 export const generateUploadUrl = mutation({
   args: {},
   returns: v.string(),
-  handler: async (ctx) => {
+  handler: async ctx => {
     // Verify user is authenticated
     await getCurrentUserOrThrow(ctx);
     return await ctx.storage.generateUploadUrl();
@@ -59,35 +59,39 @@ export const generateUploadUrl = mutation({
  */
 export const getReportsForAdmin = query({
   args: {
-    status: v.optional(v.union(
-      v.literal("pending"),
-      v.literal("reviewed"),
-      v.literal("resolved"),
-      v.literal("dismissed")
-    )),
+    status: v.optional(
+      v.union(
+        v.literal('pending'),
+        v.literal('reviewed'),
+        v.literal('resolved'),
+        v.literal('dismissed'),
+      ),
+    ),
     limit: v.optional(v.number()),
   },
-  returns: v.array(v.object({
-    _id: v.id('questionErrorReports'),
-    _creationTime: v.number(),
-    questionId: v.id('questions'),
-    questionCode: v.optional(v.string()),
-    reporterId: v.id('users'),
-    reporterEmail: v.optional(v.string()),
-    reporterName: v.optional(v.string()),
-    description: v.string(),
-    screenshotUrl: v.optional(v.string()),
-    status: v.union(
-      v.literal("pending"),
-      v.literal("reviewed"),
-      v.literal("resolved"),
-      v.literal("dismissed")
-    ),
-    reviewedBy: v.optional(v.id('users')),
-    reviewedAt: v.optional(v.number()),
-    reviewNotes: v.optional(v.string()),
-    questionTitle: v.optional(v.string()),
-  })),
+  returns: v.array(
+    v.object({
+      _id: v.id('questionErrorReports'),
+      _creationTime: v.number(),
+      questionId: v.id('questions'),
+      questionCode: v.optional(v.string()),
+      reporterId: v.id('users'),
+      reporterEmail: v.optional(v.string()),
+      reporterName: v.optional(v.string()),
+      description: v.string(),
+      screenshotUrl: v.optional(v.string()),
+      status: v.union(
+        v.literal('pending'),
+        v.literal('reviewed'),
+        v.literal('resolved'),
+        v.literal('dismissed'),
+      ),
+      reviewedBy: v.optional(v.id('users')),
+      reviewedAt: v.optional(v.number()),
+      reviewNotes: v.optional(v.string()),
+      questionTitle: v.optional(v.string()),
+    }),
+  ),
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
 
@@ -97,20 +101,18 @@ export const getReportsForAdmin = query({
           .withIndex('by_status', q => q.eq('status', args.status!))
           .order('desc')
           .take(limit)
-      : await ctx.db
-          .query('questionErrorReports')
-          .order('desc')
-          .take(limit);
+      : await ctx.db.query('questionErrorReports').order('desc').take(limit);
 
     // Enrich with user and question data
     const enrichedReports = await Promise.all(
-      reports.map(async (report) => {
+      reports.map(async report => {
         const reporter = await ctx.db.get(report.reporterId);
         const question = await ctx.db.get(report.questionId);
-        
+
         let screenshotUrl: string | undefined;
         if (report.screenshotStorageId) {
-          screenshotUrl = await ctx.storage.getUrl(report.screenshotStorageId) ?? undefined;
+          screenshotUrl =
+            (await ctx.storage.getUrl(report.screenshotStorageId)) ?? undefined;
         }
 
         return {
@@ -120,7 +122,9 @@ export const getReportsForAdmin = query({
           questionCode: report.questionCode,
           reporterId: report.reporterId,
           reporterEmail: report.reporterEmail,
-          reporterName: reporter ? `${reporter.firstName ?? ''} ${reporter.lastName ?? ''}`.trim() : undefined,
+          reporterName: reporter
+            ? `${reporter.firstName ?? ''} ${reporter.lastName ?? ''}`.trim()
+            : undefined,
           description: report.description,
           screenshotUrl,
           status: report.status,
@@ -129,7 +133,7 @@ export const getReportsForAdmin = query({
           reviewNotes: report.reviewNotes,
           questionTitle: question?.title,
         };
-      })
+      }),
     );
 
     return enrichedReports;
@@ -143,10 +147,10 @@ export const updateReportStatus = mutation({
   args: {
     reportId: v.id('questionErrorReports'),
     status: v.union(
-      v.literal("pending"),
-      v.literal("reviewed"),
-      v.literal("resolved"),
-      v.literal("dismissed")
+      v.literal('pending'),
+      v.literal('reviewed'),
+      v.literal('resolved'),
+      v.literal('dismissed'),
     ),
     reviewNotes: v.optional(v.string()),
   },
@@ -189,9 +193,9 @@ export const getReportCounts = query({
     dismissed: v.number(),
     total: v.number(),
   }),
-  handler: async (ctx) => {
+  handler: async ctx => {
     const allReports = await ctx.db.query('questionErrorReports').collect();
-    
+
     const counts = {
       pending: 0,
       reviewed: 0,
@@ -243,4 +247,3 @@ export const hasUserReportedQuestion = query({
     return existingReport.reporterId === user._id;
   },
 });
-

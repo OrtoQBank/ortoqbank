@@ -1,25 +1,27 @@
-import { v } from "convex/values";
+import { v } from 'convex/values';
 
-import { query } from "./_generated/server";
+import { query } from './_generated/server';
 
 /**
  * Get comprehensive user access information
  */
 export const getUserAccess = query({
-  args: { userId: v.id("users") },
+  args: { userId: v.id('users') },
   returns: v.object({
     hasAnyAccess: v.boolean(),
-    products: v.array(v.object({
-      productId: v.string(),
-      productName: v.string(),
-      category: v.optional(v.string()),
-      year: v.optional(v.number()),
-      hasAccess: v.boolean(),
-      accessExpiresAt: v.optional(v.number()),
-      status: v.string(),
-      isExpired: v.boolean(),
-      daysUntilExpiration: v.optional(v.number()),
-    })),
+    products: v.array(
+      v.object({
+        productId: v.string(),
+        productName: v.string(),
+        category: v.optional(v.string()),
+        year: v.optional(v.number()),
+        hasAccess: v.boolean(),
+        accessExpiresAt: v.optional(v.number()),
+        status: v.string(),
+        isExpired: v.boolean(),
+        daysUntilExpiration: v.optional(v.number()),
+      }),
+    ),
     activeProducts: v.array(v.string()),
     expiredProducts: v.array(v.string()),
     premiumAccess: v.boolean(),
@@ -27,8 +29,8 @@ export const getUserAccess = query({
   handler: async (ctx, args) => {
     // Get all user products
     const userProducts = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .query('userProducts')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
       .collect();
 
     const now = Date.now();
@@ -43,16 +45,19 @@ export const getUserAccess = query({
       const pricingPlan = await ctx.db.get(userProduct.pricingPlanId);
 
       if (pricingPlan) {
-        const isExpired = userProduct.accessExpiresAt 
-          ? userProduct.accessExpiresAt < now 
+        const isExpired = userProduct.accessExpiresAt
+          ? userProduct.accessExpiresAt < now
           : false;
-        
-        const hasAccess = userProduct.hasAccess && 
-          userProduct.status === "active" && 
+
+        const hasAccess =
+          userProduct.hasAccess &&
+          userProduct.status === 'active' &&
           !isExpired;
 
         const daysUntilExpiration = userProduct.accessExpiresAt
-          ? Math.ceil((userProduct.accessExpiresAt - now) / (24 * 60 * 60 * 1000))
+          ? Math.ceil(
+              (userProduct.accessExpiresAt - now) / (24 * 60 * 60 * 1000),
+            )
           : undefined;
 
         products.push({
@@ -70,8 +75,8 @@ export const getUserAccess = query({
         if (hasAccess) {
           hasAnyAccess = true;
           activeProducts.push(userProduct.productId);
-          
-          if (pricingPlan.category === "premium_pack") {
+
+          if (pricingPlan.category === 'premium_pack') {
             premiumAccess = true;
           }
         } else if (isExpired) {
@@ -94,8 +99,8 @@ export const getUserAccess = query({
  * Check if user has access to specific content/year
  */
 export const checkUserAccessToYear = query({
-  args: { 
-    userId: v.id("users"),
+  args: {
+    userId: v.id('users'),
     year: v.number(),
   },
   returns: v.object({
@@ -114,35 +119,45 @@ export const checkUserAccessToYear = query({
 
     // Check for premium pack access (lifetime access to all years)
     const premiumAccess = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user_product", (q) =>
-        q.eq("userId", args.userId).eq("productId", "premium_pack"),
+      .query('userProducts')
+      .withIndex('by_user_product', q =>
+        q.eq('userId', args.userId).eq('productId', 'premium_pack'),
       )
       .unique();
 
-    if (premiumAccess && premiumAccess.status === "active" && premiumAccess.hasAccess) {
+    if (
+      premiumAccess &&
+      premiumAccess.status === 'active' &&
+      premiumAccess.hasAccess
+    ) {
       return {
         hasAccess: true,
-        accessType: "premium_pack",
+        accessType: 'premium_pack',
       };
     }
 
     // Check for year-specific access by looking at all user's products
     // Use index for status, then filter hasAccess in-memory (per Convex guidelines)
     const allUserProducts = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user_status", (q) => q.eq("userId", args.userId).eq("status", "active"))
+      .query('userProducts')
+      .withIndex('by_user_status', q =>
+        q.eq('userId', args.userId).eq('status', 'active'),
+      )
       .collect();
-    
+
     const userProducts = allUserProducts.filter(up => up.hasAccess === true);
 
     for (const userProduct of userProducts) {
       const pricingPlan = await ctx.db.get(userProduct.pricingPlanId);
-      
-      if (pricingPlan && pricingPlan.accessYears && pricingPlan.accessYears.includes(args.year)) {
+
+      if (
+        pricingPlan &&
+        pricingPlan.accessYears &&
+        pricingPlan.accessYears.includes(args.year)
+      ) {
         return {
           hasAccess: true,
-          accessType: "year_access",
+          accessType: 'year_access',
           expiresAt: userProduct.accessExpiresAt,
         };
       }
@@ -158,7 +173,7 @@ export const checkUserAccessToYear = query({
  * Check if user has active year access (simple flag check)
  */
 export const checkUserHasActiveAccess = query({
-  args: { userId: v.id("users") },
+  args: { userId: v.id('users') },
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const user = await ctx.db.get(args.userId);
@@ -170,23 +185,25 @@ export const checkUserHasActiveAccess = query({
  * Get user's subscription summary for dashboard
  */
 export const getUserSubscriptionSummary = query({
-  args: { userId: v.id("users") },
+  args: { userId: v.id('users') },
   returns: v.object({
     totalProducts: v.number(),
     activeProducts: v.number(),
     expiredProducts: v.number(),
-    nextExpiration: v.optional(v.object({
-      productName: v.string(),
-      expiresAt: v.number(),
-      daysRemaining: v.number(),
-    })),
+    nextExpiration: v.optional(
+      v.object({
+        productName: v.string(),
+        expiresAt: v.number(),
+        daysRemaining: v.number(),
+      }),
+    ),
     hasPremium: v.boolean(),
     totalSpent: v.number(),
   }),
   handler: async (ctx, args) => {
     const userProducts = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .query('userProducts')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
       .collect();
 
     const now = Date.now();
@@ -200,30 +217,35 @@ export const getUserSubscriptionSummary = query({
     for (const userProduct of userProducts) {
       totalSpent += userProduct.purchasePrice;
 
-      const isExpired = userProduct.accessExpiresAt 
-        ? userProduct.accessExpiresAt < now 
+      const isExpired = userProduct.accessExpiresAt
+        ? userProduct.accessExpiresAt < now
         : false;
 
-      const hasAccess = userProduct.hasAccess && 
-        userProduct.status === "active" && 
-        !isExpired;
+      const hasAccess =
+        userProduct.hasAccess && userProduct.status === 'active' && !isExpired;
 
       if (hasAccess) {
         activeProducts++;
-        
-        if (userProduct.productId === "premium_pack") {
+
+        if (userProduct.productId === 'premium_pack') {
           hasPremium = true;
         }
 
         // Check for next expiration
-        if (userProduct.accessExpiresAt && (!nextExpiration || userProduct.accessExpiresAt < nextExpiration.expiresAt)) {
+        if (
+          userProduct.accessExpiresAt &&
+          (!nextExpiration ||
+            userProduct.accessExpiresAt < nextExpiration.expiresAt)
+        ) {
           const pricingPlan = await ctx.db.get(userProduct.pricingPlanId);
 
           if (pricingPlan) {
             nextExpiration = {
               productName: pricingPlan.name,
               expiresAt: userProduct.accessExpiresAt,
-              daysRemaining: Math.ceil((userProduct.accessExpiresAt - now) / (24 * 60 * 60 * 1000)),
+              daysRemaining: Math.ceil(
+                (userProduct.accessExpiresAt - now) / (24 * 60 * 60 * 1000),
+              ),
             };
           }
         }
@@ -247,25 +269,27 @@ export const getUserSubscriptionSummary = query({
  * Get user products with pricing plan details
  */
 export const getUserProducts = query({
-  args: { userId: v.id("users") },
-  returns: v.array(v.object({
-    _id: v.id("userProducts"),
-    productId: v.string(),
-    productName: v.string(),
-    category: v.optional(v.string()),
-    year: v.optional(v.number()),
-    hasAccess: v.boolean(),
-    accessGrantedAt: v.number(),
-    accessExpiresAt: v.optional(v.number()),
-    status: v.string(),
-    purchaseDate: v.number(),
-    purchasePrice: v.number(),
-    paymentGateway: v.string(),
-  })),
+  args: { userId: v.id('users') },
+  returns: v.array(
+    v.object({
+      _id: v.id('userProducts'),
+      productId: v.string(),
+      productName: v.string(),
+      category: v.optional(v.string()),
+      year: v.optional(v.number()),
+      hasAccess: v.boolean(),
+      accessGrantedAt: v.number(),
+      accessExpiresAt: v.optional(v.number()),
+      status: v.string(),
+      purchaseDate: v.number(),
+      purchasePrice: v.number(),
+      paymentGateway: v.string(),
+    }),
+  ),
   handler: async (ctx, args) => {
     const userProducts = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user", (q) => q.eq("userId", args.userId))
+      .query('userProducts')
+      .withIndex('by_user', q => q.eq('userId', args.userId))
       .collect();
 
     // Enrich with pricing plan details
@@ -299,9 +323,9 @@ export const getUserProducts = query({
  * Check if user has access to a specific product
  */
 export const userHasAccess = query({
-  args: { 
-    userId: v.id("users"), 
-    productId: v.string() 
+  args: {
+    userId: v.id('users'),
+    productId: v.string(),
   },
   returns: v.object({
     hasAccess: v.boolean(),
@@ -310,19 +334,20 @@ export const userHasAccess = query({
   }),
   handler: async (ctx, args) => {
     const userProduct = await ctx.db
-      .query("userProducts")
-      .withIndex("by_user_product", (q) => 
-        q.eq("userId", args.userId).eq("productId", args.productId)
+      .query('userProducts')
+      .withIndex('by_user_product', q =>
+        q.eq('userId', args.userId).eq('productId', args.productId),
       )
       .unique();
 
-    if (!userProduct || userProduct.status !== "active") {
+    if (!userProduct || userProduct.status !== 'active') {
       return { hasAccess: false };
     }
 
     // Check if access has expired
     const now = Date.now();
-    const hasExpired = userProduct.accessExpiresAt && userProduct.accessExpiresAt < now;
+    const hasExpired =
+      userProduct.accessExpiresAt && userProduct.accessExpiresAt < now;
 
     return {
       hasAccess: userProduct.hasAccess && !hasExpired,

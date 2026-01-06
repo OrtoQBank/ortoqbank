@@ -50,7 +50,7 @@ export default function NavThird() {
       <SidebarGroup>
         <SidebarGroupLabel>Usuário</SidebarGroupLabel>
         <SidebarMenu>
-          <div className="px-2 py-4 text-sm text-muted-foreground">
+          <div className="text-muted-foreground px-2 py-4 text-sm">
             Carregando...
           </div>
         </SidebarMenu>

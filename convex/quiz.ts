@@ -1,8 +1,24 @@
 import { v } from 'convex/values';
 
-import { Doc } from './_generated/dataModel';
+import { Doc, Id } from './_generated/dataModel';
 import { query } from './_generated/server';
 import { mutation } from './triggers';
+
+// Helper to fetch question content from questionContent table
+async function fetchQuestionContent(
+  ctx: any,
+  questionId: Id<'questions'>,
+): Promise<{ questionTextString: string; alternatives: string[] } | null> {
+  const content = await ctx.db
+    .query('questionContent')
+    .withIndex('by_question', (q: any) => q.eq('questionId', questionId))
+    .first();
+  if (!content) return null;
+  return {
+    questionTextString: content.questionTextString,
+    alternatives: content.alternatives,
+  };
+}
 
 export const create = mutation({
   args: {
@@ -18,7 +34,7 @@ export const create = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
     return await ctx.db.insert('presetQuizzes', {
@@ -50,26 +66,13 @@ export const getById = query({
 });
 
 export type SafeQuestion = {
-  _id: Doc<'questions'>['_id'];
-  _creationTime: Doc<'questions'>['_creationTime'];
-  title: Doc<'questions'>['title'];
-  questionTextString: Doc<'questions'>['questionTextString'];
-  alternatives: Doc<'questions'>['alternatives'];
-  questionCode?: Doc<'questions'>['questionCode'];
+  _id: Id<'questions'>;
+  _creationTime: number;
+  title: string;
+  questionTextString: string;
+  alternatives: string[];
+  questionCode?: string;
 };
-
-// Utility function to prepare question data for client
-function sanitizeQuestionForClient(question: Doc<'questions'>): SafeQuestion {
-  const safeQuestion = {
-    _id: question._id,
-    _creationTime: question._creationTime,
-    title: question.title,
-    questionTextString: question.questionTextString,
-    alternatives: question.alternatives,
-    questionCode: question.questionCode,
-  };
-  return safeQuestion;
-}
 
 export const getQuizData = query({
   args: { quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')) },
@@ -77,19 +80,26 @@ export const getQuizData = query({
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
-    // Get all questions and sanitize them
-    // Note: Promise.all with ctx.db.get() is actually optimal in Convex
-    // since individual document lookups are highly optimized
+    // Get all questions with content from questionContent table
     const safeQuestions: SafeQuestion[] = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
         if (!question) throw new Error('Question not found');
-        return sanitizeQuestionForClient(question);
+
+        // Fetch heavy content from questionContent table
+        const content = await fetchQuestionContent(ctx, questionId);
+
+        return {
+          _id: question._id,
+          _creationTime: question._creationTime,
+          title: question.title,
+          questionTextString: content?.questionTextString || '',
+          alternatives: content?.alternatives || [],
+          questionCode: question.questionCode,
+        };
       }),
     );
 
-    // Return quiz data, preserving all fields (including new taxonomy fields if they exist)
-    // This ensures backwards compatibility while supporting new fields
     return {
       ...quiz,
       questions: safeQuestions,
@@ -97,23 +107,37 @@ export const getQuizData = query({
   },
 });
 
-// Lightweight version for quiz results - only fetches essential question fields
+// Type for quiz results questions - includes correctAlternativeIndex
+export type ResultsQuestion = {
+  _id: Id<'questions'>;
+  _creationTime: number;
+  questionTextString: string;
+  alternatives: string[];
+  correctAlternativeIndex: number;
+  questionCode?: string;
+};
+
+// Lightweight version for quiz results - fetches content from questionContent table
 export const getQuizDataForResults = query({
   args: { quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')) },
   handler: async (ctx, args) => {
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
-    // Get lightweight question data - only what's needed for results display
-    const lightweightQuestions = await Promise.all(
+    // Get question data with content from questionContent table
+    const lightweightQuestions: ResultsQuestion[] = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
         if (!question) throw new Error('Question not found');
+
+        // Fetch heavy content from questionContent table
+        const content = await fetchQuestionContent(ctx, questionId);
+
         return {
           _id: question._id,
           _creationTime: question._creationTime,
-          questionTextString: question.questionTextString,
-          alternatives: question.alternatives,
+          questionTextString: content?.questionTextString || '',
+          alternatives: content?.alternatives || [],
           correctAlternativeIndex: question.correctAlternativeIndex,
           questionCode: question.questionCode,
         };

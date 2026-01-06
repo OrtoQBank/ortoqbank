@@ -33,27 +33,27 @@ export type ImageAttributes = {
 // but older content may have been saved with 'image' type
 function transformImageNodes(content: any): any {
   if (!content) return content;
-  
+
   if (Array.isArray(content)) {
     return content.map(transformImageNodes);
   }
-  
+
   if (typeof content === 'object') {
     const transformed = { ...content };
-    
+
     // Convert 'image' type to 'imageResize'
     if (transformed.type === 'image') {
       transformed.type = 'imageResize';
     }
-    
+
     // Recursively transform nested content
     if (transformed.content) {
       transformed.content = transformImageNodes(transformed.content);
     }
-    
+
     return transformed;
   }
-  
+
   return content;
 }
 
@@ -115,7 +115,11 @@ export default function RichTextEditor({
               const blobUrl = URL.createObjectURL(file);
               pendingUploads.set(blobUrl, { file, blobUrl });
 
-              editor.chain().focus().setImage({ src: blobUrl, alt: file.name }).run();
+              editor
+                .chain()
+                .focus()
+                .setImage({ src: blobUrl, alt: file.name })
+                .run();
               return true;
             }
           }
@@ -136,9 +140,13 @@ export default function RichTextEditor({
     if (editor && transformedContent && !editor.isDestroyed) {
       // Only update if the editor content is empty or different from initialContent
       const currentContent = editor.getJSON();
-      const isEmpty = !currentContent.content || currentContent.content.length === 0 || 
-        (currentContent.content.length === 1 && currentContent.content[0].type === 'paragraph' && !currentContent.content[0].content);
-      
+      const isEmpty =
+        !currentContent.content ||
+        currentContent.content.length === 0 ||
+        (currentContent.content.length === 1 &&
+          currentContent.content[0].type === 'paragraph' &&
+          !currentContent.content[0].content);
+
       if (isEmpty) {
         editor.commands.setContent(transformedContent);
       }

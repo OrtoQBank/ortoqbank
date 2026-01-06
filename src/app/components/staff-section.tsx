@@ -31,14 +31,14 @@ export default function StaffSection() {
   return (
     <section className="bg-white py-12 md:py-16">
       <div className="container mx-auto px-4">
-        <h2 className="mb-8 text-center text-3xl font-bold text-brand-blue md:text-4xl">
+        <h2 className="text-brand-blue mb-8 text-center text-3xl font-bold md:text-4xl">
           Nossa Equipe
         </h2>
         <div className="mx-auto grid max-w-4xl grid-cols-1 gap-8 md:grid-cols-2">
           {staffMembers.map((member, index) => (
             <div
               key={index}
-              className="mx-auto w-full max-w-[330px] overflow-hidden rounded-lg border border-brand-blue/20 bg-white shadow-lg"
+              className="border-brand-blue/20 mx-auto w-full max-w-[330px] overflow-hidden rounded-lg border bg-white shadow-lg"
             >
               <div className="overflow-hidden">
                 <Image
@@ -51,7 +51,7 @@ export default function StaffSection() {
                 />
               </div>
               <div className="p-4">
-                <h3 className="mb-1 text-xl font-semibold text-brand-blue">
+                <h3 className="text-brand-blue mb-1 text-xl font-semibold">
                   {member.name}
                 </h3>
 

@@ -799,11 +799,9 @@ async function getRandomFromHierarchicalAggregates(
 }
 
 /**
- * Optimized unanswered questions using pagination instead of .collect()
- */
-/**
  * Get random unanswered questions with hierarchical filtering
- * Updated to use userQuestionStats table directly instead of aggregates
+ * OPTIMIZED: Uses ID-only queries to avoid 16MB limit on full table scans.
+ * When no hierarchy filter is provided, uses aggregate-based random selection.
  */
 async function getRandomUnansweredQuestions(
   ctx: QueryCtx,
@@ -815,56 +813,67 @@ async function getRandomUnansweredQuestions(
     groupId?: Id<'groups'>;
   },
 ): Promise<Id<'questions'>[]> {
-  // Get all answered questions for this user
-  const allStats = await ctx.db
+  // Get answered question IDs from userQuestionStats (lightweight - only IDs needed)
+  const answeredStats = await ctx.db
     .query('userQuestionStats')
-    .withIndex('by_user', q => q.eq('userId', args.userId))
+    .withIndex('by_user_answered', q =>
+      q.eq('userId', args.userId).eq('hasAnswered', true),
+    )
     .collect();
 
-  // Filter to only answered stats
-  const answeredStats = allStats.filter(stat => stat.hasAnswered);
-
-  const answeredQuestionIds = new Set(
+  const answeredQuestionIds = new Set<Id<'questions'>>(
     answeredStats.map(stat => stat.questionId),
   );
 
-  // Get all questions in the specified scope
-  let allQuestions: any[] = [];
+  // Get question IDs in the specified scope - OPTIMIZED to fetch only IDs
+  let allQuestionIds: Id<'questions'>[] = [];
 
   if (args.groupId) {
-    allQuestions = await ctx.db
+    // Use indexed query - returns documents but we only use _id
+    const docs = await ctx.db
       .query('questions')
       .withIndex('by_group', q => q.eq('groupId', args.groupId!))
       .collect();
+    allQuestionIds = docs.map(d => d._id);
   } else if (args.subthemeId) {
-    allQuestions = await ctx.db
+    const docs = await ctx.db
       .query('questions')
       .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId!))
       .collect();
+    allQuestionIds = docs.map(d => d._id);
   } else if (args.themeId) {
-    allQuestions = await ctx.db
+    const docs = await ctx.db
       .query('questions')
       .withIndex('by_theme', q => q.eq('themeId', args.themeId!))
       .collect();
+    allQuestionIds = docs.map(d => d._id);
   } else {
-    // Get all questions
-    allQuestions = await ctx.db.query('questions').collect();
+    // NO HIERARCHY FILTER: Use aggregate-based random selection
+    // This avoids the 16MB limit by not loading the full questions table
+    const randomIds = await selectRandomIdsFromAggregate(
+      () =>
+        (randomQuestions.count as any)(ctx, {
+          namespace: 'global',
+          bounds: {},
+        }),
+      (index: number) => (randomQuestions.at as any)(ctx, index),
+      args.count * 3, // Get more than needed since we'll filter out answered ones
+    );
+    allQuestionIds = randomIds;
   }
 
   // Filter out answered questions
-  const unansweredQuestions = allQuestions.filter(
-    question => !answeredQuestionIds.has(question._id),
+  const unansweredIds = allQuestionIds.filter(
+    id => !answeredQuestionIds.has(id),
   );
 
-  if (unansweredQuestions.length === 0) {
+  if (unansweredIds.length === 0) {
     return [];
   }
 
   // Shuffle and return the requested count
-  const shuffled = unansweredQuestions.toSorted(() => Math.random() - 0.5);
-  return shuffled
-    .slice(0, Math.min(args.count, shuffled.length))
-    .map(q => q._id);
+  const shuffled = unansweredIds.toSorted(() => Math.random() - 0.5);
+  return shuffled.slice(0, Math.min(args.count, shuffled.length));
 }
 
 /**

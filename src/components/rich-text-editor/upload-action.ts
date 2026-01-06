@@ -66,7 +66,6 @@ export async function uploadToImageKit(formData: FormData) {
   }
 }
 
-
 // Server-side proxy function to fetch external images
 export async function fetchExternalImage(url: string) {
   try {

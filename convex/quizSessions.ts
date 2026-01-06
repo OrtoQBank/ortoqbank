@@ -151,14 +151,18 @@ export const submitAnswerAndProgress = mutation({
 
     if (!currentQuestion) throw new Error('Question not found');
 
+    // Fetch explanation from questionContent table (heavy content separated)
+    const questionContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', currentQuestionId))
+      .first();
+
     // 3. Pre-compute values for efficient session update
     const isAnswerCorrect =
       args.selectedAlternativeIndex === currentQuestion.correctAlternativeIndex;
 
-    const explanationString =
-      typeof currentQuestion.explanationTextString === 'string'
-        ? currentQuestion.explanationTextString
-        : JSON.stringify(currentQuestion.explanationTextString);
+    // Get explanation from questionContent table
+    const explanationString = questionContent?.explanationTextString || '';
 
     const nextQuestionIndex = session.currentQuestionIndex + 1;
     const isQuizComplete = nextQuestionIndex >= quiz.questions.length;

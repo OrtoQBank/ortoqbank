@@ -105,9 +105,7 @@ export default function SimuladoPage() {
   const incompleteSessions = incompleteSessionsQuery || [];
 
   // Query to get completed quiz IDs (lightweight query for performance)
-  const completedSessionsQuery = useQuery(
-    api.quizSessions.getCompletedQuizIds,
-  );
+  const completedSessionsQuery = useQuery(api.quizSessions.getCompletedQuizIds);
   const completedSessions = completedSessionsQuery || [];
 
   // Start session mutation
@@ -208,7 +206,7 @@ export default function SimuladoPage() {
           Simulados
         </h1>
         <div className="p-8 text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
+          <div className="border-t-brand-blue mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300"></div>
           <p className="text-gray-600">Carregando simulados...</p>
         </div>
       </div>

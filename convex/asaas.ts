@@ -1,7 +1,7 @@
-import { v } from "convex/values";
+import { v } from 'convex/values';
 
-import { api } from "./_generated/api";
-import { action } from "./_generated/server";
+import { api } from './_generated/api';
+import { action } from './_generated/server';
 
 // Asaas API Types
 interface AsaasCustomer {
@@ -15,7 +15,19 @@ interface AsaasCustomer {
 
 interface AsaasPayment {
   id: string;
-  status: 'PENDING' | 'CONFIRMED' | 'RECEIVED' | 'OVERDUE' | 'REFUNDED' | 'RECEIVED_IN_CASH_UNDONE' | 'CHARGEBACK_REQUESTED' | 'CHARGEBACK_DISPUTE' | 'AWAITING_CHARGEBACK_REVERSAL' | 'DUNNING_REQUESTED' | 'DUNNING_RECEIVED' | 'AWAITING_RISK_ANALYSIS';
+  status:
+    | 'PENDING'
+    | 'CONFIRMED'
+    | 'RECEIVED'
+    | 'OVERDUE'
+    | 'REFUNDED'
+    | 'RECEIVED_IN_CASH_UNDONE'
+    | 'CHARGEBACK_REQUESTED'
+    | 'CHARGEBACK_DISPUTE'
+    | 'AWAITING_CHARGEBACK_REVERSAL'
+    | 'DUNNING_REQUESTED'
+    | 'DUNNING_RECEIVED'
+    | 'AWAITING_RISK_ANALYSIS';
   value: number;
   netValue?: number;
   paymentDate?: string;
@@ -77,14 +89,17 @@ class AsaasClient {
     console.log('AsaaS API Key prefix:', this.apiKey?.slice(0, 10) + '...');
   }
 
-  async makeRequest<T>(endpoint: string, options: RequestInit = {}): Promise<T> {
+  async makeRequest<T>(
+    endpoint: string,
+    options: RequestInit = {},
+  ): Promise<T> {
     const url = `${this.baseUrl}${endpoint}`;
 
     const response = await fetch(url, {
       ...options,
       headers: {
         'Content-Type': 'application/json',
-        'access_token': this.apiKey,
+        access_token: this.apiKey,
         ...options.headers,
       },
     });
@@ -154,14 +169,17 @@ class AsaasClient {
     description?: string;
     offset?: number;
     limit?: number;
-  }): Promise<{ data: AsaasFiscalService[], totalCount: number }> {
+  }): Promise<{ data: AsaasFiscalService[]; totalCount: number }> {
     const queryParams = new URLSearchParams();
-    if (params?.description) queryParams.append('description', params.description);
+    if (params?.description)
+      queryParams.append('description', params.description);
     if (params?.offset) queryParams.append('offset', params.offset.toString());
     if (params?.limit) queryParams.append('limit', params.limit.toString());
 
     const endpoint = `/fiscalInfo/services${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    return this.makeRequest<{ data: AsaasFiscalService[], totalCount: number }>(endpoint);
+    return this.makeRequest<{ data: AsaasFiscalService[]; totalCount: number }>(
+      endpoint,
+    );
   }
 
   async scheduleInvoice(params: {
@@ -175,12 +193,12 @@ class AsaasClient {
     // Tax structure as per Asaas API (flat properties, not nested)
     taxes?: {
       retainIss?: boolean; // Whether ISS is retained
-      iss?: number;        // ISS rate (e.g., 2 for 2%)
-      cofins?: number;     // COFINS rate
-      csll?: number;       // CSLL rate
-      inss?: number;       // INSS rate
-      ir?: number;         // IR rate
-      pis?: number;        // PIS rate
+      iss?: number; // ISS rate (e.g., 2 for 2%)
+      cofins?: number; // COFINS rate
+      csll?: number; // CSLL rate
+      inss?: number; // INSS rate
+      ir?: number; // IR rate
+      pis?: number; // PIS rate
     };
   }): Promise<AsaasInvoice> {
     return this.makeRequest<AsaasInvoice>('/invoices', {
@@ -202,7 +220,6 @@ class AsaasClient {
     return this.makeRequest<AsaasInvoice>(`/invoices/${invoiceId}`);
   }
 }
-
 
 /**
  * Create AsaaS customer for transparent checkout
@@ -259,9 +276,12 @@ export const createPixPayment = action({
   }),
   handler: async (ctx, args) => {
     // Get the pending order to get the final price (with coupons already applied)
-    const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
-      orderId: args.pendingOrderId,
-    });
+    const pendingOrder: any = await ctx.runQuery(
+      api.payments.getPendingOrderById,
+      {
+        orderId: args.pendingOrderId,
+      },
+    );
 
     if (!pendingOrder) {
       throw new Error('Pending order not found');
@@ -275,9 +295,12 @@ export const createPixPayment = action({
     }
 
     // Get pricing plan for description
-    const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
-      productId: args.productId,
-    });
+    const pricingPlan: any = await ctx.runQuery(
+      api.pricingPlans.getByProductId,
+      {
+        productId: args.productId,
+      },
+    );
 
     if (!pricingPlan || !pricingPlan.isActive) {
       throw new Error('Product not found or inactive');
@@ -296,7 +319,9 @@ export const createPixPayment = action({
       customer: args.customerId,
       billingType: 'PIX',
       value: finalPrice,
-      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().split('T')[0], // Tomorrow
+      dueDate: new Date(Date.now() + 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split('T')[0], // Tomorrow
       description,
       externalReference: args.pendingOrderId, // This is the key for webhook correlation
     });
@@ -365,9 +390,12 @@ export const createCreditCardPayment = action({
   }),
   handler: async (ctx, args) => {
     // Get the pending order to get the final price (with coupons already applied)
-    const pendingOrder: any = await ctx.runQuery(api.payments.getPendingOrderById, {
-      orderId: args.pendingOrderId,
-    });
+    const pendingOrder: any = await ctx.runQuery(
+      api.payments.getPendingOrderById,
+      {
+        orderId: args.pendingOrderId,
+      },
+    );
 
     if (!pendingOrder) {
       throw new Error('Pending order not found');
@@ -381,9 +409,12 @@ export const createCreditCardPayment = action({
     }
 
     // Get pricing plan for description
-    const pricingPlan: any = await ctx.runQuery(api.pricingPlans.getByProductId, {
-      productId: args.productId,
-    });
+    const pricingPlan: any = await ctx.runQuery(
+      api.pricingPlans.getByProductId,
+      {
+        productId: args.productId,
+      },
+    );
 
     if (!pricingPlan || !pricingPlan.isActive) {
       throw new Error('Product not found or inactive');
@@ -405,7 +436,9 @@ export const createCreditCardPayment = action({
     if (args.installments && args.installments > 1) {
       // Validate installment count
       if (args.installments < 1 || args.installments > 21) {
-        throw new Error(`Invalid installment count: ${args.installments}. Must be between 1 and 21.`);
+        throw new Error(
+          `Invalid installment count: ${args.installments}. Must be between 1 and 21.`,
+        );
       }
 
       installmentCount = args.installments;
@@ -415,7 +448,8 @@ export const createCreditCardPayment = action({
       description += ` (${installmentCount}x)`;
 
       // Calculate estimated installment value for logging (Asaas will calculate the actual value)
-      const estimatedInstallmentValue = Math.round((finalPrice / installmentCount) * 100) / 100;
+      const estimatedInstallmentValue =
+        Math.round((finalPrice / installmentCount) * 100) / 100;
 
       console.log(`💳 INSTALLMENT PAYMENT - CRITICAL PARAMETERS:`, {
         installmentCount,
@@ -504,7 +538,9 @@ export const getPaymentStatus = action({
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
 
-    const payment = await asaas.makeRequest<AsaasPayment>(`/payments/${args.paymentId}`);
+    const payment = await asaas.makeRequest<AsaasPayment>(
+      `/payments/${args.paymentId}`,
+    );
 
     // Map AsaaS status to our status
     let status = 'pending';
@@ -550,7 +586,6 @@ export const getPaymentStatus = action({
   },
 });
 
-
 /**
  * Get fiscal service ID by searching for the service description
  * For software services, use: "02964 | 1.09"
@@ -565,13 +600,15 @@ export const getFiscalServiceId = action({
       description: v.string(),
       issTax: v.number(),
     }),
-    v.null()
+    v.null(),
   ),
   handler: async (ctx, args) => {
     const asaas = new AsaasClient();
 
     try {
-      console.log(`🔍 Searching for fiscal service: ${args.serviceDescription}`);
+      console.log(
+        `🔍 Searching for fiscal service: ${args.serviceDescription}`,
+      );
 
       const result = await asaas.listFiscalServices({
         description: args.serviceDescription,
@@ -579,15 +616,21 @@ export const getFiscalServiceId = action({
       });
 
       if (!result.data || result.data.length === 0) {
-        console.warn(`⚠️ Fiscal service not found for: ${args.serviceDescription}`);
-        console.warn(`💡 TIP: Check if the service is registered in your Asaas account`);
+        console.warn(
+          `⚠️ Fiscal service not found for: ${args.serviceDescription}`,
+        );
+        console.warn(
+          `💡 TIP: Check if the service is registered in your Asaas account`,
+        );
         return null;
       }
 
       // Log all found services to help with debugging
       console.log(`📋 Found ${result.data.length} fiscal service(s):`);
       for (const svc of result.data) {
-        console.log(`  - ID: ${svc.id} | ISS: ${svc.issTax}% | Desc: ${svc.description}`);
+        console.log(
+          `  - ID: ${svc.id} | ISS: ${svc.issTax}% | Desc: ${svc.description}`,
+        );
       }
 
       // Service ID 306562 is EXPIRED (valid until 31/03/2024)
@@ -595,13 +638,19 @@ export const getFiscalServiceId = action({
       // Skip expired service IDs and use the first valid one
       const EXPIRED_SERVICE_IDS = new Set(['306562']);
 
-      const service = result.data.find(svc => !EXPIRED_SERVICE_IDS.has(svc.id)) || result.data[0];
+      const service =
+        result.data.find(svc => !EXPIRED_SERVICE_IDS.has(svc.id)) ||
+        result.data[0];
 
       if (EXPIRED_SERVICE_IDS.has(service.id)) {
-        console.warn(`⚠️ WARNING: Using expired service ID ${service.id}. All available services are expired!`);
+        console.warn(
+          `⚠️ WARNING: Using expired service ID ${service.id}. All available services are expired!`,
+        );
       }
 
-      console.log(`✅ Using fiscal service: ${service.id} - ${service.description}`);
+      console.log(
+        `✅ Using fiscal service: ${service.id} - ${service.description}`,
+      );
       console.log(`   API ISS rate: ${service.issTax}%`);
 
       // IMPORTANT: The API returns issTax: 0, but the dashboard shows 2%
@@ -633,15 +682,17 @@ export const scheduleInvoice = action({
     municipalServiceCode: v.optional(v.string()), // Manual code (e.g., "02964" or "1.01")
     municipalServiceName: v.string(), // Service name/description
     observations: v.optional(v.string()),
-    taxes: v.optional(v.object({
-      retainIss: v.boolean(),
-      iss: v.optional(v.number()),
-      cofins: v.optional(v.number()),
-      csll: v.optional(v.number()),
-      inss: v.optional(v.number()),
-      ir: v.optional(v.number()),
-      pis: v.optional(v.number()),
-    })),
+    taxes: v.optional(
+      v.object({
+        retainIss: v.boolean(),
+        iss: v.optional(v.number()),
+        cofins: v.optional(v.number()),
+        csll: v.optional(v.number()),
+        inss: v.optional(v.number()),
+        ir: v.optional(v.number()),
+        pis: v.optional(v.number()),
+      }),
+    ),
   },
   returns: v.object({
     invoiceId: v.string(),
@@ -654,9 +705,13 @@ export const scheduleInvoice = action({
       ? `ID: ${args.municipalServiceId}`
       : `Code: ${args.municipalServiceCode}`;
 
-    console.log(`📄 Scheduling invoice with municipal service ${serviceIdentifier} - ${args.municipalServiceName}`);
+    console.log(
+      `📄 Scheduling invoice with municipal service ${serviceIdentifier} - ${args.municipalServiceName}`,
+    );
     if (args.value) {
-      console.log(`   Explicit invoice value: R$ ${args.value} (overrides payment value)`);
+      console.log(
+        `   Explicit invoice value: R$ ${args.value} (overrides payment value)`,
+      );
     }
 
     const invoice = await asaas.scheduleInvoice({
@@ -670,7 +725,9 @@ export const scheduleInvoice = action({
       taxes: args.taxes,
     });
 
-    console.log(`✅ Invoice scheduled: ${invoice.id} (status: ${invoice.status})`);
+    console.log(
+      `✅ Invoice scheduled: ${invoice.id} (status: ${invoice.status})`,
+    );
 
     return {
       invoiceId: invoice.id,
@@ -678,4 +735,3 @@ export const scheduleInvoice = action({
     };
   },
 });
-

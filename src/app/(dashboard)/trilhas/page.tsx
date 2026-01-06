@@ -68,9 +68,7 @@ export default function TrilhasPage() {
   const incompleteSessionsQuery = useQuery(
     api.quizSessions.listIncompleteSessions,
   );
-  const completedSessionsQuery = useQuery(
-    api.quizSessions.getCompletedQuizIds,
-  );
+  const completedSessionsQuery = useQuery(api.quizSessions.getCompletedQuizIds);
 
   const isLoading =
     userLoading ||
@@ -218,9 +216,7 @@ export default function TrilhasPage() {
                   variant="outline"
                   className="flex-1 cursor-pointer md:flex-none"
                 >
-                  <HoverPrefetchLink
-                    href={`/quiz-results/${quiz._id}`}
-                  >
+                  <HoverPrefetchLink href={`/quiz-results/${quiz._id}`}>
                     Ver Resultados
                   </HoverPrefetchLink>
                 </Button>
@@ -240,7 +236,7 @@ export default function TrilhasPage() {
           Trilhas
         </h1>
         <div className="p-8 text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
+          <div className="border-t-brand-blue mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300"></div>
           <p className="text-gray-600">Carregando trilhas...</p>
         </div>
       </div>

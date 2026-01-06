@@ -8,8 +8,6 @@ import { Button } from '@/components/ui/button';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
-import { useTestFormState } from '../../criar-teste/_components/hooks/useTestFormState';
-import { type TestFormData } from '../../criar-teste/_components/schema';
 import { FeedbackModal } from '../../criar-teste/_components/form/modals/FeedbackModal';
 import { NameModal } from '../../criar-teste/_components/form/modals/NameModal';
 import { QuestionCountSelector } from '../../criar-teste/_components/form/QuestionCountSelector';
@@ -17,6 +15,8 @@ import { QuestionModeSelector } from '../../criar-teste/_components/form/Questio
 import { SubthemeSelector } from '../../criar-teste/_components/form/SubthemeSelector';
 import { TestModeSelector } from '../../criar-teste/_components/form/TestModeSelector';
 import { ThemeSelector } from '../../criar-teste/_components/form/ThemeSelector';
+import { useTestFormState } from '../../criar-teste/_components/hooks/useTestFormState';
+import { type TestFormData } from '../../criar-teste/_components/schema';
 import { useQuizCreationJob } from './hooks/useQuizCreationJob';
 import { ProgressOverlay } from './ProgressOverlay';
 
@@ -36,7 +36,9 @@ export default function TestFormV2() {
   });
 
   // V2: Use the workflow mutation instead of the synchronous one
-  const createWithWorkflow = useMutation(api.customQuizWorkflow.createWithWorkflow);
+  const createWithWorkflow = useMutation(
+    api.customQuizWorkflow.createWithWorkflow,
+  );
 
   // Job progress tracking
   const {
@@ -75,14 +77,16 @@ export default function TestFormV2() {
     // Build group -> subtheme mapping
     for (const group of hierarchicalData.groups || []) {
       if (group.subthemeId) {
-        groupToSubtheme[group._id as Id<'groups'>] = group.subthemeId as Id<'subthemes'>;
+        groupToSubtheme[group._id as Id<'groups'>] =
+          group.subthemeId as Id<'subthemes'>;
       }
     }
 
     // Build subtheme -> theme mapping
     for (const subtheme of hierarchicalData.subthemes || []) {
       if (subtheme.themeId) {
-        subthemeToTheme[subtheme._id as Id<'subthemes'>] = subtheme.themeId as Id<'themes'>;
+        subthemeToTheme[subtheme._id as Id<'subthemes'>] =
+          subtheme.themeId as Id<'themes'>;
       }
     }
 
@@ -140,7 +144,13 @@ export default function TestFormV2() {
         setShowNameModal(false);
       }
     },
-    [formData, createWithWorkflow, mapQuestionMode, buildHierarchyMaps, startWatching]
+    [
+      formData,
+      createWithWorkflow,
+      mapQuestionMode,
+      buildHierarchyMaps,
+      startWatching,
+    ],
   );
 
   // Memoized form handlers (same as v1)
@@ -148,14 +158,14 @@ export default function TestFormV2() {
     (value: 'study' | 'exam') => {
       form.setValue('testMode', value, { shouldValidate: true });
     },
-    [form]
+    [form],
   );
 
   const handleQuestionModeChange = useCallback(
     (value: 'all' | 'incorrect' | 'unanswered' | 'bookmarked') => {
       form.setValue('questionMode', value, { shouldValidate: true });
     },
-    [form]
+    [form],
   );
 
   const handleToggleTheme = useCallback(
@@ -164,12 +174,12 @@ export default function TestFormV2() {
       form.setValue(
         'selectedThemes',
         current.includes(themeId)
-          ? current.filter((id) => id !== themeId)
+          ? current.filter(id => id !== themeId)
           : [...current, themeId],
-        { shouldValidate: true }
+        { shouldValidate: true },
       );
     },
-    [form]
+    [form],
   );
 
   const handleToggleSubtheme = useCallback(
@@ -178,12 +188,12 @@ export default function TestFormV2() {
       form.setValue(
         'selectedSubthemes',
         current.includes(subthemeId)
-          ? current.filter((id) => id !== subthemeId)
+          ? current.filter(id => id !== subthemeId)
           : [...current, subthemeId],
-        { shouldValidate: true }
+        { shouldValidate: true },
       );
     },
-    [form]
+    [form],
   );
 
   const handleToggleGroup = useCallback(
@@ -192,12 +202,12 @@ export default function TestFormV2() {
       form.setValue(
         'selectedGroups',
         current.includes(groupId)
-          ? current.filter((id) => id !== groupId)
+          ? current.filter(id => id !== groupId)
           : [...current, groupId],
-        { shouldValidate: true }
+        { shouldValidate: true },
       );
     },
-    [form]
+    [form],
   );
 
   const handleToggleMultipleGroups = useCallback(
@@ -205,7 +215,7 @@ export default function TestFormV2() {
       const current = form.getValues('selectedGroups') || [];
       const updatedGroups = new Set(current);
 
-      groupIds.forEach((groupId) => {
+      groupIds.forEach(groupId => {
         if (updatedGroups.has(groupId)) {
           updatedGroups.delete(groupId);
         } else {
@@ -217,39 +227,39 @@ export default function TestFormV2() {
         shouldValidate: true,
       });
     },
-    [form]
+    [form],
   );
 
   const handleQuestionCountChange = useCallback(
     (value: number) => {
       form.setValue('numQuestions', value, { shouldValidate: true });
     },
-    [form]
+    [form],
   );
 
   // Memoized sorted data
   const sortedThemes = useMemo(
     () =>
-      ([...(hierarchicalData?.themes || [])] as any[]).sort((a: any, b: any) =>
-        (a.name || '').localeCompare(b.name || '')
+      ([...(hierarchicalData?.themes || [])] as any[]).toSorted(
+        (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
-    [hierarchicalData?.themes]
+    [hierarchicalData?.themes],
   );
 
   const sortedSubthemes = useMemo(
     () =>
-      ([...(hierarchicalData?.subthemes || [])] as any[]).sort(
-        (a: any, b: any) => (a.name || '').localeCompare(b.name || '')
+      ([...(hierarchicalData?.subthemes || [])] as any[]).toSorted(
+        (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
-    [hierarchicalData?.subthemes]
+    [hierarchicalData?.subthemes],
   );
 
   const sortedGroups = useMemo(
     () =>
-      ([...(hierarchicalData?.groups || [])] as any[]).sort((a: any, b: any) =>
-        (a.name || '').localeCompare(b.name || '')
+      ([...(hierarchicalData?.groups || [])] as any[]).toSorted(
+        (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
-    [hierarchicalData?.groups]
+    [hierarchicalData?.groups],
   );
 
   // Handle progress overlay close on error
@@ -263,7 +273,7 @@ export default function TestFormV2() {
     return (
       <div className="flex min-h-[400px] items-center justify-center p-6">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
+          <div className="border-t-brand-blue mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300"></div>
           <p className="text-gray-600">Carregando...</p>
         </div>
       </div>
@@ -288,7 +298,7 @@ export default function TestFormV2() {
       />
 
       <form
-        onSubmit={(e) => {
+        onSubmit={e => {
           const currentQuestionCount = getCurrentQuestionCount();
           if (!isLoading && currentQuestionCount === 0) {
             e.preventDefault();
@@ -312,8 +322,7 @@ export default function TestFormV2() {
 
         <FeedbackModal
           isOpen={
-            submissionState === 'error' ||
-            submissionState === 'no-questions'
+            submissionState === 'error' || submissionState === 'no-questions'
           }
           onClose={() => {
             if (
@@ -376,7 +385,7 @@ export default function TestFormV2() {
 
           <Button
             type="submit"
-            className="w-full cursor-pointer bg-brand-blue hover:bg-brand-blue/90"
+            className="bg-brand-blue hover:bg-brand-blue/90 w-full cursor-pointer"
             disabled={isProcessing}
           >
             {isProcessing ? 'Gerando seu teste...' : 'Gerar Teste'}
@@ -386,4 +395,3 @@ export default function TestFormV2() {
     </>
   );
 }
-

@@ -4,9 +4,11 @@
 
 **Problem**: Asaas was processing 12x installment payments as single charges.
 
-**Root Cause**: Using wrong API parameters (`value` + `installments` instead of `totalValue` + `installmentCount`).
+**Root Cause**: Using wrong API parameters (`value` + `installments` instead of
+`totalValue` + `installmentCount`).
 
 **Solution**: Conditionally use different fields based on payment type:
+
 - **Single Payment**: Send `value: 2029.44`
 - **Installment Payment**: Send `totalValue: 2029.44` + `installmentCount: 12`
 
@@ -15,9 +17,12 @@
 ---
 
 ## Problem Identified
-Asaas was not receiving installment parameters correctly. Payments with 12 installments were being processed as single charges.
+
+Asaas was not receiving installment parameters correctly. Payments with 12
+installments were being processed as single charges.
 
 ### Evidence
+
 ```json
 // Request sent (WRONG - before fix):
 {
@@ -33,9 +38,13 @@ Asaas was not receiving installment parameters correctly. Payments with 12 insta
 ```
 
 ## Root Cause
-According to [Asaas API Documentation](https://docs.asaas.com/reference/criar-cobranca-com-cartao-de-credito), there are **three different ways** to structure payment requests:
+
+According to
+[Asaas API Documentation](https://docs.asaas.com/reference/criar-cobranca-com-cartao-de-credito),
+there are **three different ways** to structure payment requests:
 
 ### 1. Single Payment (À vista)
+
 ```json
 {
   "value": 2029.44
@@ -43,6 +52,7 @@ According to [Asaas API Documentation](https://docs.asaas.com/reference/criar-co
 ```
 
 ### 2. Installment Payment - Automatic Calculation (RECOMMENDED)
+
 ```json
 {
   "totalValue": 2029.44,
@@ -52,6 +62,7 @@ According to [Asaas API Documentation](https://docs.asaas.com/reference/criar-co
 ```
 
 ### 3. Installment Payment - Manual Calculation
+
 ```json
 {
   "installmentCount": 12,
@@ -60,15 +71,18 @@ According to [Asaas API Documentation](https://docs.asaas.com/reference/criar-co
 }
 ```
 
-**The Problem**: We were sending `value` + `installments` which Asaas doesn't recognize for installment payments.
+**The Problem**: We were sending `value` + `installments` which Asaas doesn't
+recognize for installment payments.
 
-**The Solution**: Use `totalValue` + `installmentCount` for installments (Option 2 - simpler and more robust)
+**The Solution**: Use `totalValue` + `installmentCount` for installments (Option
+2 - simpler and more robust)
 
 ## Solution Implemented
 
 ### 1. Backend Changes (`convex/asaas.ts`)
 
 #### Changed API Interface
+
 ```typescript
 // ❌ BEFORE (Wrong):
 async createCharge(charge: {
@@ -86,19 +100,21 @@ async createCharge(charge: {
 ```
 
 #### Smart Payment Type Detection
+
 ```typescript
 if (args.installments && args.installments > 1) {
   // Validate range (1-21 for Visa/Master, 1-12 for others)
   if (args.installments < 1 || args.installments > 21) {
     throw new Error(`Invalid installment count: ${args.installments}`);
   }
-  
+
   installmentCount = args.installments;
   isInstallmentPayment = true;
 }
 ```
 
 #### Conditional Field Assignment (Key Fix!)
+
 ```typescript
 const paymentRequest: any = {
   customer: args.customerId,
@@ -121,8 +137,10 @@ if (isInstallmentPayment && installmentCount !== undefined) {
 ### 2. Frontend Changes (`src/app/checkout/page.tsx`)
 
 Added logging to track installment selection:
+
 ```typescript
-const installmentsToSend = selectedInstallments > 1 ? selectedInstallments : undefined;
+const installmentsToSend =
+  selectedInstallments > 1 ? selectedInstallments : undefined;
 
 console.log('💳 Frontend: Creating credit card payment with installments:', {
   selectedInstallments,
@@ -136,28 +154,36 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 ### For 12x R$ 2029.44:
 
 #### Request to Asaas (CORRECTED):
+
 ```json
 {
   "customer": "cus_000145260957",
   "billingType": "CREDIT_CARD",
-  "totalValue": 2029.44,         // ✅ Total value (not 'value')
-  "installmentCount": 12,        // ✅ Number of installments
+  "totalValue": 2029.44, // ✅ Total value (not 'value')
+  "installmentCount": 12, // ✅ Number of installments
   "dueDate": "2025-11-02",
   "description": "Plano TEOT 2027 (R2) - Cartão de Crédito (Cupom: BLACK) (12x)",
-  "creditCard": { /* ... */ },
-  "creditCardHolderInfo": { /* ... */ },
+  "creditCard": {
+    /* ... */
+  },
+  "creditCardHolderInfo": {
+    /* ... */
+  },
   "externalReference": "order_id_here"
 }
 ```
-**Note**: No `installmentValue` sent - Asaas calculates it automatically from `totalValue ÷ installmentCount`
+
+**Note**: No `installmentValue` sent - Asaas calculates it automatically from
+`totalValue ÷ installmentCount`
 
 #### Expected Response:
+
 ```json
 {
   "id": "pay_xxxxx",
-  "installmentNumber": 1,        // ✅ First installment
-  "value": 169.12,               // ✅ Per-installment value (calculated by Asaas)
-  "totalValue": 2029.44,         // ✅ Total across all installments
+  "installmentNumber": 1, // ✅ First installment
+  "value": 169.12, // ✅ Per-installment value (calculated by Asaas)
+  "totalValue": 2029.44, // ✅ Total across all installments
   "status": "CONFIRMED"
 }
 ```
@@ -165,23 +191,30 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 ### For Single Payment (À vista):
 
 #### Request to Asaas:
+
 ```json
 {
   "customer": "cus_000145260957",
   "billingType": "CREDIT_CARD",
-  "value": 2029.44,              // ✅ Use 'value' for single payments
+  "value": 2029.44, // ✅ Use 'value' for single payments
   "dueDate": "2025-11-02",
   "description": "Plano TEOT 2027 (R2) - Cartão de Crédito",
-  "creditCard": { /* ... */ },
-  "creditCardHolderInfo": { /* ... */ },
+  "creditCard": {
+    /* ... */
+  },
+  "creditCardHolderInfo": {
+    /* ... */
+  },
   "externalReference": "order_id_here"
 }
 ```
+
 **Note**: No `totalValue`, no `installmentCount` - this is a single payment
 
 ## Validation Checklist
 
 ### ✅ Code Quality
+
 - [x] Explicit validation for installment count (1-21)
 - [x] Validation for calculated installment value
 - [x] Comprehensive logging at each step
@@ -191,11 +224,13 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 ### 🔍 Testing Requirements
 
 #### Test Case 1: Single Payment
+
 - Select "À vista" (1x)
 - Expected: `installmentCount` and `installmentValue` should NOT be sent
 - Check logs: Should see "Single payment (no installments)"
 
 #### Test Case 2: 2x Installments
+
 - Select 2x parcelas
 - Amount: R$ 2029.44
 - Expected Request:
@@ -205,9 +240,11 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
     "installmentCount": 2
   }
   ```
-- Expected Response: `installmentNumber: 1`, `value: 1014.72` (calculated by Asaas)
+- Expected Response: `installmentNumber: 1`, `value: 1014.72` (calculated by
+  Asaas)
 
 #### Test Case 3: 12x Installments (Your Original Issue)
+
 - Select 12x parcelas
 - Amount: R$ 2029.44
 - Expected Request:
@@ -217,9 +254,11 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
     "installmentCount": 12
   }
   ```
-- Expected Response: `installmentNumber: 1`, `value: 169.12` (calculated by Asaas)
+- Expected Response: `installmentNumber: 1`, `value: 169.12` (calculated by
+  Asaas)
 
 #### Test Case 4: With Coupon
+
 - Apply a coupon discount
 - Select installments
 - Expected: Installment value calculated on final price after discount
@@ -229,12 +268,14 @@ console.log('💳 Frontend: Creating credit card payment with installments:', {
 Check these logs in your Convex dashboard:
 
 1. **Frontend Log** (page.tsx):
+
    ```
    💳 Frontend: Creating credit card payment with installments: {...}
    ✅ Frontend: Installment payment confirmed - 12x parcelas
    ```
 
 2. **Backend Log** (asaas.ts):
+
    ```
    💳 INSTALLMENT PAYMENT - CRITICAL PARAMETERS: {
      installmentCount: 12,
@@ -262,6 +303,7 @@ Check these logs in your Convex dashboard:
 ## Key Improvements
 
 ### 🛡️ Safety Features
+
 1. **Validation**: Range checks (1-21) before sending to API
 2. **Error Handling**: Throws explicit errors for invalid values
 3. **Rounding Detection**: Warns if rounding causes > 1 cent difference
@@ -269,18 +311,21 @@ Check these logs in your Convex dashboard:
 5. **Comprehensive Logging**: Full audit trail of installment processing
 
 ### 📈 Business Impact
+
 - ✅ Customers can now actually use installment payments
 - ✅ Proper billing for 2x to 12x installments
 - ✅ Compliant with Asaas API requirements
 - ✅ Better customer experience (interest-free installments)
 
 ## References
+
 - [Asaas Credit Card Documentation](https://docs.asaas.com/reference/criar-cobranca-com-cartao-de-credito)
 - [Asaas Installment Payments Guide](https://docs.asaas.com/docs/installment-payments)
 
 ## Deployment Notes
 
 After deploying:
+
 1. Test with Asaas sandbox first
 2. Try all installment options (1x, 2x, 6x, 12x)
 3. Verify Asaas dashboard shows correct installment structure
@@ -289,8 +334,7 @@ After deploying:
 
 ---
 
-**Fixed on**: November 2, 2025
-**Files Modified**: 
+**Fixed on**: November 2, 2025 **Files Modified**:
+
 - `convex/asaas.ts`
 - `src/app/checkout/page.tsx`
-

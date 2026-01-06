@@ -36,7 +36,7 @@ export function useQuizCreationJob(): UseQuizCreationJobResult {
   // Subscribe to job status updates
   const jobStatus = useQuery(
     api.customQuizWorkflow.getJobStatus,
-    jobId ? { jobId } : 'skip'
+    jobId ? { jobId } : 'skip',
   ) as JobStatus | null | undefined;
 
   const isActive =
@@ -74,4 +74,3 @@ export function useLatestQuizJob() {
   const latestJob = useQuery(api.customQuizWorkflow.getLatestJob);
   return latestJob;
 }
-

@@ -622,3 +622,110 @@ export const backfillCompletedQuizSummaries = migrations.define({
 export const runCompletedQuizSummariesMigration = migrations.runner([
   internal.migrations.backfillCompletedQuizSummaries,
 ]);
+
+// =============================================================================
+// QUESTION CONTENT CLEANUP MIGRATION
+// =============================================================================
+
+/**
+ * Remove heavy content fields from questions table.
+ *
+ * PREREQUISITES:
+ * 1. ALL read operations MUST be updated to fetch from questionContent table
+ * 2. Verify that questionContent records exist for all questions
+ * 3. Run this ONLY after confirming the app works correctly with questionContent
+ *
+ * This migration removes the following fields from questions documents:
+ * - questionTextString
+ * - explanationTextString
+ * - alternatives
+ * - questionText (legacy object format)
+ * - explanationText (legacy object format)
+ *
+ * After running this migration, questions will be significantly smaller,
+ * preventing 16MB limit issues during quiz creation queries.
+ */
+export const removeHeavyContentFromQuestions = migrations.define({
+  table: 'questions',
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<
+    | {
+        questionTextString?: undefined;
+        explanationTextString?: undefined;
+        alternatives?: undefined;
+        questionText?: undefined;
+        explanationText?: undefined;
+      }
+    | undefined
+  > => {
+    // Skip if already cleaned up (no heavy content fields)
+    if (
+      doc.questionTextString === undefined &&
+      doc.explanationTextString === undefined &&
+      doc.alternatives === undefined &&
+      doc.questionText === undefined &&
+      doc.explanationText === undefined
+    ) {
+      return;
+    }
+
+    // Verify questionContent exists before removing from questions
+    const questionContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', doc._id))
+      .first();
+
+    if (!questionContent) {
+      // Log warning but don't fail - content might need to be backfilled separately
+      console.warn(
+        `Question ${doc._id} has no questionContent record. Skipping cleanup.`,
+      );
+      return;
+    }
+
+    // Return the fields to set to undefined (removes them from the document)
+    return {
+      questionTextString: undefined,
+      explanationTextString: undefined,
+      alternatives: undefined,
+      questionText: undefined,
+      explanationText: undefined,
+    };
+  },
+});
+
+// Runner for removing heavy content from questions
+export const runRemoveHeavyContentMigration = migrations.runner([
+  internal.migrations.removeHeavyContentFromQuestions,
+]);
+
+/**
+ * Verify migration: Check that all questions have content in questionContent table
+ * Run this BEFORE the cleanup migration to ensure data integrity
+ */
+export const verifyQuestionContentExists = internalQuery({
+  args: {},
+  handler: async ctx => {
+    const questions = await ctx.db.query('questions').collect();
+    const missing: Id<'questions'>[] = [];
+
+    for (const question of questions) {
+      const content = await ctx.db
+        .query('questionContent')
+        .withIndex('by_question', q => q.eq('questionId', question._id))
+        .first();
+
+      if (!content) {
+        missing.push(question._id);
+      }
+    }
+
+    return {
+      totalQuestions: questions.length,
+      questionsWithContent: questions.length - missing.length,
+      missingContent: missing,
+    };
+  },
+});

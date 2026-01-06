@@ -1,4 +1,4 @@
-import { format,setISOWeek, setYear, startOfISOWeek } from 'date-fns';
+import { format, setISOWeek, setYear, startOfISOWeek } from 'date-fns';
 
 export function formatWeekString(
   weekString: string,
@@ -17,5 +17,7 @@ export function formatWeekString(
   // Get the start of the ISO week (Monday)
   const weekStartDate = startOfISOWeek(date);
 
-  return formatType === 'short' ? format(weekStartDate, 'dd/MM/yy') : `Semana de ${format(weekStartDate, 'dd/MM/yyyy')}`;
+  return formatType === 'short'
+    ? format(weekStartDate, 'dd/MM/yy')
+    : `Semana de ${format(weekStartDate, 'dd/MM/yyyy')}`;
 }
