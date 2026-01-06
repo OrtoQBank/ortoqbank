@@ -264,6 +264,19 @@ export default defineSchema({
     .index('by_tenant', ['tenantId'])
     .index('by_tenant_and_user', ['tenantId', 'userId']),
 
+  // Lightweight table for tracking completed quiz sessions (denormalized for performance)
+  // This avoids reading heavy answerFeedback data when just checking completion status
+  completedQuizSummaries: defineTable({
+    tenantId: v.optional(v.id('apps')),
+    userId: v.id('users'),
+    quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+    sessionId: v.id('quizSessions'),
+    completedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_session', ['sessionId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId']),
+
   userBookmarks: defineTable({
     // Multi-tenancy
     tenantId: v.optional(v.id('apps')),

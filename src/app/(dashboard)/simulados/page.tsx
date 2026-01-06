@@ -104,9 +104,9 @@ export default function SimuladoPage() {
   );
   const incompleteSessions = incompleteSessionsQuery || [];
 
-  // Query to get all completed sessions for the current user
+  // Query to get completed quiz IDs (lightweight query for performance)
   const completedSessionsQuery = useQuery(
-    api.quizSessions.getAllCompletedSessions,
+    api.quizSessions.getCompletedQuizIds,
   );
   const completedSessions = completedSessionsQuery || [];
 
