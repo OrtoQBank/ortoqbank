@@ -35,33 +35,50 @@ http.route({
           });
 
           // Handle claim token from invitation metadata or find by email
-          if (event.type === 'user.created' && event.data.email_addresses?.[0]?.email_address) {
+          if (
+            event.type === 'user.created' &&
+            event.data.email_addresses?.[0]?.email_address
+          ) {
             try {
               const email = event.data.email_addresses[0].email_address;
               console.log(`🔗 New user created: ${email}`);
-              
+
               // Try to find and claim any paid orders for this email
-              const result = await ctx.runMutation(api.payments.claimOrderByEmail, {
-                email: email,
-                clerkUserId: event.data.id,
-              });
-              
+              const result = await ctx.runMutation(
+                api.payments.claimOrderByEmail,
+                {
+                  email: email,
+                  clerkUserId: event.data.id,
+                },
+              );
+
               console.log(`✅ Claim result:`, result);
-              
+
               // Try to update email invitation status to accepted
               try {
-                const invitation = await ctx.runQuery(api.payments.findSentInvitationByEmail, {
-                  email: email,
-                });
-                  
+                const invitation = await ctx.runQuery(
+                  api.payments.findSentInvitationByEmail,
+                  {
+                    email: email,
+                  },
+                );
+
                 if (invitation) {
-                  await ctx.runMutation(internal.payments.updateEmailInvitationAccepted, {
-                    invitationId: invitation._id,
-                  });
-                  console.log(`✅ Updated invitation status to accepted for ${email}`);
+                  await ctx.runMutation(
+                    internal.payments.updateEmailInvitationAccepted,
+                    {
+                      invitationId: invitation._id,
+                    },
+                  );
+                  console.log(
+                    `✅ Updated invitation status to accepted for ${email}`,
+                  );
                 }
               } catch (invitationError) {
-                console.error('Error updating invitation status:', invitationError);
+                console.error(
+                  'Error updating invitation status:',
+                  invitationError,
+                );
                 // Don't fail the webhook if this fails
               }
             } catch (linkError) {
@@ -99,40 +116,47 @@ http.route({
     try {
       // Get webhook body
       const rawBody = await request.text();
-      
+
       // Validate webhook authentication (required for both sandbox and production)
-      const asaasSignature = request.headers.get('asaas-access-token') || 
-                           request.headers.get('authorization') ||
-                           request.headers.get('x-asaas-signature');
-      
+      const asaasSignature =
+        request.headers.get('asaas-access-token') ||
+        request.headers.get('authorization') ||
+        request.headers.get('x-asaas-signature');
+
       const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
-      
+
       // Log headers for debugging
       console.log('AsaaS Webhook Headers:', {
         'asaas-access-token': request.headers.get('asaas-access-token'),
-        'authorization': request.headers.get('authorization'),
+        authorization: request.headers.get('authorization'),
         'x-asaas-signature': request.headers.get('x-asaas-signature'),
         'content-type': request.headers.get('content-type'),
       });
 
       // ALWAYS require webhook secret to be configured
       if (!webhookSecret) {
-        console.error('ASAAS_WEBHOOK_SECRET environment variable not configured');
+        console.error(
+          'ASAAS_WEBHOOK_SECRET environment variable not configured',
+        );
         return new Response('Server configuration error', { status: 500 });
       }
 
       // ALWAYS require authentication header
       if (!asaasSignature) {
         console.error('Missing AsaaS authentication header');
-        return new Response('Unauthorized - Missing authentication', { status: 401 });
+        return new Response('Unauthorized - Missing authentication', {
+          status: 401,
+        });
       }
 
       // ALWAYS validate signature
       if (asaasSignature !== webhookSecret) {
         console.error('Invalid AsaaS webhook signature');
-        return new Response('Unauthorized - Invalid signature', { status: 401 });
+        return new Response('Unauthorized - Invalid signature', {
+          status: 401,
+        });
       }
-      
+
       console.log('✅ Webhook authentication successful');
 
       const body = JSON.parse(rawBody);
@@ -151,7 +175,9 @@ http.route({
         case 'PAYMENT_CONFIRMED': // intentional fallthrough
         case 'PAYMENT_RECEIVED': {
           try {
-            console.log(`Processing ${event} event - payment with customer data`);
+            console.log(
+              `Processing ${event} event - payment with customer data`,
+            );
             await ctx.runAction(internal.payments.processAsaasWebhook, {
               event,
               payment,
@@ -170,7 +196,6 @@ http.route({
       }
 
       return new Response('OK', { status: 200 });
-
     } catch (error) {
       console.error('Error processing AsaaS webhook:', error);
       return new Response('Webhook processing failed', { status: 500 });

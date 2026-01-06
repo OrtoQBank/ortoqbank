@@ -71,7 +71,7 @@ const BookmarkedThemeCount = memo(({ themeId }: { themeId: string }) => {
   const count = userCountsForQuizCreation.byTheme[themeId]?.bookmarked || 0;
 
   return (
-    <span className="rounded-full bg-brand-blue/10 px-1.5 py-0.5 text-xs text-brand-blue">
+    <span className="bg-brand-blue/10 text-brand-blue rounded-full px-1.5 py-0.5 text-xs">
       {count}
     </span>
   );

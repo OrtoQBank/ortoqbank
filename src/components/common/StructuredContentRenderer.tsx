@@ -142,7 +142,9 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
         node.attrs || {};
 
       // Helper function to parse CSS style string into React CSSProperties object
-      const parseStyleString = (styleStr: string | undefined): Record<string, string> => {
+      const parseStyleString = (
+        styleStr: string | undefined,
+      ): Record<string, string> => {
         const styles: Record<string, string> = {};
         if (typeof styleStr === 'string') {
           styleStr.split(';').forEach(declaration => {
@@ -186,7 +188,9 @@ function renderNode(node: ContentNode, key: string | number): React.ReactNode {
           <div style={parsedContainerStyles as React.CSSProperties}>
             {imgElement}
           </div>
-        ) : imgElement;
+        ) : (
+          imgElement
+        );
 
         element = hasWrapperStyles ? (
           <div key={key} style={parsedWrapperStyles as React.CSSProperties}>

@@ -222,8 +222,8 @@ export default function TestForm() {
   // Memoized sorted data to prevent re-sorting on every render
   const sortedThemes = useMemo(
     () =>
-      ([...(hierarchicalData?.themes || [])] as any[]).toSorted((a: any, b: any) =>
-        (a.name || '').localeCompare(b.name || ''),
+      ([...(hierarchicalData?.themes || [])] as any[]).toSorted(
+        (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.themes],
   );
@@ -238,8 +238,8 @@ export default function TestForm() {
 
   const sortedGroups = useMemo(
     () =>
-      ([...(hierarchicalData?.groups || [])] as any[]).toSorted((a: any, b: any) =>
-        (a.name || '').localeCompare(b.name || ''),
+      ([...(hierarchicalData?.groups || [])] as any[]).toSorted(
+        (a: any, b: any) => (a.name || '').localeCompare(b.name || ''),
       ),
     [hierarchicalData?.groups],
   );
@@ -249,7 +249,7 @@ export default function TestForm() {
     return (
       <div className="flex min-h-[400px] items-center justify-center p-6">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300 border-t-brand-blue"></div>
+          <div className="border-t-brand-blue mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-4 border-gray-300"></div>
           <p className="text-gray-600">Carregando...</p>
         </div>
       </div>
@@ -349,7 +349,7 @@ export default function TestForm() {
 
         <Button
           type="submit"
-          className="w-full cursor-pointer bg-brand-blue hover:bg-brand-blue/90"
+          className="bg-brand-blue hover:bg-brand-blue/90 w-full cursor-pointer"
           disabled={isSubmitting}
         >
           {isSubmitting ? 'Gerando seu teste...' : 'Gerar Teste'}

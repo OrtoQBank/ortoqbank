@@ -19,52 +19,51 @@ function PaymentFailedContent() {
     // Redirect to support with context using URLSearchParams for proper encoding
     const params = new URLSearchParams();
     params.append('issue', 'payment-failed');
-    
+
     // Only append order if orderId is non-null/defined
     if (orderId) {
       params.append('order', orderId);
     }
-    
+
     globalThis.location.href = `/suporte?${params.toString()}`;
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 flex items-center justify-center p-4">
-      <div className="max-w-md w-full text-center space-y-6">
-        
+    <div className="flex min-h-screen items-center justify-center bg-gradient-to-br from-red-50 to-red-100 p-4">
+      <div className="w-full max-w-md space-y-6 text-center">
         {/* Error Icon */}
-        <XCircle className="h-20 w-20 text-red-600 mx-auto" />
+        <XCircle className="mx-auto h-20 w-20 text-red-600" />
 
         {/* Main Message */}
         <div>
-          <h1 className="text-3xl font-bold text-red-900 mb-4">
+          <h1 className="mb-4 text-3xl font-bold text-red-900">
             ❌ Pagamento Não Aprovado
           </h1>
-          <p className="text-lg text-red-700 mb-6">
+          <p className="mb-6 text-lg text-red-700">
             Não foi possível processar seu pagamento
           </p>
         </div>
 
         {/* Reasons */}
-        <div className="bg-white rounded-lg p-6 shadow-sm text-left">
-          <h3 className="font-semibold text-gray-900 mb-3">
+        <div className="rounded-lg bg-white p-6 text-left shadow-sm">
+          <h3 className="mb-3 font-semibold text-gray-900">
             Possíveis motivos:
           </h3>
           <ul className="space-y-2 text-sm text-gray-600">
             <li className="flex items-start">
-              <span className="text-red-500 mr-2">•</span>
+              <span className="mr-2 text-red-500">•</span>
               <span>Cartão sem limite ou dados incorretos</span>
             </li>
             <li className="flex items-start">
-              <span className="text-red-500 mr-2">•</span>
+              <span className="mr-2 text-red-500">•</span>
               <span>PIX não foi realizado no prazo</span>
             </li>
             <li className="flex items-start">
-              <span className="text-red-500 mr-2">•</span>
+              <span className="mr-2 text-red-500">•</span>
               <span>Problema técnico temporário</span>
             </li>
             <li className="flex items-start">
-              <span className="text-red-500 mr-2">•</span>
+              <span className="mr-2 text-red-500">•</span>
               <span>Boleto vencido ou não pago</span>
             </li>
           </ul>
@@ -72,16 +71,16 @@ function PaymentFailedContent() {
 
         {/* Action Buttons */}
         <div className="space-y-3">
-          <Button 
+          <Button
             onClick={handleRetryPayment}
-            className="w-full bg-brand-blue hover:bg-brand-blue/90 text-white"
+            className="bg-brand-blue hover:bg-brand-blue/90 w-full text-white"
             size="lg"
           >
             <RefreshCw className="mr-2 h-5 w-5" />
             Tentar Novamente
           </Button>
 
-          <Button 
+          <Button
             onClick={handleContactSupport}
             variant="outline"
             className="w-full"
@@ -93,23 +92,21 @@ function PaymentFailedContent() {
         </div>
 
         {/* Security Message */}
-        <div className="bg-brand-blue/10 border border-brand-blue/20 rounded-lg p-4">
+        <div className="bg-brand-blue/10 border-brand-blue/20 rounded-lg border p-4">
           <div className="text-sm">
-            <p className="font-medium text-brand-blue mb-1">
+            <p className="text-brand-blue mb-1 font-medium">
               🔒 Dados Protegidos
             </p>
             <p className="text-brand-blue">
-              Nenhuma conta foi criada. Seus dados estão seguros.
-              Tente novamente quando resolver o problema do pagamento.
+              Nenhuma conta foi criada. Seus dados estão seguros. Tente
+              novamente quando resolver o problema do pagamento.
             </p>
           </div>
         </div>
 
         {/* Order Reference */}
         {orderId && (
-          <p className="text-xs text-gray-500">
-            Referência: {orderId}
-          </p>
+          <p className="text-xs text-gray-500">Referência: {orderId}</p>
         )}
       </div>
     </div>
@@ -118,7 +115,13 @@ function PaymentFailedContent() {
 
 export default function PaymentFailedPage() {
   return (
-    <Suspense fallback={<div className="min-h-screen flex items-center justify-center">Carregando...</div>}>
+    <Suspense
+      fallback={
+        <div className="flex min-h-screen items-center justify-center">
+          Carregando...
+        </div>
+      }
+    >
       <PaymentFailedContent />
     </Suspense>
   );

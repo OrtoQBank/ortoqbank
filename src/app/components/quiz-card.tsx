@@ -54,9 +54,9 @@ export default function QuizCard() {
 
   if (isCompleted) {
     return (
-      <div className="flex min-h-[300px] w-full items-center justify-center rounded-3xl border border-brand-blue bg-white p-4 shadow-lg">
+      <div className="border-brand-blue flex min-h-[300px] w-full items-center justify-center rounded-3xl border bg-white p-4 shadow-lg">
         <div className="text-center">
-          <h3 className="mb-3 text-xl font-bold text-brand-blue">
+          <h3 className="text-brand-blue mb-3 text-xl font-bold">
             Excelente trabalho! 🎉
           </h3>
           <p className="mb-4 text-base text-gray-600">
@@ -85,7 +85,7 @@ export default function QuizCard() {
         return (
           <div
             key={questions.indexOf(question)}
-            className={`absolute inset-0 w-full rounded-3xl border border-brand-blue bg-white p-4 shadow-lg transition-all duration-300 ${
+            className={`border-brand-blue absolute inset-0 w-full rounded-3xl border bg-white p-4 shadow-lg transition-all duration-300 ${
               {
                 0: 'z-20',
                 1: 'z-10 translate-y-2',
@@ -93,7 +93,7 @@ export default function QuizCard() {
               }[index] || ''
             }`}
           >
-            <h3 className="mb-3 text-xl font-semibold text-brand-blue">
+            <h3 className="text-brand-blue mb-3 text-xl font-semibold">
               {question.question}
             </h3>
             <div className="space-y-1.5">
@@ -103,7 +103,7 @@ export default function QuizCard() {
                   className={`w-full justify-start ${getButtonStyle(
                     index === 0 && selectedAnswer === alternativeIndex,
                     isCorrect,
-                  )} border border-brand-blue`}
+                  )} border-brand-blue border`}
                   onClick={() => index === 0 && handleAnswer(alternativeIndex)}
                   disabled={
                     index !== 0 ||

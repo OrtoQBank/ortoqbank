@@ -97,7 +97,7 @@ export default function WaitlistPage() {
       </div>
 
       {/* Instructions */}
-      <p className="text-sm text-muted-foreground">
+      <p className="text-muted-foreground text-sm">
         {isLoading
           ? 'Carregando...'
           : searchQuery.trim()
@@ -123,7 +123,7 @@ export default function WaitlistPage() {
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="py-6 text-center text-muted-foreground"
+                  className="text-muted-foreground py-6 text-center"
                 >
                   Carregando inscricoes...
                 </TableCell>
@@ -132,7 +132,7 @@ export default function WaitlistPage() {
               <TableRow>
                 <TableCell
                   colSpan={6}
-                  className="py-6 text-center text-muted-foreground"
+                  className="text-muted-foreground py-6 text-center"
                 >
                   {searchQuery.trim()
                     ? 'Nenhuma inscricao encontrada'

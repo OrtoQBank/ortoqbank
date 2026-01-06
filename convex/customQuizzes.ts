@@ -1,7 +1,24 @@
 import { v } from 'convex/values';
 
+import { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
 import { getCurrentUserOrThrow } from './users';
+
+// Helper to fetch question content from questionContent table
+async function fetchQuestionContent(
+  ctx: any,
+  questionId: Id<'questions'>,
+): Promise<{ questionTextString: string; alternatives: string[] } | null> {
+  const content = await ctx.db
+    .query('questionContent')
+    .withIndex('by_question', (q: any) => q.eq('questionId', questionId))
+    .first();
+  if (!content) return null;
+  return {
+    questionTextString: content.questionTextString,
+    alternatives: content.alternatives,
+  };
+}
 
 export type QuestionMode = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
 
@@ -90,7 +107,7 @@ export const getById = query({
   },
 });
 
-// Lightweight version for quiz results - only fetches essential question fields
+// Lightweight version for quiz results - fetches content from questionContent table
 export const getByIdForResults = query({
   args: { id: v.id('customQuizzes') },
   handler: async (ctx, { id }) => {
@@ -106,16 +123,20 @@ export const getByIdForResults = query({
       throw new Error('Not authorized to access this quiz');
     }
 
-    // Get lightweight question data - only what's needed for results display
+    // Get question data with content from questionContent table
     const lightweightQuestions = await Promise.all(
       quiz.questions.map(async questionId => {
         const question = await ctx.db.get(questionId);
         if (!question) return null;
+
+        // Fetch heavy content from questionContent table
+        const content = await fetchQuestionContent(ctx, questionId);
+
         return {
           _id: question._id,
           _creationTime: question._creationTime,
-          questionTextString: question.questionTextString,
-          alternatives: question.alternatives,
+          questionTextString: content?.questionTextString || '',
+          alternatives: content?.alternatives || [],
           correctAlternativeIndex: question.correctAlternativeIndex,
           questionCode: question.questionCode,
         };

@@ -1,8 +1,8 @@
-"use node";
+'use node';
 
-import { v } from "convex/values";
+import { v } from 'convex/values';
 
-import { action } from "./_generated/server";
+import { action } from './_generated/server';
 
 /**
  * Check if a Clerk user exists by email
@@ -16,9 +16,12 @@ export const checkClerkUserExists = action({
       firstName: v.optional(v.string()),
       lastName: v.optional(v.string()),
     }),
-    v.null()
+    v.null(),
   ),
-  handler: async (ctx, args): Promise<{
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{
     id: string;
     emailAddresses: any[];
     firstName?: string;
@@ -30,10 +33,10 @@ export const checkClerkUserExists = action({
       const users = await clerk.users.getUserList({
         emailAddress: [args.email],
       });
-      
+
       const user = users.data.length > 0 ? users.data[0] : null;
       if (!user) return null;
-      
+
       return {
         id: user.id,
         emailAddresses: user.emailAddresses,

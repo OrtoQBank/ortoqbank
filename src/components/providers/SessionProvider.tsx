@@ -27,7 +27,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
   // Get real-time data from Convex backend
   const userRole = useQuery(api.users.getCurrentUserRole);
   const termsAccepted = useQuery(api.users.getTermsAccepted);
-  
+
   // Calculate derived values
   const isAdmin = userRole === 'admin';
   const isLoading = userRole === undefined || termsAccepted === undefined;

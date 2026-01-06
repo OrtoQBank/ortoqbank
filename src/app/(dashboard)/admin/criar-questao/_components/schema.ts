@@ -12,14 +12,16 @@ const questionSchemaBase = z.object({
     .min(2, 'Deve haver pelo menos 2 alternativas')
     .max(6, 'Deve haver no máximo 6 alternativas')
     .refine(
-      (alternatives) => alternatives.every((alt) => alt.trim().length > 0),
-      'Todas as alternativas devem ser preenchidas'
+      alternatives => alternatives.every(alt => alt.trim().length > 0),
+      'Todas as alternativas devem ser preenchidas',
     ),
 
-  correctAlternativeIndex: z.number({
-    required_error: 'Selecione a alternativa correta',
-    invalid_type_error: 'Selecione a alternativa correta',
-  }).min(0, 'Selecione a alternativa correta'),
+  correctAlternativeIndex: z
+    .number({
+      required_error: 'Selecione a alternativa correta',
+      invalid_type_error: 'Selecione a alternativa correta',
+    })
+    .min(0, 'Selecione a alternativa correta'),
   explanationTextString: z.string(),
   themeId: z.string().min(1, 'O tema é obrigatório'),
   subthemeId: z.string().optional(),
@@ -28,8 +30,8 @@ const questionSchemaBase = z.object({
 
 // Export with refine for validation
 export const questionSchema = questionSchemaBase.refine(
-  (data) => 
-    typeof data.correctAlternativeIndex === 'number' && 
+  data =>
+    typeof data.correctAlternativeIndex === 'number' &&
     data.correctAlternativeIndex >= 0 &&
     data.correctAlternativeIndex < data.alternatives.length,
   {

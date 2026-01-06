@@ -5,7 +5,7 @@ import { api, internal } from './_generated/api';
 import {
   internalAction,
   internalMutation,
-  internalQuery
+  internalQuery,
 } from './_generated/server';
 
 /**
@@ -53,7 +53,9 @@ export const generateInvoice = internalMutation({
       paymentMethodDescription = `Cartão de Crédito - ${totalInstallments}x de R$ ${(args.totalValue / totalInstallments).toFixed(2)}`;
     }
 
-    console.log(`📄 Creating invoice for order ${args.orderId}: ${serviceDescription} - R$ ${args.totalValue} (${paymentMethodDescription})`);
+    console.log(
+      `📄 Creating invoice for order ${args.orderId}: ${serviceDescription} - R$ ${args.totalValue} (${paymentMethodDescription})`,
+    );
 
     // Create invoice record with installment information for reference
     const invoiceId = await ctx.db.insert('invoices', {
@@ -78,9 +80,13 @@ export const generateInvoice = internalMutation({
     });
 
     // Schedule async invoice generation
-    await ctx.scheduler.runAfter(0, internal.invoices.processInvoiceGeneration, {
-      invoiceId,
-    });
+    await ctx.scheduler.runAfter(
+      0,
+      internal.invoices.processInvoiceGeneration,
+      {
+        invoiceId,
+      },
+    );
 
     console.log(`✅ Invoice ${invoiceId} created and scheduled for processing`);
 
@@ -106,9 +112,10 @@ export const processInvoiceGeneration = internalAction({
   returns: v.null(),
   handler: async (ctx, args) => {
     // Get invoice record (outside try block so we can reference it in catch)
-    const invoice: FunctionReturnType<typeof internal.invoices.getInvoiceById> = await ctx.runQuery(internal.invoices.getInvoiceById, {
-      invoiceId: args.invoiceId,
-    });
+    const invoice: FunctionReturnType<typeof internal.invoices.getInvoiceById> =
+      await ctx.runQuery(internal.invoices.getInvoiceById, {
+        invoiceId: args.invoiceId,
+      });
 
     if (!invoice) {
       return null;
@@ -141,9 +148,10 @@ export const processInvoiceGeneration = internalAction({
       });
 
       // Truncate service name to 350 characters (Asaas limit)
-      const municipalServiceName = fiscalService.description.length > 250
-        ? fiscalService.description.slice(0, 247) + '...'
-        : fiscalService.description;
+      const municipalServiceName =
+        fiscalService.description.length > 250
+          ? fiscalService.description.slice(0, 247) + '...'
+          : fiscalService.description;
 
       // Get ISS rate - hard coded to 2% according to business needs
       const issRate = 2;
@@ -151,7 +159,7 @@ export const processInvoiceGeneration = internalAction({
       // Build taxes object (flat structure per Asaas API)
       const taxes = {
         retainIss: false, // Do not retain ISS
-        iss: issRate,    // ISS rate as a direct number (e.g., 2 for 2%)
+        iss: issRate, // ISS rate as a direct number (e.g., 2 for 2%)
         cofins: 0,
         csll: 0,
         inss: 0,
@@ -187,9 +195,9 @@ export const processInvoiceGeneration = internalAction({
         invoiceId: args.invoiceId,
         asaasInvoiceId: result.invoiceId,
       });
-
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
+      const errorMessage =
+        error instanceof Error ? error.message : String(error);
 
       // Update invoice record with error (non-blocking)
       await ctx.runMutation(internal.invoices.updateInvoiceError, {

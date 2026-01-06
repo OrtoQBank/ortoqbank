@@ -28,6 +28,83 @@ function stringifyContent(content: any): string {
   return JSON.stringify(content);
 }
 
+// =============================================================================
+// QUESTION CONTENT QUERIES
+// =============================================================================
+
+/**
+ * Get question content (heavy fields) from the questionContent table.
+ * This is the preferred way to fetch content - avoids loading heavy data from questions table.
+ */
+export const getQuestionContent = query({
+  args: { questionId: v.id('questions') },
+  returns: v.union(
+    v.object({
+      questionTextString: v.string(),
+      explanationTextString: v.string(),
+      alternatives: v.array(v.string()),
+    }),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const content = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', args.questionId))
+      .first();
+    if (!content) return null;
+    return {
+      questionTextString: content.questionTextString,
+      explanationTextString: content.explanationTextString,
+      alternatives: content.alternatives,
+    };
+  },
+});
+
+/**
+ * Batch fetch question content for multiple questions.
+ * More efficient than multiple individual calls.
+ */
+export const getQuestionContentBatch = query({
+  args: { questionIds: v.array(v.id('questions')) },
+  returns: v.record(
+    v.id('questions'),
+    v.object({
+      questionTextString: v.string(),
+      explanationTextString: v.string(),
+      alternatives: v.array(v.string()),
+    }),
+  ),
+  handler: async (ctx, args) => {
+    const result: Record<
+      string,
+      {
+        questionTextString: string;
+        explanationTextString: string;
+        alternatives: string[];
+      }
+    > = {};
+
+    // Fetch content for all questions in parallel
+    await Promise.all(
+      args.questionIds.map(async questionId => {
+        const content = await ctx.db
+          .query('questionContent')
+          .withIndex('by_question', q => q.eq('questionId', questionId))
+          .first();
+        if (content) {
+          result[questionId] = {
+            questionTextString: content.questionTextString,
+            explanationTextString: content.explanationTextString,
+            alternatives: content.alternatives,
+          };
+        }
+      }),
+    );
+
+    return result;
+  },
+});
+
 export const create = mutation({
   args: {
     // Accept stringified content from frontend
@@ -44,7 +121,7 @@ export const create = mutation({
   handler: async (ctx, args) => {
     // Verify admin access
     await requireAdmin(ctx);
-    
+
     // Validate JSON structure of string content
     try {
       const questionTextObj = JSON.parse(args.questionTextString);
@@ -74,58 +151,51 @@ export const create = mutation({
     // Get the default tenant (ortoqbank app)
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
-    
+
     // Lookup taxonomy names for denormalization
     const theme = await ctx.db.get(args.themeId);
     if (!theme) throw new Error('Theme not found');
-    
+
     const subtheme = args.subthemeId ? await ctx.db.get(args.subthemeId) : null;
     const group = args.groupId ? await ctx.db.get(args.groupId) : null;
 
-    // Prepare question data with ALL fields for backwards compatibility
-    // During migration phase, we store heavy content in BOTH tables
-    // This ensures frontend (Quiz.tsx) continues to work without changes
+    // Prepare question data with ONLY lightweight fields
+    // Heavy content (questionTextString, explanationTextString, alternatives)
+    // is stored ONLY in questionContent table for optimal performance
     const questionData = {
       // Multi-tenancy
       tenantId: defaultApp?._id,
-      
+
       // Metadata
       title: args.title,
       normalizedTitle: args.title.trim().toLowerCase(),
       questionCode: args.questionCode,
-      
+
       // Taxonomy IDs
       themeId: args.themeId,
       subthemeId: args.subthemeId,
       groupId: args.groupId,
-      
+
       // DENORMALIZED: Taxonomy names (new)
       themeName: theme.name,
       subthemeName: subtheme?.name,
       groupName: group?.name,
-      
-      // Quiz essentials
+
+      // Quiz essentials (lightweight)
       correctAlternativeIndex: args.correctAlternativeIndex,
       alternativeCount: args.alternatives.length,
-      
+
       // Publishing
       isPublic: false,
       authorId: user._id,
-      
-      // BACKWARDS COMPATIBILITY: Keep heavy content in questions table too
-      // This allows existing frontend code to continue working
-      questionTextString: args.questionTextString,
-      explanationTextString: args.explanationTextString,
-      alternatives: args.alternatives,
-      
-      // Mark as migrated (content ALSO exists in questionContent table)
+
+      // Mark as migrated (content exists ONLY in questionContent table)
       contentMigrated: true,
     };
 
-    // Also store heavy content in questionContent table (new format)
-    // In future, queries can choose to fetch from here for better performance
+    // Store heavy content ONLY in questionContent table
     const contentData = {
       questionTextString: args.questionTextString,
       explanationTextString: args.explanationTextString,
@@ -133,7 +203,11 @@ export const create = mutation({
     };
 
     // Use the helper function (stores in both tables)
-    const questionId = await _internalInsertQuestion(ctx, questionData, contentData);
+    const questionId = await _internalInsertQuestion(
+      ctx,
+      questionData,
+      contentData,
+    );
     return questionId;
   },
 });
@@ -201,7 +275,7 @@ export const update = mutation({
   handler: async (ctx, args) => {
     // Verify admin access
     await requireAdmin(ctx);
-    
+
     // Validate JSON structure of string content
     try {
       const questionTextObj = JSON.parse(args.questionTextString);
@@ -223,13 +297,20 @@ export const update = mutation({
     // Lookup taxonomy names for denormalization
     const theme = await ctx.db.get(args.themeId);
     if (!theme) throw new Error('Theme not found');
-    
+
     const subtheme = args.subthemeId ? await ctx.db.get(args.subthemeId) : null;
     const group = args.groupId ? await ctx.db.get(args.groupId) : null;
 
-    const { id, ...otherFields } = args;
+    const {
+      id,
+      questionTextString,
+      explanationTextString,
+      alternatives,
+      ...otherFields
+    } = args;
 
-    // Prepare update data with denormalized names
+    // Prepare update data for questions table - ONLY lightweight fields
+    // Heavy content is stored in questionContent table only
     const updates = {
       ...otherFields,
       normalizedTitle: args.title?.trim().toLowerCase(),
@@ -237,26 +318,32 @@ export const update = mutation({
       themeName: theme.name,
       subthemeName: subtheme?.name,
       groupName: group?.name,
-      // Update alternative count
-      alternativeCount: args.alternatives.length,
+      // Update alternative count (lightweight)
+      alternativeCount: alternatives.length,
     };
 
-    // Use the helper function for question table
+    // Use the helper function for question table (no heavy content)
     await _internalUpdateQuestion(ctx, id, updates);
 
-    // Also update questionContent table if it exists
+    // Update heavy content in questionContent table ONLY
     const existingContent = await ctx.db
       .query('questionContent')
-      .withIndex('by_question', (q) => q.eq('questionId', id))
+      .withIndex('by_question', q => q.eq('questionId', id))
       .first();
 
-    if (existingContent) {
-      await ctx.db.patch(existingContent._id, {
-        questionTextString: args.questionTextString,
-        explanationTextString: args.explanationTextString,
-        alternatives: args.alternatives,
-      });
-    }
+    // Update or create content in questionContent table
+    await (existingContent
+      ? ctx.db.patch(existingContent._id, {
+          questionTextString,
+          explanationTextString,
+          alternatives,
+        })
+      : ctx.db.insert('questionContent', {
+          questionId: id,
+          questionTextString,
+          explanationTextString,
+          alternatives,
+        }));
 
     return true; // Indicate success
   },
@@ -538,4 +625,3 @@ export const searchByTitle = query({
     return [];
   },
 });
-

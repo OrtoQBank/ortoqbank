@@ -57,7 +57,7 @@ type WaitlistFormValues = z.infer<typeof waitlistFormSchema>;
 export function WaitlistModal() {
   const [isOpen, setIsOpen] = useQueryState(
     'waitlist',
-    parseAsBoolean.withDefault(false)
+    parseAsBoolean.withDefault(false),
   );
   const createWaitlistEntry = useMutation(api.waitlist.createWaitlistEntry);
   const [submitSuccess, setSubmitSuccess] = useState(false);
@@ -80,30 +80,27 @@ export function WaitlistModal() {
   const onSubmit = async (values: WaitlistFormValues) => {
     setError(null);
 
-  
-      const entryId = await createWaitlistEntry({
-        name: values.name,
-        email: values.email,
-        whatsapp: values.whatsapp,
-        instagram: values.instagram || undefined,
-        residencyLevel: values.residencyLevel,
-        subspecialty: values.subspecialty,
-      });
+    const entryId = await createWaitlistEntry({
+      name: values.name,
+      email: values.email,
+      whatsapp: values.whatsapp,
+      instagram: values.instagram || undefined,
+      residencyLevel: values.residencyLevel,
+      subspecialty: values.subspecialty,
+    });
 
-      if (entryId === 'email_already_exists') {
-        setError('Este e-mail já está cadastrado na lista de espera.');
-        return;
-      }
+    if (entryId === 'email_already_exists') {
+      setError('Este e-mail já está cadastrado na lista de espera.');
+      return;
+    }
 
-      setSubmitSuccess(true);
+    setSubmitSuccess(true);
 
-      setTimeout(() => {
-        form.reset();
-        setSubmitSuccess(false);
-        handleClose();
-      }, 2000);
-      
-  
+    setTimeout(() => {
+      form.reset();
+      setSubmitSuccess(false);
+      handleClose();
+    }, 2000);
   };
 
   if (!isOpen) return null;
@@ -113,7 +110,7 @@ export function WaitlistModal() {
       <div className="relative w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
         <button
           onClick={handleClose}
-          className="absolute right-4 top-4 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
+          className="absolute top-4 right-4 rounded-full p-1 text-gray-400 transition-colors hover:bg-gray-100 hover:text-gray-600"
           aria-label="Fechar"
         >
           <X className="h-6 w-6" />
@@ -122,7 +119,7 @@ export function WaitlistModal() {
         {submitSuccess ? (
           <div className="py-8 text-center">
             <div className="mb-4 text-5xl">✓</div>
-            <h2 className="mb-2 text-2xl font-bold text-brand-blue">
+            <h2 className="text-brand-blue mb-2 text-2xl font-bold">
               Cadastro realizado!
             </h2>
             <p className="text-gray-600">
@@ -139,7 +136,10 @@ export function WaitlistModal() {
             </p>
 
             <Form {...form}>
-              <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
+              <form
+                onSubmit={form.handleSubmit(onSubmit)}
+                className="space-y-4"
+              >
                 <FormField
                   control={form.control}
                   name="name"
@@ -215,14 +215,17 @@ export function WaitlistModal() {
                   name="residencyLevel"
                   render={({ field }) => (
                     <FormItem>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger className="border-brand-blue focus:ring-brand-blue">
                             <SelectValue placeholder="* Nível atual na Residência" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {RESIDENCY_LEVELS.map((level) => (
+                          {RESIDENCY_LEVELS.map(level => (
                             <SelectItem key={level} value={level}>
                               {level}
                             </SelectItem>
@@ -239,14 +242,17 @@ export function WaitlistModal() {
                   name="subspecialty"
                   render={({ field }) => (
                     <FormItem>
-                      <Select onValueChange={field.onChange} value={field.value}>
+                      <Select
+                        onValueChange={field.onChange}
+                        value={field.value}
+                      >
                         <FormControl>
                           <SelectTrigger className="border-brand-blue focus:ring-brand-blue">
                             <SelectValue placeholder="* Subespecialidade que deseja seguir" />
                           </SelectTrigger>
                         </FormControl>
                         <SelectContent>
-                          {SUBSPECIALTIES.map((specialty) => (
+                          {SUBSPECIALTIES.map(specialty => (
                             <SelectItem key={specialty} value={specialty}>
                               {specialty}
                             </SelectItem>
@@ -267,9 +273,11 @@ export function WaitlistModal() {
                 <Button
                   type="submit"
                   disabled={form.formState.isSubmitting}
-                  className="w-full bg-brand-blue py-6 text-lg font-semibold uppercase text-white hover:bg-brand-blue/80"
+                  className="bg-brand-blue hover:bg-brand-blue/80 w-full py-6 text-lg font-semibold text-white uppercase"
                 >
-                  {form.formState.isSubmitting ? 'Enviando...' : 'Entrar para lista VIP'}
+                  {form.formState.isSubmitting
+                    ? 'Enviando...'
+                    : 'Entrar para lista VIP'}
                 </Button>
 
                 <p className="text-center text-xs text-gray-500">
@@ -285,4 +293,3 @@ export function WaitlistModal() {
     </div>
   );
 }
-

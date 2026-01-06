@@ -9,7 +9,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert';
 function PaymentErrorAlertContent() {
   const searchParams = useSearchParams();
   const [isHidden, setIsHidden] = useState(false);
-  
+
   // Derive whether to show error from searchParams
   const hasPaymentError = useMemo(() => {
     return searchParams.get('error') === 'payment_required';
@@ -29,11 +29,12 @@ function PaymentErrorAlertContent() {
 
   return (
     <div className="container mx-auto px-4 py-4">
-      <Alert variant="destructive" className="max-w-2xl mx-auto">
+      <Alert variant="destructive" className="mx-auto max-w-2xl">
         <AlertCircle className="h-4 w-4" />
         <AlertDescription>
-          <strong>Pagamento necessário:</strong> Você precisa completar o pagamento antes de criar sua conta. 
-          Escolha um plano abaixo para continuar.
+          <strong>Pagamento necessário:</strong> Você precisa completar o
+          pagamento antes de criar sua conta. Escolha um plano abaixo para
+          continuar.
         </AlertDescription>
       </Alert>
     </div>

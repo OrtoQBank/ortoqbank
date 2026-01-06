@@ -3,7 +3,11 @@ import { v } from 'convex/values';
 
 import { components, internal } from './_generated/api';
 import { DataModel, Id } from './_generated/dataModel';
-import { internalAction, internalMutation, internalQuery } from './_generated/server';
+import {
+  internalAction,
+  internalMutation,
+  internalQuery,
+} from './_generated/server';
 
 // Initialize migrations component
 export const migrations = new Migrations<DataModel>(components.migrations);
@@ -34,7 +38,7 @@ export const getOrCreateDefaultApp = internalMutation({
     // Check if default app already exists
     const existingApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', slug))
+      .withIndex('by_slug', q => q.eq('slug', slug))
       .first();
 
     if (existingApp) {
@@ -69,7 +73,7 @@ export const getDefaultAppId = internalQuery({
     const slug = args.slug || 'ortoqbank';
     const app = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', slug))
+      .withIndex('by_slug', q => q.eq('slug', slug))
       .first();
     return app?._id || null;
   },
@@ -100,15 +104,23 @@ export const runDenormalizationMigrations = migrations.runner([
  */
 export const backfillThemesTenantId = migrations.define({
   table: 'themes',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     // Skip if already has tenantId
     if (doc.tenantId) {
       return;
     }
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -119,12 +131,20 @@ export const backfillThemesTenantId = migrations.define({
  */
 export const backfillSubthemesTenantId = migrations.define({
   table: 'subthemes',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -135,12 +155,20 @@ export const backfillSubthemesTenantId = migrations.define({
  */
 export const backfillGroupsTenantId = migrations.define({
   table: 'groups',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -151,12 +179,20 @@ export const backfillGroupsTenantId = migrations.define({
  */
 export const backfillQuestionsTenantId = migrations.define({
   table: 'questions',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -167,12 +203,20 @@ export const backfillQuestionsTenantId = migrations.define({
  */
 export const backfillPresetQuizzesTenantId = migrations.define({
   table: 'presetQuizzes',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -183,12 +227,20 @@ export const backfillPresetQuizzesTenantId = migrations.define({
  */
 export const backfillCustomQuizzesTenantId = migrations.define({
   table: 'customQuizzes',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -199,12 +251,20 @@ export const backfillCustomQuizzesTenantId = migrations.define({
  */
 export const backfillQuizSessionsTenantId = migrations.define({
   table: 'quizSessions',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -215,12 +275,20 @@ export const backfillQuizSessionsTenantId = migrations.define({
  */
 export const backfillUserBookmarksTenantId = migrations.define({
   table: 'userBookmarks',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -231,12 +299,20 @@ export const backfillUserBookmarksTenantId = migrations.define({
  */
 export const backfillUserQuestionStatsTenantId = migrations.define({
   table: 'userQuestionStats',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -247,12 +323,20 @@ export const backfillUserQuestionStatsTenantId = migrations.define({
  */
 export const backfillUserStatsCountsTenantId = migrations.define({
   table: 'userStatsCounts',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -263,12 +347,18 @@ export const backfillUserStatsCountsTenantId = migrations.define({
  */
 export const backfillQuestionDenormalizedNames = migrations.define({
   table: 'questions',
-  migrateOne: async (ctx, doc): Promise<{
-    themeName?: string;
-    subthemeName?: string;
-    groupName?: string;
-    alternativeCount?: number;
-  } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<
+    | {
+        themeName?: string;
+        subthemeName?: string;
+        groupName?: string;
+        alternativeCount?: number;
+      }
+    | undefined
+  > => {
     // Skip if already has denormalized names
     if (doc.themeName) {
       return;
@@ -323,7 +413,7 @@ export const migrateQuestionContent = migrations.define({
     // Check if questionContent ACTUALLY exists for this question (don't rely on flag)
     const existingContent = await ctx.db
       .query('questionContent')
-      .withIndex('by_question', (q) => q.eq('questionId', doc._id))
+      .withIndex('by_question', q => q.eq('questionId', doc._id))
       .first();
 
     // Skip if content already exists in questionContent table
@@ -332,7 +422,11 @@ export const migrateQuestionContent = migrations.define({
     }
 
     // Skip if no content to migrate
-    if (!doc.questionTextString && !doc.explanationTextString && !doc.alternatives) {
+    if (
+      !doc.questionTextString &&
+      !doc.explanationTextString &&
+      !doc.alternatives
+    ) {
       return;
     }
 
@@ -366,25 +460,33 @@ export const setupMultiTenancy = internalAction({
     defaultAppId: v.id('apps'),
     message: v.string(),
   }),
-  handler: async (ctx, args): Promise<{ defaultAppId: Id<'apps'>; message: string }> => {
+  handler: async (
+    ctx,
+    args,
+  ): Promise<{ defaultAppId: Id<'apps'>; message: string }> => {
     console.log('=== Starting Multi-Tenancy Setup ===');
 
     // Step 1: Create default app
     console.log('Step 1: Creating/getting default app...');
-    const defaultAppId: Id<'apps'> = await ctx.runMutation(internal.migrations.getOrCreateDefaultApp, {
-      slug: args.defaultAppSlug,
-      name: args.defaultAppName,
-      domain: args.defaultAppDomain,
-    });
+    const defaultAppId: Id<'apps'> = await ctx.runMutation(
+      internal.migrations.getOrCreateDefaultApp,
+      {
+        slug: args.defaultAppSlug,
+        name: args.defaultAppName,
+        domain: args.defaultAppDomain,
+      },
+    );
     console.log(`Default app ID: ${defaultAppId}`);
 
     // Step 2: Run tenantId backfill migrations
     console.log('Step 2: Running tenantId backfill migrations...');
     console.log('Run the following in Convex dashboard:');
     console.log('  npx convex run migrations:runMultiTenancyMigrations');
-    
+
     // Step 3: Run denormalization migrations
-    console.log('Step 3: After tenantId backfill, run denormalization migrations:');
+    console.log(
+      'Step 3: After tenantId backfill, run denormalization migrations:',
+    );
     console.log('  npx convex run migrations:runDenormalizationMigrations');
 
     return {
@@ -403,12 +505,20 @@ export const setupMultiTenancy = internalAction({
  */
 export const backfillCouponsTenantId = migrations.define({
   table: 'coupons',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -419,12 +529,20 @@ export const backfillCouponsTenantId = migrations.define({
  */
 export const backfillPricingPlansTenantId = migrations.define({
   table: 'pricingPlans',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -435,12 +553,20 @@ export const backfillPricingPlansTenantId = migrations.define({
  */
 export const backfillWaitlistTenantId = migrations.define({
   table: 'waitlist',
-  migrateOne: async (ctx, doc): Promise<{ tenantId: Id<'apps'> } | undefined> => {
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ tenantId: Id<'apps'> } | undefined> => {
     if (doc.tenantId) return;
 
-    const defaultAppId = await ctx.runQuery(internal.migrations.getDefaultAppId, {});
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
     if (!defaultAppId) {
-      throw new Error('Default app not found. Run getOrCreateDefaultApp first.');
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
     }
     return { tenantId: defaultAppId };
   },
@@ -496,3 +622,110 @@ export const backfillCompletedQuizSummaries = migrations.define({
 export const runCompletedQuizSummariesMigration = migrations.runner([
   internal.migrations.backfillCompletedQuizSummaries,
 ]);
+
+// =============================================================================
+// QUESTION CONTENT CLEANUP MIGRATION
+// =============================================================================
+
+/**
+ * Remove heavy content fields from questions table.
+ *
+ * PREREQUISITES:
+ * 1. ALL read operations MUST be updated to fetch from questionContent table
+ * 2. Verify that questionContent records exist for all questions
+ * 3. Run this ONLY after confirming the app works correctly with questionContent
+ *
+ * This migration removes the following fields from questions documents:
+ * - questionTextString
+ * - explanationTextString
+ * - alternatives
+ * - questionText (legacy object format)
+ * - explanationText (legacy object format)
+ *
+ * After running this migration, questions will be significantly smaller,
+ * preventing 16MB limit issues during quiz creation queries.
+ */
+export const removeHeavyContentFromQuestions = migrations.define({
+  table: 'questions',
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<
+    | {
+        questionTextString?: undefined;
+        explanationTextString?: undefined;
+        alternatives?: undefined;
+        questionText?: undefined;
+        explanationText?: undefined;
+      }
+    | undefined
+  > => {
+    // Skip if already cleaned up (no heavy content fields)
+    if (
+      doc.questionTextString === undefined &&
+      doc.explanationTextString === undefined &&
+      doc.alternatives === undefined &&
+      doc.questionText === undefined &&
+      doc.explanationText === undefined
+    ) {
+      return;
+    }
+
+    // Verify questionContent exists before removing from questions
+    const questionContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', doc._id))
+      .first();
+
+    if (!questionContent) {
+      // Log warning but don't fail - content might need to be backfilled separately
+      console.warn(
+        `Question ${doc._id} has no questionContent record. Skipping cleanup.`,
+      );
+      return;
+    }
+
+    // Return the fields to set to undefined (removes them from the document)
+    return {
+      questionTextString: undefined,
+      explanationTextString: undefined,
+      alternatives: undefined,
+      questionText: undefined,
+      explanationText: undefined,
+    };
+  },
+});
+
+// Runner for removing heavy content from questions
+export const runRemoveHeavyContentMigration = migrations.runner([
+  internal.migrations.removeHeavyContentFromQuestions,
+]);
+
+/**
+ * Verify migration: Check that all questions have content in questionContent table
+ * Run this BEFORE the cleanup migration to ensure data integrity
+ */
+export const verifyQuestionContentExists = internalQuery({
+  args: {},
+  handler: async ctx => {
+    const questions = await ctx.db.query('questions').collect();
+    const missing: Id<'questions'>[] = [];
+
+    for (const question of questions) {
+      const content = await ctx.db
+        .query('questionContent')
+        .withIndex('by_question', q => q.eq('questionId', question._id))
+        .first();
+
+      if (!content) {
+        missing.push(question._id);
+      }
+    }
+
+    return {
+      totalQuestions: questions.length,
+      questionsWithContent: questions.length - missing.length,
+      missingContent: missing,
+    };
+  },
+});

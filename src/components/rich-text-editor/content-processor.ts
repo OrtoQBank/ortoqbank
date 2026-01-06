@@ -99,13 +99,16 @@ export const validateImageSourcesWithDetails = (
             reason: 'blob_url',
             nodeType: node.type,
           });
-          console.error('[ImageValidation] Image still has blob URL (upload may have failed):', {
-            src,
-            alt,
-            nodeType: node.type,
-            pendingUploadsSize: pendingUploads.size,
-            hasPendingUpload: pendingUploads.has(src),
-          });
+          console.error(
+            '[ImageValidation] Image still has blob URL (upload may have failed):',
+            {
+              src,
+              alt,
+              nodeType: node.type,
+              pendingUploadsSize: pendingUploads.size,
+              hasPendingUpload: pendingUploads.has(src),
+            },
+          );
         } else if (!src.startsWith(imageKitEndpoint)) {
           invalidImages.push({
             src,
@@ -211,12 +214,17 @@ export const processEditorContent = async (
           // Keep original node attrs (with blob URL) - validation will catch this later
         }
       } else {
-        console.error('[ImageUpload] Blob URL not found in pendingUploads map:', {
-          blobUrl: blobUrl.slice(0, 80),
-          alt: node.attrs?.alt,
-          pendingUploadsKeys: [...pendingUploads.keys()].map(k => k.slice(0, 50)),
-          hint: 'This can happen if: 1) Image was copy-pasted from another source, 2) Page was refreshed, 3) Image was added via drag-drop without proper handling',
-        });
+        console.error(
+          '[ImageUpload] Blob URL not found in pendingUploads map:',
+          {
+            blobUrl: blobUrl.slice(0, 80),
+            alt: node.attrs?.alt,
+            pendingUploadsKeys: [...pendingUploads.keys()].map(k =>
+              k.slice(0, 50),
+            ),
+            hint: 'This can happen if: 1) Image was copy-pasted from another source, 2) Page was refreshed, 3) Image was added via drag-drop without proper handling',
+          },
+        );
         // Keep original node attrs - validation will catch this later
       }
     }

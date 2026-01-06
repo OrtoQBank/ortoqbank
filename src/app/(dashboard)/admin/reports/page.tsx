@@ -131,7 +131,7 @@ export default function AdminReportsPage() {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2 border-brand-blue"></div>
+          <div className="border-brand-blue mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-b-2"></div>
           <p className="text-muted-foreground">Carregando relatórios...</p>
         </div>
       </div>
@@ -155,116 +155,152 @@ export default function AdminReportsPage() {
         <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
           <div className="flex items-center gap-2">
             <Clock className="h-5 w-5 text-amber-600" />
-            <span className="text-sm font-medium text-amber-800">Pendentes</span>
+            <span className="text-sm font-medium text-amber-800">
+              Pendentes
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold text-amber-900">{counts.pending}</p>
+          <p className="mt-2 text-2xl font-bold text-amber-900">
+            {counts.pending}
+          </p>
         </div>
         <div className="rounded-lg border border-blue-200 bg-blue-50 p-4">
           <div className="flex items-center gap-2">
             <Eye className="h-5 w-5 text-blue-600" />
-            <span className="text-sm font-medium text-blue-800">Em análise</span>
+            <span className="text-sm font-medium text-blue-800">
+              Em análise
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold text-blue-900">{counts.reviewed}</p>
+          <p className="mt-2 text-2xl font-bold text-blue-900">
+            {counts.reviewed}
+          </p>
         </div>
         <div className="rounded-lg border border-green-200 bg-green-50 p-4">
           <div className="flex items-center gap-2">
             <CheckCircle className="h-5 w-5 text-green-600" />
-            <span className="text-sm font-medium text-green-800">Resolvidos</span>
+            <span className="text-sm font-medium text-green-800">
+              Resolvidos
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold text-green-900">{counts.resolved}</p>
+          <p className="mt-2 text-2xl font-bold text-green-900">
+            {counts.resolved}
+          </p>
         </div>
         <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
           <div className="flex items-center gap-2">
             <XCircle className="h-5 w-5 text-gray-600" />
-            <span className="text-sm font-medium text-gray-800">Descartados</span>
+            <span className="text-sm font-medium text-gray-800">
+              Descartados
+            </span>
           </div>
-          <p className="mt-2 text-2xl font-bold text-gray-900">{counts.dismissed}</p>
+          <p className="mt-2 text-2xl font-bold text-gray-900">
+            {counts.dismissed}
+          </p>
         </div>
       </div>
 
       {/* Tabs for filtering */}
-      <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as ReportStatus | 'all')}>
+      <Tabs
+        value={activeTab}
+        onValueChange={v => setActiveTab(v as ReportStatus | 'all')}
+      >
         <TabsList className="mb-4">
           <TabsTrigger value="all">Todos ({counts.total})</TabsTrigger>
-          <TabsTrigger value="pending">Pendentes ({counts.pending})</TabsTrigger>
-          <TabsTrigger value="reviewed">Em análise ({counts.reviewed})</TabsTrigger>
-          <TabsTrigger value="resolved">Resolvidos ({counts.resolved})</TabsTrigger>
-          <TabsTrigger value="dismissed">Descartados ({counts.dismissed})</TabsTrigger>
+          <TabsTrigger value="pending">
+            Pendentes ({counts.pending})
+          </TabsTrigger>
+          <TabsTrigger value="reviewed">
+            Em análise ({counts.reviewed})
+          </TabsTrigger>
+          <TabsTrigger value="resolved">
+            Resolvidos ({counts.resolved})
+          </TabsTrigger>
+          <TabsTrigger value="dismissed">
+            Descartados ({counts.dismissed})
+          </TabsTrigger>
         </TabsList>
 
         <TabsContent value={activeTab} className="mt-0">
-          {reports ? reports.length === 0 ? (
-            <div className="py-8 text-center text-muted-foreground">
-              Nenhum relatório encontrado nesta categoria.
-            </div>
-          ) : (
-            <div className="space-y-3">
-              {reports.map((report) => {
-                const StatusIcon = statusConfig[report.status].icon;
-                return (
-                  <div
-                    key={report._id}
-                    className="flex items-start justify-between rounded-lg border p-4 transition-colors hover:bg-gray-50"
-                  >
-                    <div className="flex-1">
-                      <div className="mb-2 flex items-center gap-2">
-                        <Badge
-                          variant="outline"
-                          className={statusConfig[report.status].color}
-                        >
-                          <StatusIcon className="mr-1 h-3 w-3" />
-                          {statusConfig[report.status].label}
-                        </Badge>
-                        {report.screenshotUrl && (
-                          <Badge variant="outline" className="gap-1">
-                            <ImageIcon className="h-3 w-3" />
-                            Imagem
+          {reports ? (
+            reports.length === 0 ? (
+              <div className="text-muted-foreground py-8 text-center">
+                Nenhum relatório encontrado nesta categoria.
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {reports.map(report => {
+                  const StatusIcon = statusConfig[report.status].icon;
+                  return (
+                    <div
+                      key={report._id}
+                      className="flex items-start justify-between rounded-lg border p-4 transition-colors hover:bg-gray-50"
+                    >
+                      <div className="flex-1">
+                        <div className="mb-2 flex items-center gap-2">
+                          <Badge
+                            variant="outline"
+                            className={statusConfig[report.status].color}
+                          >
+                            <StatusIcon className="mr-1 h-3 w-3" />
+                            {statusConfig[report.status].label}
                           </Badge>
-                        )}
-                        {report.questionCode && (
-                          <span className="text-xs text-muted-foreground">
-                            Código: {report.questionCode}
-                          </span>
-                        )}
-                      </div>
-                      <p className="mb-2 line-clamp-2 text-sm">{report.description}</p>
-                      <div className="flex items-center gap-4 text-xs text-muted-foreground">
-                        <span>
-                          Por: {report.reporterName || report.reporterEmail || 'Usuário'}
-                        </span>
-                        <span>•</span>
-                        <span>{formatDate(report._creationTime)}</span>
-                        {report.questionTitle && (
-                          <>
-                            <span>•</span>
-                            <span className="max-w-[200px] truncate">
-                              {report.questionTitle}
+                          {report.screenshotUrl && (
+                            <Badge variant="outline" className="gap-1">
+                              <ImageIcon className="h-3 w-3" />
+                              Imagem
+                            </Badge>
+                          )}
+                          {report.questionCode && (
+                            <span className="text-muted-foreground text-xs">
+                              Código: {report.questionCode}
                             </span>
-                          </>
-                        )}
+                          )}
+                        </div>
+                        <p className="mb-2 line-clamp-2 text-sm">
+                          {report.description}
+                        </p>
+                        <div className="text-muted-foreground flex items-center gap-4 text-xs">
+                          <span>
+                            Por:{' '}
+                            {report.reporterName ||
+                              report.reporterEmail ||
+                              'Usuário'}
+                          </span>
+                          <span>•</span>
+                          <span>{formatDate(report._creationTime)}</span>
+                          {report.questionTitle && (
+                            <>
+                              <span>•</span>
+                              <span className="max-w-[200px] truncate">
+                                {report.questionTitle}
+                              </span>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      <div className="ml-4 flex items-center gap-2">
+                        <Link
+                          href={`/admin/gerenciar-questoes/${report.questionId}`}
+                        >
+                          <Button variant="outline" size="sm">
+                            <ExternalLink className="mr-1 h-4 w-4" />
+                            Ver Questão
+                          </Button>
+                        </Link>
+                        <Button
+                          variant="default"
+                          size="sm"
+                          onClick={() => openReportDetails(report)}
+                        >
+                          Gerenciar
+                        </Button>
                       </div>
                     </div>
-                    <div className="ml-4 flex items-center gap-2">
-                      <Link href={`/admin/gerenciar-questoes/${report.questionId}`}>
-                        <Button variant="outline" size="sm">
-                          <ExternalLink className="mr-1 h-4 w-4" />
-                          Ver Questão
-                        </Button>
-                      </Link>
-                      <Button
-                        variant="default"
-                        size="sm"
-                        onClick={() => openReportDetails(report)}
-                      >
-                        Gerenciar
-                      </Button>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            )
           ) : (
-            <div className="py-8 text-center text-muted-foreground">
+            <div className="text-muted-foreground py-8 text-center">
               Carregando...
             </div>
           )}
@@ -272,7 +308,10 @@ export default function AdminReportsPage() {
       </Tabs>
 
       {/* Report Details Dialog */}
-      <Dialog open={!!selectedReport} onOpenChange={() => setSelectedReport(null)}>
+      <Dialog
+        open={!!selectedReport}
+        onOpenChange={() => setSelectedReport(null)}
+      >
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
@@ -291,20 +330,25 @@ export default function AdminReportsPage() {
               {/* Reporter Info */}
               <div className="rounded-lg bg-gray-50 p-3">
                 <p className="text-sm font-medium">Reportado por</p>
-                <p className="text-sm text-muted-foreground">
+                <p className="text-muted-foreground text-sm">
                   {selectedReport.reporterName || 'Nome não disponível'}
-                  {selectedReport.reporterEmail && ` (${selectedReport.reporterEmail})`}
+                  {selectedReport.reporterEmail &&
+                    ` (${selectedReport.reporterEmail})`}
                 </p>
-                <p className="mt-1 text-xs text-muted-foreground">
+                <p className="text-muted-foreground mt-1 text-xs">
                   {formatDate(selectedReport._creationTime)}
                 </p>
               </div>
 
               {/* Description */}
               <div>
-                <p className="mb-2 text-sm font-medium">Descrição do Problema</p>
+                <p className="mb-2 text-sm font-medium">
+                  Descrição do Problema
+                </p>
                 <div className="rounded-lg border bg-white p-3">
-                  <p className="whitespace-pre-wrap text-sm">{selectedReport.description}</p>
+                  <p className="text-sm whitespace-pre-wrap">
+                    {selectedReport.description}
+                  </p>
                 </div>
               </div>
 
@@ -332,7 +376,7 @@ export default function AdminReportsPage() {
                 <p className="text-sm font-medium">Atualizar Status</p>
                 <Select
                   value={newStatus}
-                  onValueChange={(v) => setNewStatus(v as ReportStatus)}
+                  onValueChange={v => setNewStatus(v as ReportStatus)}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -372,7 +416,7 @@ export default function AdminReportsPage() {
                   <Textarea
                     placeholder="Adicione notas sobre a revisão..."
                     value={reviewNotes}
-                    onChange={(e) => setReviewNotes(e.target.value)}
+                    onChange={e => setReviewNotes(e.target.value)}
                     className="min-h-[80px]"
                   />
                 </div>
@@ -381,7 +425,9 @@ export default function AdminReportsPage() {
           )}
 
           <DialogFooter className="gap-2 sm:gap-0">
-            <Link href={`/admin/gerenciar-questoes/${selectedReport?.questionId}`}>
+            <Link
+              href={`/admin/gerenciar-questoes/${selectedReport?.questionId}`}
+            >
               <Button variant="outline">
                 <ExternalLink className="mr-2 h-4 w-4" />
                 Ver Questão
@@ -396,4 +442,3 @@ export default function AdminReportsPage() {
     </div>
   );
 }
-

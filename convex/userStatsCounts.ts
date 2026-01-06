@@ -146,5 +146,3 @@ export async function getUserBookmarksCountByGroup(
     .first();
   return userCounts?.bookmarkedByGroup[groupId] || 0;
 }
-
-

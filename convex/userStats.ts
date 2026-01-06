@@ -26,7 +26,6 @@ type UserStats = {
   totalQuestions: number;
 };
 
-
 // OLD getUserStatsFromTable function removed - replaced by getUserStatsFast
 
 // OLD getUserStatsSummaryWithAggregates function removed - replaced by getUserStatsFast
@@ -877,7 +876,7 @@ export const initializeUserStatsCounts = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
     // Insert the computed counts
@@ -933,7 +932,7 @@ export const initializeAllUserStatsCounts = mutation({
     // Get default tenant for multi-tenancy
     const defaultApp = await ctx.db
       .query('apps')
-      .withIndex('by_slug', (q) => q.eq('slug', 'ortoqbank'))
+      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
       .first();
 
     let processedUsers = 0;

@@ -14,14 +14,14 @@ export function AvailableQuestionsInfo({
   requestedCount,
 }: AvailableQuestionsInfoProps) {
   return (
-    <div className="rounded-md bg-brand-blue/10 p-4 dark:bg-brand-blue/20">
+    <div className="bg-brand-blue/10 dark:bg-brand-blue/20 rounded-md p-4">
       <div className="flex items-center">
-        <InfoCircle className="h-5 w-5 text-brand-blue/40 dark:text-brand-blue/30" />
+        <InfoCircle className="text-brand-blue/40 dark:text-brand-blue/30 h-5 w-5" />
         <div className="ml-3">
-          <h3 className="text-sm font-medium text-brand-blue/90 dark:text-brand-blue/20">
+          <h3 className="text-brand-blue/90 dark:text-brand-blue/20 text-sm font-medium">
             Questões Disponíveis
           </h3>
-          <div className="mt-2 text-sm text-brand-blue/80 dark:text-brand-blue/30">
+          <div className="text-brand-blue/80 dark:text-brand-blue/30 mt-2 text-sm">
             {isLoading ? (
               <div className="flex items-center">
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />

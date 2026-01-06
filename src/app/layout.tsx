@@ -68,11 +68,10 @@ export default function RootLayout({
 }: Readonly<{
   children: React.ReactNode;
 }>) {
-  const gtmId = process.env.NEXT_PUBLIC_GTM_ID
+  const gtmId = process.env.NEXT_PUBLIC_GTM_ID;
   return (
     <html lang="pt-BR">
-   
-   {gtmId && <GoogleTagManager gtmId={gtmId} />}
+      {gtmId && <GoogleTagManager gtmId={gtmId} />}
       <body
         className={`${geistSans.variable} ${geistMono.variable} ${sifonn.variable} antialiased`}
       >
@@ -88,7 +87,7 @@ export default function RootLayout({
               </NuqsAdapter>
             </ConvexClientProvider>
           </PostHogProvider>
-        </ErrorBoundary>  
+        </ErrorBoundary>
       </body>
     </html>
   );

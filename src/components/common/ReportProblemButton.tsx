@@ -34,12 +34,16 @@ export default function ReportProblemButton({
   const [open, setOpen] = useState(false);
   const [description, setDescription] = useState('');
   const [screenshotFile, setScreenshotFile] = useState<File | null>(null);
-  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(null);
+  const [screenshotPreview, setScreenshotPreview] = useState<string | null>(
+    null,
+  );
   const [isSubmitting, setIsSubmitting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const submitReport = useMutation(api.questionErrorReport.submitReport);
-  const generateUploadUrl = useMutation(api.questionErrorReport.generateUploadUrl);
+  const generateUploadUrl = useMutation(
+    api.questionErrorReport.generateUploadUrl,
+  );
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -120,7 +124,8 @@ export default function ReportProblemButton({
 
       toast({
         title: 'Problema reportado',
-        description: 'Obrigado por nos ajudar a melhorar! Sua reportagem será analisada.',
+        description:
+          'Obrigado por nos ajudar a melhorar! Sua reportagem será analisada.',
       });
 
       // Reset form and close dialog
@@ -174,7 +179,10 @@ export default function ReportProblemButton({
 
         <div className="space-y-4">
           <div>
-            <label htmlFor="description" className="mb-2 block text-sm font-medium">
+            <label
+              htmlFor="description"
+              className="mb-2 block text-sm font-medium"
+            >
               Descrição do problema *
             </label>
             <Textarea
@@ -191,7 +199,7 @@ export default function ReportProblemButton({
             <label className="mb-2 block text-sm font-medium">
               Captura de tela (opcional)
             </label>
-            
+
             {screenshotPreview ? (
               <div className="relative">
                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -203,7 +211,7 @@ export default function ReportProblemButton({
                 <button
                   type="button"
                   onClick={removeScreenshot}
-                  className="absolute -right-2 -top-2 rounded-full bg-red-500 p-1 text-white hover:bg-red-600"
+                  className="absolute -top-2 -right-2 rounded-full bg-red-500 p-1 text-white hover:bg-red-600"
                   disabled={isSubmitting}
                 >
                   <X className="h-4 w-4" />
@@ -258,4 +266,3 @@ export default function ReportProblemButton({
     </Dialog>
   );
 }
-

@@ -1,8 +1,8 @@
-import { cronJobs } from "convex/server";
-import { v } from "convex/values";
+import { cronJobs } from 'convex/server';
+import { v } from 'convex/values';
 
-import { internal } from "./_generated/api";
-import { internalMutation } from "./_generated/server";
+import { internal } from './_generated/api';
+import { internalMutation } from './_generated/server';
 
 /**
  * Update user year access flags at the end of each year
@@ -11,31 +11,31 @@ import { internalMutation } from "./_generated/server";
 export const updateYearAccess = internalMutation({
   args: {},
   returns: v.null(),
-  handler: async (ctx) => {
-    console.log("Starting year-end access update...");
-    
+  handler: async ctx => {
+    console.log('Starting year-end access update...');
+
     const now = Date.now();
     let usersUpdated = 0;
     let usersChecked = 0;
 
     // Get all users with active year access
-    const allUsers = await ctx.db
-      .query("users")
-      .collect();
+    const allUsers = await ctx.db.query('users').collect();
 
     for (const user of allUsers) {
       if (!user.hasActiveYearAccess) {
         continue; // Skip users without active access
       }
-      
+
       usersChecked++;
 
       // Get all user products using index (no runtime filters)
       const allUserProducts = await ctx.db
-        .query("userProducts")
-        .withIndex("by_user_status", (q) => q.eq("userId", user._id).eq("status", "active"))
+        .query('userProducts')
+        .withIndex('by_user_status', q =>
+          q.eq('userId', user._id).eq('status', 'active'),
+        )
         .collect();
-      
+
       // Filter by hasAccess in-memory (per Convex guidelines)
       const userProducts = allUserProducts.filter(up => up.hasAccess === true);
 
@@ -61,14 +61,16 @@ export const updateYearAccess = internalMutation({
       for (const userProduct of userProducts) {
         if (userProduct.accessExpiresAt && userProduct.accessExpiresAt <= now) {
           await ctx.db.patch(userProduct._id, {
-            status: "expired",
+            status: 'expired',
             hasAccess: false,
           });
         }
       }
     }
 
-    console.log(`Year-end access update completed. Checked ${usersChecked} users, updated ${usersUpdated} users.`);
+    console.log(
+      `Year-end access update completed. Checked ${usersChecked} users, updated ${usersUpdated} users.`,
+    );
     return null;
   },
 });
@@ -82,30 +84,30 @@ export const manualUpdateYearAccess = internalMutation({
     usersChecked: v.number(),
     usersUpdated: v.number(),
   }),
-  handler: async (ctx) => {
-    console.log("Starting manual year access update...");
-    
+  handler: async ctx => {
+    console.log('Starting manual year access update...');
+
     const now = Date.now();
     let usersUpdated = 0;
     let usersChecked = 0;
 
-    const allUsers = await ctx.db
-      .query("users")
-      .collect();
+    const allUsers = await ctx.db.query('users').collect();
 
     for (const user of allUsers) {
       if (!user.hasActiveYearAccess) {
         continue;
       }
-      
+
       usersChecked++;
 
       // Fetch active user products using index (no runtime filters)
       const allUserProducts = await ctx.db
-        .query("userProducts")
-        .withIndex("by_user_status", (q) => q.eq("userId", user._id).eq("status", "active"))
+        .query('userProducts')
+        .withIndex('by_user_status', q =>
+          q.eq('userId', user._id).eq('status', 'active'),
+        )
         .collect();
-      
+
       // Filter by hasAccess in-memory (as per Convex guidelines)
       const userProducts = allUserProducts.filter(up => up.hasAccess === true);
 
@@ -127,15 +129,17 @@ export const manualUpdateYearAccess = internalMutation({
       for (const userProduct of userProducts) {
         if (userProduct.accessExpiresAt && userProduct.accessExpiresAt <= now) {
           await ctx.db.patch(userProduct._id, {
-            status: "expired",
+            status: 'expired',
             hasAccess: false,
           });
         }
       }
     }
 
-    console.log(`Manual update completed. Checked ${usersChecked} users, updated ${usersUpdated} users.`);
-    
+    console.log(
+      `Manual update completed. Checked ${usersChecked} users, updated ${usersUpdated} users.`,
+    );
+
     return {
       usersChecked,
       usersUpdated,
@@ -147,7 +151,11 @@ export const manualUpdateYearAccess = internalMutation({
 const crons = cronJobs();
 
 // Run at 23:59 on December 31st every year
-crons.cron("update_year_access", "59 23 31 12 *", internal.crons.updateYearAccess, {});
+crons.cron(
+  'update_year_access',
+  '59 23 31 12 *',
+  internal.crons.updateYearAccess,
+  {},
+);
 
 export default crons;
-
