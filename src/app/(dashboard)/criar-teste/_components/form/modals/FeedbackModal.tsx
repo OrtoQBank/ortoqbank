@@ -13,11 +13,13 @@ import {
 type FeedbackModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  state: 'idle' | 'loading' | 'success' | 'error' | 'no-questions';
+  state: 'idle' | 'loading' | 'success' | 'error' | 'no-questions' | 'validation-error';
   message: {
     title: string;
     description: string;
   };
+  questionCount?: number;
+  onStartQuiz?: () => void;
 };
 
 export function FeedbackModal({
@@ -25,6 +27,8 @@ export function FeedbackModal({
   onClose,
   state,
   message,
+  questionCount,
+  onStartQuiz,
 }: FeedbackModalProps) {
   return (
     <Dialog
@@ -50,9 +54,23 @@ export function FeedbackModal({
 
           {state === 'success' && (
             <>
-              <CheckCircle2 className="h-12 w-12 text-green-500" />
-              <DialogTitle>{message.title}</DialogTitle>
-              <DialogDescription>{message.description}</DialogDescription>
+              <CheckCircle2 className="h-10 w-10 text-green-500" />
+              <DialogTitle className="text-center text-lg font-medium">
+                Quiz pronto
+              </DialogTitle>
+              <DialogDescription className="text-muted-foreground text-center text-sm">
+                {questionCount === undefined
+                  ? message.description
+                  : `${questionCount} questões selecionadas`}
+              </DialogDescription>
+              {onStartQuiz && (
+                <Button
+                  onClick={onStartQuiz}
+                  className="bg-brand-blue hover:bg-brand-blue/90 mt-2 w-full"
+                >
+                  Iniciar
+                </Button>
+              )}
             </>
           )}
 
@@ -87,6 +105,19 @@ export function FeedbackModal({
               <DialogDescription>{message.description}</DialogDescription>
               <Button onClick={onClose} variant="outline">
                 Fechar
+              </Button>
+            </>
+          )}
+
+          {state === 'validation-error' && (
+            <>
+              <AlertTriangle className="h-12 w-12 text-amber-500" />
+              <DialogTitle className="text-center">{message.title}</DialogTitle>
+              <DialogDescription className="text-center">
+                {message.description}
+              </DialogDescription>
+              <Button onClick={onClose} variant="outline" className="mt-4">
+                Entendi
               </Button>
             </>
           )}
