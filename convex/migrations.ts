@@ -452,3 +452,47 @@ export const runAdditionalTenantIdMigrations = migrations.runner([
   internal.migrations.backfillPricingPlansTenantId,
   internal.migrations.backfillWaitlistTenantId,
 ]);
+
+// =============================================================================
+// COMPLETED QUIZ SUMMARIES MIGRATION
+// =============================================================================
+
+/**
+ * Backfill completedQuizSummaries from existing completed quizSessions
+ * This creates lightweight summary records for performance optimization
+ */
+export const backfillCompletedQuizSummaries = migrations.define({
+  table: 'quizSessions',
+  migrateOne: async (ctx, doc): Promise<undefined> => {
+    // Skip if not complete
+    if (!doc.isComplete) {
+      return;
+    }
+
+    // Check if summary already exists for this session
+    const existing = await ctx.db
+      .query('completedQuizSummaries')
+      .withIndex('by_session', q => q.eq('sessionId', doc._id))
+      .first();
+
+    if (existing) {
+      return;
+    }
+
+    // Create summary record
+    await ctx.db.insert('completedQuizSummaries', {
+      tenantId: doc.tenantId,
+      userId: doc.userId,
+      quizId: doc.quizId,
+      sessionId: doc._id,
+      completedAt: doc._creationTime, // Use session creation time as fallback
+    });
+
+    return;
+  },
+});
+
+// Runner for completed quiz summaries backfill
+export const runCompletedQuizSummariesMigration = migrations.runner([
+  internal.migrations.backfillCompletedQuizSummaries,
+]);

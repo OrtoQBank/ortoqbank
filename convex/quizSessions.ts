@@ -178,6 +178,17 @@ export const submitAnswerAndProgress = mutation({
       isComplete: isQuizComplete,
     });
 
+    // 4b. If quiz is complete, insert into lightweight summary table for efficient queries
+    if (isQuizComplete) {
+      await ctx.db.insert('completedQuizSummaries', {
+        tenantId: session.tenantId,
+        userId: userId._id,
+        quizId: args.quizId,
+        sessionId: session._id,
+        completedAt: Date.now(),
+      });
+    }
+
     // 5. Schedule user stats update asynchronously (non-blocking)
     ctx.scheduler.runAfter(0, internal.userStats._updateQuestionStats, {
       userId: userId._id,
@@ -222,6 +233,15 @@ export const completeQuizSession = mutation({
     if (!session) throw new Error('No active quiz session found');
 
     await ctx.db.patch(session._id, { isComplete: true });
+
+    // Insert into lightweight summary table for efficient queries
+    await ctx.db.insert('completedQuizSummaries', {
+      tenantId: session.tenantId,
+      userId: userId._id,
+      quizId: args.quizId,
+      sessionId: session._id,
+      completedAt: Date.now(),
+    });
 
     return { success: true };
   },
@@ -279,5 +299,26 @@ export const getAllCompletedSessions = query({
       .collect();
 
     return sessions;
+  },
+});
+
+// Lightweight query for getting completed quiz IDs only (optimized for performance)
+// Uses denormalized completedQuizSummaries table to avoid reading heavy session data
+export const getCompletedQuizIds = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+    }),
+  ),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    const summaries = await ctx.db
+      .query('completedQuizSummaries')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .collect();
+
+    return summaries.map(s => ({ quizId: s.quizId }));
   },
 });

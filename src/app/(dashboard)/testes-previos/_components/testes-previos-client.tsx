@@ -42,7 +42,7 @@ export function TestesPreviosClient() {
   const subthemesResult = useQuery(api.subthemes.list, {});
   const groupsResult = useQuery(api.groups.list, {});
   const completedSessionsResult = useQuery(
-    api.quizSessions.getAllCompletedSessions,
+    api.quizSessions.getCompletedQuizIds,
     {},
   );
 
