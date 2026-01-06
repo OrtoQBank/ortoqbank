@@ -546,65 +546,65 @@ export const sampleAndFilterByMode = internalMutation({
     const validIds: Id<'questions'>[] = [];
 
     switch (args.questionMode) {
-    case 'unanswered': {
-      // For unanswered: check userQuestionStats for each candidate
-      for (const questionId of candidateIds) {
-        if (validIds.length >= args.targetCount) break;
+      case 'unanswered': {
+        // For unanswered: check userQuestionStats for each candidate
+        for (const questionId of candidateIds) {
+          if (validIds.length >= args.targetCount) break;
 
-        const stat = await ctx.db
-          .query('userQuestionStats')
-          .withIndex('by_user_question', q =>
-            q.eq('userId', args.userId).eq('questionId', questionId),
-          )
-          .first();
+          const stat = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user_question', q =>
+              q.eq('userId', args.userId).eq('questionId', questionId),
+            )
+            .first();
 
-        // If no stat exists or hasAnswered is false, it's unanswered
-        if (!stat || !stat.hasAnswered) {
-          validIds.push(questionId);
+          // If no stat exists or hasAnswered is false, it's unanswered
+          if (!stat || !stat.hasAnswered) {
+            validIds.push(questionId);
+          }
         }
+
+        break;
       }
-    
-    break;
-    }
-    case 'incorrect': {
-      // For incorrect: check if question is in user's incorrect stats
-      for (const questionId of candidateIds) {
-        if (validIds.length >= args.targetCount) break;
+      case 'incorrect': {
+        // For incorrect: check if question is in user's incorrect stats
+        for (const questionId of candidateIds) {
+          if (validIds.length >= args.targetCount) break;
 
-        const stat = await ctx.db
-          .query('userQuestionStats')
-          .withIndex('by_user_question', q =>
-            q.eq('userId', args.userId).eq('questionId', questionId),
-          )
-          .first();
+          const stat = await ctx.db
+            .query('userQuestionStats')
+            .withIndex('by_user_question', q =>
+              q.eq('userId', args.userId).eq('questionId', questionId),
+            )
+            .first();
 
-        if (stat?.isIncorrect) {
-          validIds.push(questionId);
+          if (stat?.isIncorrect) {
+            validIds.push(questionId);
+          }
         }
+
+        break;
       }
-    
-    break;
-    }
-    case 'bookmarked': {
-      // For bookmarked: check if question is in user's bookmarks
-      for (const questionId of candidateIds) {
-        if (validIds.length >= args.targetCount) break;
+      case 'bookmarked': {
+        // For bookmarked: check if question is in user's bookmarks
+        for (const questionId of candidateIds) {
+          if (validIds.length >= args.targetCount) break;
 
-        const bookmark = await ctx.db
-          .query('userBookmarks')
-          .withIndex('by_user_question', q =>
-            q.eq('userId', args.userId).eq('questionId', questionId),
-          )
-          .first();
+          const bookmark = await ctx.db
+            .query('userBookmarks')
+            .withIndex('by_user_question', q =>
+              q.eq('userId', args.userId).eq('questionId', questionId),
+            )
+            .first();
 
-        if (bookmark) {
-          validIds.push(questionId);
+          if (bookmark) {
+            validIds.push(questionId);
+          }
         }
+
+        break;
       }
-    
-    break;
-    }
-    // No default
+      // No default
     }
 
     // Exhausted if we checked all candidates but didn't find enough
@@ -1012,96 +1012,102 @@ export const quizCreationWorkflow = workflow.define({
         );
 
         switch (jobData.input.questionMode) {
-        case 'unanswered': {
-          // Get all answered IDs for this user (paginated)
-          let answerCursor: string | null = null;
-          const answeredIds = new Set<Id<'questions'>>();
-          let answerBatch = 0;
+          case 'unanswered': {
+            // Get all answered IDs for this user (paginated)
+            let answerCursor: string | null = null;
+            const answeredIds = new Set<Id<'questions'>>();
+            let answerBatch = 0;
 
-          do {
-            const batch: {
-              questionIds: Id<'questions'>[];
-              nextCursor: string | null;
-              isDone: boolean;
-            } = await step.runMutation(
-              internal.customQuizWorkflow.getAnsweredQuestionIdsBatch,
-              { userId: jobData.userId, cursor: answerCursor, batchSize: 1000 },
-              { name: `getAnswered_${answerBatch}` },
+            do {
+              const batch: {
+                questionIds: Id<'questions'>[];
+                nextCursor: string | null;
+                isDone: boolean;
+              } = await step.runMutation(
+                internal.customQuizWorkflow.getAnsweredQuestionIdsBatch,
+                {
+                  userId: jobData.userId,
+                  cursor: answerCursor,
+                  batchSize: 1000,
+                },
+                { name: `getAnswered_${answerBatch}` },
+              );
+
+              batch.questionIds.forEach(id => answeredIds.add(id));
+              answerCursor = batch.nextCursor;
+              answerBatch++;
+            } while (answerCursor);
+
+            // Filter out answered questions
+            questionIds = uniqueHierarchyIds.filter(id => !answeredIds.has(id));
+
+            break;
+          }
+          case 'incorrect': {
+            // Get all incorrect IDs for this user (paginated)
+            let incorrectCursor: string | null = null;
+            const incorrectIds = new Set<Id<'questions'>>();
+            let incorrectBatch = 0;
+
+            do {
+              const batch: {
+                questionIds: Id<'questions'>[];
+                nextCursor: string | null;
+                isDone: boolean;
+              } = await step.runMutation(
+                internal.customQuizWorkflow.getIncorrectQuestionIdsBatch,
+                {
+                  userId: jobData.userId,
+                  cursor: incorrectCursor,
+                  batchSize: 1000,
+                },
+                { name: `getIncorrect_${incorrectBatch}` },
+              );
+
+              batch.questionIds.forEach(id => incorrectIds.add(id));
+              incorrectCursor = batch.nextCursor;
+              incorrectBatch++;
+            } while (incorrectCursor);
+
+            // Keep only incorrect questions from hierarchy
+            questionIds = uniqueHierarchyIds.filter(id => incorrectIds.has(id));
+
+            break;
+          }
+          case 'bookmarked': {
+            // Get all bookmarked IDs for this user (paginated)
+            let bookmarkCursor: string | null = null;
+            const bookmarkedIds = new Set<Id<'questions'>>();
+            let bookmarkBatch = 0;
+
+            do {
+              const batch: {
+                questionIds: Id<'questions'>[];
+                nextCursor: string | null;
+                isDone: boolean;
+              } = await step.runMutation(
+                internal.customQuizWorkflow.getBookmarkedQuestionIdsBatch,
+                {
+                  userId: jobData.userId,
+                  cursor: bookmarkCursor,
+                  batchSize: 1000,
+                },
+                { name: `getBookmarked_${bookmarkBatch}` },
+              );
+
+              batch.questionIds.forEach(id => bookmarkedIds.add(id));
+              bookmarkCursor = batch.nextCursor;
+              bookmarkBatch++;
+            } while (bookmarkCursor);
+
+            // Keep only bookmarked questions from hierarchy
+            questionIds = uniqueHierarchyIds.filter(id =>
+              bookmarkedIds.has(id),
             );
 
-            batch.questionIds.forEach(id => answeredIds.add(id));
-            answerCursor = batch.nextCursor;
-            answerBatch++;
-          } while (answerCursor);
-
-          // Filter out answered questions
-          questionIds = uniqueHierarchyIds.filter(id => !answeredIds.has(id));
-        
-        break;
-        }
-        case 'incorrect': {
-          // Get all incorrect IDs for this user (paginated)
-          let incorrectCursor: string | null = null;
-          const incorrectIds = new Set<Id<'questions'>>();
-          let incorrectBatch = 0;
-
-          do {
-            const batch: {
-              questionIds: Id<'questions'>[];
-              nextCursor: string | null;
-              isDone: boolean;
-            } = await step.runMutation(
-              internal.customQuizWorkflow.getIncorrectQuestionIdsBatch,
-              {
-                userId: jobData.userId,
-                cursor: incorrectCursor,
-                batchSize: 1000,
-              },
-              { name: `getIncorrect_${incorrectBatch}` },
-            );
-
-            batch.questionIds.forEach(id => incorrectIds.add(id));
-            incorrectCursor = batch.nextCursor;
-            incorrectBatch++;
-          } while (incorrectCursor);
-
-          // Keep only incorrect questions from hierarchy
-          questionIds = uniqueHierarchyIds.filter(id => incorrectIds.has(id));
-        
-        break;
-        }
-        case 'bookmarked': {
-          // Get all bookmarked IDs for this user (paginated)
-          let bookmarkCursor: string | null = null;
-          const bookmarkedIds = new Set<Id<'questions'>>();
-          let bookmarkBatch = 0;
-
-          do {
-            const batch: {
-              questionIds: Id<'questions'>[];
-              nextCursor: string | null;
-              isDone: boolean;
-            } = await step.runMutation(
-              internal.customQuizWorkflow.getBookmarkedQuestionIdsBatch,
-              {
-                userId: jobData.userId,
-                cursor: bookmarkCursor,
-                batchSize: 1000,
-              },
-              { name: `getBookmarked_${bookmarkBatch}` },
-            );
-
-            batch.questionIds.forEach(id => bookmarkedIds.add(id));
-            bookmarkCursor = batch.nextCursor;
-            bookmarkBatch++;
-          } while (bookmarkCursor);
-
-          // Keep only bookmarked questions from hierarchy
-          questionIds = uniqueHierarchyIds.filter(id => bookmarkedIds.has(id));
-        
-        break;
-        }
-        // No default
+            break;
+          }
+          // No default
         }
       }
       // =====================================================================
