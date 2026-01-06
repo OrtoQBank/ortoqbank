@@ -241,15 +241,261 @@ export async function _internalUpdateQuestion(
   const newQuestionDoc = (await ctx.db.get(id))!;
 
   // Check if any taxonomy fields changed
-  const taxonomyChanged =
-    (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) ||
-    (updates.subthemeId !== undefined &&
-      updates.subthemeId !== oldQuestionDoc.subthemeId) ||
-    (updates.groupId !== undefined &&
-      updates.groupId !== oldQuestionDoc.groupId);
+  const themeChanged =
+    updates.themeId !== undefined &&
+    updates.themeId !== oldQuestionDoc.themeId;
+  const subthemeChanged =
+    updates.subthemeId !== undefined &&
+    updates.subthemeId !== oldQuestionDoc.subthemeId;
+  const groupChanged =
+    updates.groupId !== undefined && updates.groupId !== oldQuestionDoc.groupId;
+
+  const taxonomyChanged = themeChanged || subthemeChanged || groupChanged;
 
   if (taxonomyChanged) {
     console.log(`Question ${id} taxonomy changed, updating aggregates...`);
+
+    // ============================================================================
+    // UPDATE DENORMALIZED TAXONOMY FIELDS IN RELATED TABLES
+    // ============================================================================
+
+    // Query all userQuestionStats for this question (no direct by_question index, so we use by_user_question)
+    // We need to iterate through all stats - this is acceptable since taxonomy changes are rare admin operations
+    const allUserQuestionStats = await ctx.db.query('userQuestionStats').collect();
+    const questionStats = allUserQuestionStats.filter(
+      stat => stat.questionId === id,
+    );
+
+    if (questionStats.length > 0) {
+      console.log(
+        `Updating ${questionStats.length} userQuestionStats records for question ${id}`,
+      );
+      for (const stat of questionStats) {
+        await ctx.db.patch(stat._id, {
+          themeId: newQuestionDoc.themeId,
+          subthemeId: newQuestionDoc.subthemeId,
+          groupId: newQuestionDoc.groupId,
+        });
+      }
+    }
+
+    // Update userBookmarks records for this question
+    const questionBookmarks = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_question', q => q.eq('questionId', id))
+      .collect();
+
+    if (questionBookmarks.length > 0) {
+      console.log(
+        `Updating ${questionBookmarks.length} userBookmarks records for question ${id}`,
+      );
+      for (const bookmark of questionBookmarks) {
+        await ctx.db.patch(bookmark._id, {
+          themeId: newQuestionDoc.themeId,
+          subthemeId: newQuestionDoc.subthemeId,
+          groupId: newQuestionDoc.groupId,
+        });
+      }
+    }
+
+    // ============================================================================
+    // UPDATE USER STATS COUNTS (Pre-computed aggregates)
+    // ============================================================================
+    // When a question moves between themes/subthemes/groups, we need to update
+    // the pre-computed counts in userStatsCounts for all affected users
+
+    // Collect all affected user IDs (from both stats and bookmarks)
+    const affectedUserIds = new Set<Id<'users'>>();
+    for (const stat of questionStats) {
+      affectedUserIds.add(stat.userId);
+    }
+    for (const bookmark of questionBookmarks) {
+      affectedUserIds.add(bookmark.userId);
+    }
+
+    if (affectedUserIds.size > 0) {
+      console.log(
+        `Updating userStatsCounts for ${affectedUserIds.size} affected users`,
+      );
+
+      for (const userId of affectedUserIds) {
+        const userCounts = await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_user', q => q.eq('userId', userId))
+          .first();
+
+        if (!userCounts) {
+          // No counts record for this user, nothing to update
+          continue;
+        }
+
+        const updates: Record<string, any> = {
+          lastUpdated: Date.now(),
+        };
+
+        // Find this user's stat for this question
+        const userStat = questionStats.find(s => s.userId === userId);
+        const userBookmark = questionBookmarks.find(b => b.userId === userId);
+
+        // Update theme counts if theme changed
+        if (themeChanged && oldQuestionDoc.themeId !== newQuestionDoc.themeId) {
+          const oldThemeId = oldQuestionDoc.themeId;
+          const newThemeId = newQuestionDoc.themeId;
+
+          // Move answered counts
+          if (userStat?.hasAnswered) {
+            const oldAnsweredByTheme = { ...userCounts.answeredByTheme };
+            oldAnsweredByTheme[oldThemeId] = Math.max(
+              0,
+              (oldAnsweredByTheme[oldThemeId] || 0) - 1,
+            );
+            oldAnsweredByTheme[newThemeId] =
+              (oldAnsweredByTheme[newThemeId] || 0) + 1;
+            updates.answeredByTheme = oldAnsweredByTheme;
+          }
+
+          // Move incorrect counts
+          if (userStat?.isIncorrect) {
+            const oldIncorrectByTheme = { ...userCounts.incorrectByTheme };
+            oldIncorrectByTheme[oldThemeId] = Math.max(
+              0,
+              (oldIncorrectByTheme[oldThemeId] || 0) - 1,
+            );
+            oldIncorrectByTheme[newThemeId] =
+              (oldIncorrectByTheme[newThemeId] || 0) + 1;
+            updates.incorrectByTheme = oldIncorrectByTheme;
+          }
+
+          // Move bookmark counts
+          if (userBookmark) {
+            const oldBookmarkedByTheme = { ...userCounts.bookmarkedByTheme };
+            oldBookmarkedByTheme[oldThemeId] = Math.max(
+              0,
+              (oldBookmarkedByTheme[oldThemeId] || 0) - 1,
+            );
+            oldBookmarkedByTheme[newThemeId] =
+              (oldBookmarkedByTheme[newThemeId] || 0) + 1;
+            updates.bookmarkedByTheme = oldBookmarkedByTheme;
+          }
+        }
+
+        // Update subtheme counts if subtheme changed
+        if (subthemeChanged) {
+          const oldSubthemeId = oldQuestionDoc.subthemeId;
+          const newSubthemeId = newQuestionDoc.subthemeId;
+
+          // Move answered counts
+          if (userStat?.hasAnswered) {
+            const oldAnsweredBySubtheme = { ...userCounts.answeredBySubtheme };
+            if (oldSubthemeId) {
+              oldAnsweredBySubtheme[oldSubthemeId] = Math.max(
+                0,
+                (oldAnsweredBySubtheme[oldSubthemeId] || 0) - 1,
+              );
+            }
+            if (newSubthemeId) {
+              oldAnsweredBySubtheme[newSubthemeId] =
+                (oldAnsweredBySubtheme[newSubthemeId] || 0) + 1;
+            }
+            updates.answeredBySubtheme = oldAnsweredBySubtheme;
+          }
+
+          // Move incorrect counts
+          if (userStat?.isIncorrect) {
+            const oldIncorrectBySubtheme = { ...userCounts.incorrectBySubtheme };
+            if (oldSubthemeId) {
+              oldIncorrectBySubtheme[oldSubthemeId] = Math.max(
+                0,
+                (oldIncorrectBySubtheme[oldSubthemeId] || 0) - 1,
+              );
+            }
+            if (newSubthemeId) {
+              oldIncorrectBySubtheme[newSubthemeId] =
+                (oldIncorrectBySubtheme[newSubthemeId] || 0) + 1;
+            }
+            updates.incorrectBySubtheme = oldIncorrectBySubtheme;
+          }
+
+          // Move bookmark counts
+          if (userBookmark) {
+            const oldBookmarkedBySubtheme = {
+              ...userCounts.bookmarkedBySubtheme,
+            };
+            if (oldSubthemeId) {
+              oldBookmarkedBySubtheme[oldSubthemeId] = Math.max(
+                0,
+                (oldBookmarkedBySubtheme[oldSubthemeId] || 0) - 1,
+              );
+            }
+            if (newSubthemeId) {
+              oldBookmarkedBySubtheme[newSubthemeId] =
+                (oldBookmarkedBySubtheme[newSubthemeId] || 0) + 1;
+            }
+            updates.bookmarkedBySubtheme = oldBookmarkedBySubtheme;
+          }
+        }
+
+        // Update group counts if group changed
+        if (groupChanged) {
+          const oldGroupId = oldQuestionDoc.groupId;
+          const newGroupId = newQuestionDoc.groupId;
+
+          // Move answered counts
+          if (userStat?.hasAnswered) {
+            const oldAnsweredByGroup = { ...userCounts.answeredByGroup };
+            if (oldGroupId) {
+              oldAnsweredByGroup[oldGroupId] = Math.max(
+                0,
+                (oldAnsweredByGroup[oldGroupId] || 0) - 1,
+              );
+            }
+            if (newGroupId) {
+              oldAnsweredByGroup[newGroupId] =
+                (oldAnsweredByGroup[newGroupId] || 0) + 1;
+            }
+            updates.answeredByGroup = oldAnsweredByGroup;
+          }
+
+          // Move incorrect counts
+          if (userStat?.isIncorrect) {
+            const oldIncorrectByGroup = { ...userCounts.incorrectByGroup };
+            if (oldGroupId) {
+              oldIncorrectByGroup[oldGroupId] = Math.max(
+                0,
+                (oldIncorrectByGroup[oldGroupId] || 0) - 1,
+              );
+            }
+            if (newGroupId) {
+              oldIncorrectByGroup[newGroupId] =
+                (oldIncorrectByGroup[newGroupId] || 0) + 1;
+            }
+            updates.incorrectByGroup = oldIncorrectByGroup;
+          }
+
+          // Move bookmark counts
+          if (userBookmark) {
+            const oldBookmarkedByGroup = { ...userCounts.bookmarkedByGroup };
+            if (oldGroupId) {
+              oldBookmarkedByGroup[oldGroupId] = Math.max(
+                0,
+                (oldBookmarkedByGroup[oldGroupId] || 0) - 1,
+              );
+            }
+            if (newGroupId) {
+              oldBookmarkedByGroup[newGroupId] =
+                (oldBookmarkedByGroup[newGroupId] || 0) + 1;
+            }
+            updates.bookmarkedByGroup = oldBookmarkedByGroup;
+          }
+        }
+
+        // Apply updates if any changes were made
+        if (Object.keys(updates).length > 1) {
+          // More than just lastUpdated
+          await ctx.db.patch(userCounts._id, updates);
+        }
+      }
+    }
 
     // Update theme aggregate if themeId changed
     if (updates.themeId && updates.themeId !== oldQuestionDoc.themeId) {

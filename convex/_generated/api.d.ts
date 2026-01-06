@@ -18,7 +18,6 @@ import type * as clerkActions from "../clerkActions.js";
 import type * as crons from "../crons.js";
 import type * as customQuizWorkflow from "../customQuizWorkflow.js";
 import type * as customQuizzes from "../customQuizzes.js";
-import type * as customQuizzesCreation from "../customQuizzesCreation.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as init from "../init.js";
@@ -62,7 +61,6 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   customQuizWorkflow: typeof customQuizWorkflow;
   customQuizzes: typeof customQuizzes;
-  customQuizzesCreation: typeof customQuizzesCreation;
   groups: typeof groups;
   http: typeof http;
   init: typeof init;

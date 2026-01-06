@@ -1,5 +1,5 @@
 import { FormContextProvider } from './_components/context/FormContext';
-import TestForm from './_components/form/form';
+import TestForm from './_components/TestForm';
 
 export default function CriarTestePage() {
   return (
