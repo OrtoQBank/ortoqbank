@@ -1,7 +1,7 @@
 'use client';
 
 import { useQuery } from 'convex-helpers/react/cache/hooks';
-import { redirect, useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import Quiz from '@/components/quiz/Quiz';
@@ -13,6 +13,7 @@ export default function QuizPageV2() {
   const { id } = useParams() as {
     id: Id<'customQuizzes'>;
   };
+  const router = useRouter();
 
   // Fetch the quiz session using the new getActiveSession function
   const quizSession = useQuery(api.quizSessions.getActiveSession, {
@@ -23,9 +24,9 @@ export default function QuizPageV2() {
   useEffect(() => {
     if (quizSession?.isComplete) {
       // Redirect to results page
-      redirect(`/quiz-results/${id}`);
+      router.push(`/quiz-results/${id}`);
     }
-  }, [quizSession, id]);
+  }, [quizSession, id, router]);
 
   // Show loading state while fetching quiz data
   if (!quizSession) {
