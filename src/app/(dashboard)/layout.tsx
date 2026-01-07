@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { MobileBottomNav } from '@/components/nav/mobile-bottom-nav';
 import OnboardingOverlay from '@/components/onboarding/OnboardingOverlay';
 import { SessionProvider } from '@/components/providers/SessionProvider';
+import { useTenantAccess } from '@/components/providers/TenantProvider';
 import { TermsProvider } from '@/components/providers/TermsProvider';
 import { AppSidebar } from '@/components/sidebar/app-sidebar';
 import { SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar';
@@ -16,6 +17,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const [hasRedirected, setHasRedirected] = useState(false);
   const { isLoading, isAuthenticated, user } = useCurrentUser();
+  const access = useTenantAccess();
 
   // Track if we've already initiated redirect to prevent multiple calls
   const redirectInitiatedRef = useRef(false);
@@ -51,8 +53,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     }
   }, [isLoading, isAuthenticated, router]);
 
-  // Show loading while user is being stored
-  if (isLoading) {
+  // Redirect to homepage if user doesn't have access to this app
+  useEffect(() => {
+    // Only check once access data is loaded and user is authenticated
+    if (
+      isAuthenticated &&
+      !access.isLoading &&
+      !access.hasAccess &&
+      !redirectInitiatedRef.current
+    ) {
+      redirectInitiatedRef.current = true;
+      setTimeout(() => setHasRedirected(true), 0);
+      router.replace('/?access=denied&reason=no_app_access');
+    }
+  }, [isAuthenticated, access.isLoading, access.hasAccess, router]);
+
+  // Show loading while user or access data is being loaded
+  if (isLoading || (isAuthenticated && access.isLoading)) {
     return (
       <div className="from-brand-blue/10 flex min-h-screen items-center justify-center bg-gradient-to-br to-indigo-100">
         <div className="text-center">
@@ -63,8 +80,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     );
   }
 
-  // Show loading placeholder while redirecting to sign-in
-  if (!isAuthenticated || hasRedirected) {
+  // Show loading placeholder while redirecting to sign-in or access denied
+  if (!isAuthenticated || hasRedirected || !access.hasAccess) {
     return null;
   }
 
