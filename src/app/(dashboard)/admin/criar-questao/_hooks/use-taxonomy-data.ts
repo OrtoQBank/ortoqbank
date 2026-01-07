@@ -1,5 +1,6 @@
-import { useQuery } from 'convex/react';
 import { useMemo, useState } from 'react';
+
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
@@ -20,19 +21,19 @@ export function useTaxonomyData(
     defaultGroupId,
   );
 
-  // Query data
-  const themes = useQuery(api.themes.list);
-  const subthemes = useQuery(
+  // Query data - tenant-aware
+  const themes = useTenantQuery(api.themes.list, {});
+  const subthemes = useTenantQuery(
     api.subthemes.list,
     selectedTheme ? { themeId: selectedTheme } : 'skip',
   );
-  const groups = useQuery(
+  const groups = useTenantQuery(
     api.groups.list,
     selectedSubtheme ? { subthemeId: selectedSubtheme } : 'skip',
   );
 
-  // Query for question count
-  const themeQuestionCount = useQuery(
+  // Query for question count - tenant-aware
+  const themeQuestionCount = useTenantQuery(
     api.questions.getQuestionCountForTheme,
     selectedTheme ? { themeId: selectedTheme } : 'skip',
   );

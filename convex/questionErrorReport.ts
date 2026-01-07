@@ -59,6 +59,7 @@ export const generateUploadUrl = mutation({
  */
 export const getReportsForAdmin = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     status: v.optional(
       v.union(
         v.literal('pending'),
@@ -95,13 +96,34 @@ export const getReportsForAdmin = query({
   handler: async (ctx, args) => {
     const limit = args.limit ?? 50;
 
-    const reports = args.status
-      ? await ctx.db
+    let reports;
+    if (args.tenantId) {
+      // Filter by tenant and optionally by status
+      if (args.status) {
+        reports = await ctx.db
           .query('questionErrorReports')
-          .withIndex('by_status', q => q.eq('status', args.status!))
+          .withIndex('by_tenant_and_status', q =>
+            q.eq('tenantId', args.tenantId).eq('status', args.status!),
+          )
           .order('desc')
-          .take(limit)
-      : await ctx.db.query('questionErrorReports').order('desc').take(limit);
+          .take(limit);
+      } else {
+        reports = await ctx.db
+          .query('questionErrorReports')
+          .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+          .order('desc')
+          .take(limit);
+      }
+    } else {
+      // No tenant filter - return all (for backward compatibility)
+      reports = args.status
+        ? await ctx.db
+            .query('questionErrorReports')
+            .withIndex('by_status', q => q.eq('status', args.status!))
+            .order('desc')
+            .take(limit)
+        : await ctx.db.query('questionErrorReports').order('desc').take(limit);
+    }
 
     // Enrich with user and question data
     const enrichedReports = await Promise.all(
@@ -185,7 +207,9 @@ export const updateReportStatus = mutation({
  * Get report count by status (for admin dashboard)
  */
 export const getReportCounts = query({
-  args: {},
+  args: {
+    tenantId: v.optional(v.id('apps')),
+  },
   returns: v.object({
     pending: v.number(),
     reviewed: v.number(),
@@ -193,8 +217,16 @@ export const getReportCounts = query({
     dismissed: v.number(),
     total: v.number(),
   }),
-  handler: async ctx => {
-    const allReports = await ctx.db.query('questionErrorReports').collect();
+  handler: async (ctx, args) => {
+    let allReports;
+    if (args.tenantId) {
+      allReports = await ctx.db
+        .query('questionErrorReports')
+        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+        .collect();
+    } else {
+      allReports = await ctx.db.query('questionErrorReports').collect();
+    }
 
     const counts = {
       pending: 0,
