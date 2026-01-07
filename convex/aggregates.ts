@@ -4,19 +4,19 @@ import { components } from './_generated/api';
 import { DataModel, Id } from './_generated/dataModel';
 
 // =============================================================================
-// SECTION 1: GLOBAL QUESTION COUNT AGGREGATES
+// SECTION 1: QUESTION COUNT AGGREGATES (NAMESPACED BY TENANT)
 // Used for question mode 'all' (non-user-specific)
-// These count total available questions by category
+// These count total available questions by category, scoped per tenant
 // =============================================================================
 
-// Track total question count globally
+// Track total question count per tenant
 export const totalQuestionCount = new TableAggregate<{
-  Namespace: string;
+  Namespace: Id<'apps'>;
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.questionCountTotal, {
-  namespace: () => 'global',
+  namespace: (d: unknown) => (d as { tenantId: Id<'apps'> }).tenantId,
   sortKey: () => 'question',
 });
 
@@ -64,19 +64,19 @@ export const questionCountByGroup = new TableAggregate<{
 });
 
 // =============================================================================
-// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES
+// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES (NAMESPACED BY TENANT)
 // Used for question mode 'all' (non-user-specific)
-// These return actual question documents for quiz generation
+// These return actual question documents for quiz generation, scoped per tenant
 // =============================================================================
 
 // Random question selection aggregates for efficient randomization
 export const randomQuestions = new TableAggregate<{
-  Namespace: string;
+  Namespace: Id<'apps'>;
   Key: null;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.randomQuestions, {
-  namespace: () => 'global',
+  namespace: (d: unknown) => (d as { tenantId: Id<'apps'> }).tenantId,
   sortKey: () => null, // No sorting = random order by _id
 });
 
