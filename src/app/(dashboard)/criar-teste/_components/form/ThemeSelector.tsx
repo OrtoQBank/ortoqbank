@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useQuery } from 'convex/react';
 import { InfoIcon as InfoCircle } from 'lucide-react';
 import { memo } from 'react';
 import { type Control, useWatch } from 'react-hook-form';

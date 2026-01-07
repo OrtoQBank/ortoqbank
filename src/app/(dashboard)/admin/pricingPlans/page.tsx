@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { Check, Edit2, Plus, Save, Trash2, X } from 'lucide-react';
 import { useState } from 'react';
 
@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Doc, Id } from '../../../../../convex/_generated/dataModel';
@@ -43,7 +44,7 @@ type FormData = {
 };
 
 export default function PricingPlansAdminPage() {
-  const plans = useQuery(api.pricingPlans.getPricingPlans) || [];
+  const plans = useTenantQuery(api.pricingPlans.getPricingPlans, {}) || [];
   const savePlan = useMutation(api.pricingPlans.savePricingPlan);
   const removePlan = useMutation(api.pricingPlans.removePricingPlan);
 

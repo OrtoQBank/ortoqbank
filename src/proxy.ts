@@ -3,6 +3,13 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
+import {
+  extractSubdomain,
+  getTenantCookieOptions,
+  isValidTenantSlug,
+  TENANT_COOKIE_NAME,
+} from '@/lib/tenant';
+
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/criar-teste(.*)',
@@ -20,13 +27,48 @@ const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 const isWebhookRoute = createRouteMatcher(['/api/webhooks/clerk(.*)']);
 
 export default clerkMiddleware(async (auth, request) => {
-  // Skip authentication for webhook routes
-  if (isWebhookRoute(request)) return NextResponse.next();
+  // ==========================================================================
+  // TENANT DETECTION
+  // Extract subdomain from hostname and set tenant cookie
+  // ==========================================================================
+  const hostname = request.headers.get('host') || 'localhost:3000';
+  const subdomain = extractSubdomain(hostname);
 
+  // Determine the tenant slug
+  const tenantSlug =
+    subdomain && isValidTenantSlug(subdomain) ? subdomain : 'ortoqbank';
+
+  // Get existing tenant cookie
+  const existingTenantCookie = request.cookies.get(TENANT_COOKIE_NAME);
+
+  // ==========================================================================
+  // WEBHOOK ROUTES - Skip authentication
+  // ==========================================================================
+  if (isWebhookRoute(request)) {
+    const response = NextResponse.next();
+
+    // Set tenant cookie if changed or not present
+    if (existingTenantCookie?.value !== tenantSlug) {
+      const cookieOptions = getTenantCookieOptions();
+      response.cookies.set(TENANT_COOKIE_NAME, tenantSlug, {
+        maxAge: cookieOptions.maxAge,
+        path: cookieOptions.path,
+        sameSite: cookieOptions.sameSite,
+        secure: cookieOptions.secure,
+      });
+    }
+
+    return response;
+  }
+
+  // ==========================================================================
+  // PROTECTED ROUTES - Require authentication
+  // ==========================================================================
   if (isProtectedRoute(request)) await auth.protect();
 
-  // For admin routes, provide redundant protection by checking Clerk metadata
-  // Primary role checking still happens at the backend level for security
+  // ==========================================================================
+  // ADMIN ROUTES - Additional role verification
+  // ==========================================================================
   if (isAdminRoute(request)) {
     await auth.protect();
 
@@ -44,6 +86,31 @@ export default clerkMiddleware(async (auth, request) => {
       );
     }
   }
+
+  // ==========================================================================
+  // SET TENANT COOKIE ON RESPONSE
+  // ==========================================================================
+  const response = NextResponse.next();
+
+  // Set tenant cookie if changed or not present
+  if (existingTenantCookie?.value !== tenantSlug) {
+    const cookieOptions = getTenantCookieOptions();
+    response.cookies.set(TENANT_COOKIE_NAME, tenantSlug, {
+      maxAge: cookieOptions.maxAge,
+      path: cookieOptions.path,
+      sameSite: cookieOptions.sameSite,
+      secure: cookieOptions.secure,
+    });
+
+    // Log tenant detection for debugging
+    if (process.env.NODE_ENV === 'development') {
+      console.log(
+        `[Tenant] Detected tenant: ${tenantSlug} (subdomain: ${subdomain || 'none'})`,
+      );
+    }
+  }
+
+  return response;
 });
 
 export const config = {

@@ -6,14 +6,38 @@ import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
-  args: { themeId: v.optional(v.id('themes')) },
-  handler: async (context, { themeId }) => {
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    themeId: v.optional(v.id('themes')),
+  },
+  handler: async (context, { tenantId, themeId }) => {
+    // If both tenantId and themeId are provided, use the compound index
+    if (tenantId && themeId) {
+      return await context.db
+        .query('subthemes')
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', tenantId).eq('themeId', themeId),
+        )
+        .collect();
+    }
+
+    // If only tenantId is provided
+    if (tenantId) {
+      return await context.db
+        .query('subthemes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
+
+    // If only themeId is provided (backward compatibility)
     if (themeId) {
       return await context.db
         .query('subthemes')
         .withIndex('by_theme', q => q.eq('themeId', themeId))
         .collect();
     }
+
+    // No filters - return all (backward compatibility)
     return await context.db.query('subthemes').collect();
   },
 });
@@ -26,7 +50,14 @@ export const getById = query({
 });
 
 export const listByThemes = query({
-  handler: async context => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    if (tenantId) {
+      return await context.db
+        .query('subthemes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
     return await context.db.query('subthemes').collect();
   },
 });
@@ -34,11 +65,12 @@ export const listByThemes = query({
 // Mutations
 export const create = mutation({
   args: {
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     themeId: v.id('themes'),
     prefix: v.optional(v.string()),
   },
-  handler: async (context, { name, themeId, prefix }) => {
+  handler: async (context, { tenantId, name, themeId, prefix }) => {
     // Verify admin access
     await requireAdmin(context);
     // Check if theme exists
@@ -54,6 +86,7 @@ export const create = mutation({
     actualPrefix = normalizeText(actualPrefix).toUpperCase();
 
     return await context.db.insert('subthemes', {
+      tenantId,
       name,
       themeId,
       prefix: actualPrefix,
@@ -84,7 +117,7 @@ export const update = mutation({
     }
 
     // Normalize the prefix if one is provided
-    const updates: any = { name, themeId };
+    const updates: Record<string, unknown> = { name, themeId };
     if (prefix !== undefined) {
       updates.prefix = normalizeText(prefix).toUpperCase();
     }

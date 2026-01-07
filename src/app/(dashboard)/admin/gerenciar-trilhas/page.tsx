@@ -52,6 +52,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
@@ -113,8 +114,8 @@ export default function ManagePresetExams() {
     new Set(),
   );
 
-  // Fetch data - only fetch themes for the creation form
-  const themes = useQuery(api.themes.list) || [];
+  // Fetch data - only fetch themes for the creation form (tenant-aware)
+  const themes = useTenantQuery(api.themes.list, {}) || [];
 
   // Use searchByName instead of list for quizzes - only when search is provided
   const presetQuizzes =

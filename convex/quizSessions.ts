@@ -295,16 +295,27 @@ export const completeQuizSession = mutation({
 
 // Add this new query function to list incomplete sessions for current user
 export const listIncompleteSessions = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Query for all incomplete sessions for this user
-    const sessions = await ctx.db
-      .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-      .filter(q => q.eq(q.field('isComplete'), false))
-      .collect();
+    let sessions;
+    if (tenantId) {
+      sessions = await ctx.db
+        .query('quizSessions')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .filter(q => q.eq(q.field('isComplete'), false))
+        .collect();
+    } else {
+      sessions = await ctx.db
+        .query('quizSessions')
+        .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+        .filter(q => q.eq(q.field('isComplete'), false))
+        .collect();
+    }
 
     return sessions;
   },
@@ -332,17 +343,29 @@ export const getCompletedSessions = query({
 
 // Get all completed sessions for the current user
 export const getAllCompletedSessions = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Get all completed sessions for this user, ordered by newest first
-    const sessions = await ctx.db
-      .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-      .filter(q => q.eq(q.field('isComplete'), true))
-      .order('desc')
-      .collect();
+    let sessions;
+    if (tenantId) {
+      sessions = await ctx.db
+        .query('quizSessions')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .filter(q => q.eq(q.field('isComplete'), true))
+        .order('desc')
+        .collect();
+    } else {
+      sessions = await ctx.db
+        .query('quizSessions')
+        .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+        .filter(q => q.eq(q.field('isComplete'), true))
+        .order('desc')
+        .collect();
+    }
 
     return sessions;
   },
@@ -351,19 +374,29 @@ export const getAllCompletedSessions = query({
 // Lightweight query for getting completed quiz IDs only (optimized for performance)
 // Uses denormalized completedQuizSummaries table to avoid reading heavy session data
 export const getCompletedQuizIds = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
-    const summaries = await ctx.db
-      .query('completedQuizSummaries')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
+    let summaries;
+    if (tenantId) {
+      summaries = await ctx.db
+        .query('completedQuizSummaries')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .collect();
+    } else {
+      summaries = await ctx.db
+        .query('completedQuizSummaries')
+        .withIndex('by_user', q => q.eq('userId', userId._id))
+        .collect();
+    }
 
     return summaries.map(s => ({ quizId: s.quizId }));
   },

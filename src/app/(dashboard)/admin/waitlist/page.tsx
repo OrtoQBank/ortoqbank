@@ -1,6 +1,5 @@
 'use client';
 
-import { useQuery } from 'convex/react';
 import { Download, Search } from 'lucide-react';
 import { useState } from 'react';
 import * as XLSX from 'xlsx';
@@ -15,13 +14,14 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 
 export default function WaitlistPage() {
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const entries = useQuery(api.waitlist.list);
+  const entries = useTenantQuery(api.waitlist.list, {});
   const isLoading = entries === undefined;
 
   // Filter entries based on search query

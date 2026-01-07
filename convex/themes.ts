@@ -6,17 +6,32 @@ import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
-  args: {},
-  handler: async context => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    if (tenantId) {
+      return await context.db
+        .query('themes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
+    // Fallback for backward compatibility (no tenant filter)
     return await context.db.query('themes').collect();
   },
 });
 
 // Optimized query that returns themes sorted by displayOrder, then name
 export const listSorted = query({
-  args: {},
-  handler: async context => {
-    const themes = await context.db.query('themes').collect();
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    let themes;
+    if (tenantId) {
+      themes = await context.db
+        .query('themes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    } else {
+      themes = await context.db.query('themes').collect();
+    }
 
     // Sort themes: displayOrder first (undefined goes last), then alphabetically by name
     return themes.toSorted((a, b) => {
@@ -42,11 +57,30 @@ export const getById = query({
 });
 
 export const getHierarchicalData = query({
-  args: {},
-  handler: async context => {
-    const themes = await context.db.query('themes').collect();
-    const subthemes = await context.db.query('subthemes').collect();
-    const groups = await context.db.query('groups').collect();
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    let themes;
+    let subthemes;
+    let groups;
+
+    if (tenantId) {
+      themes = await context.db
+        .query('themes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+      subthemes = await context.db
+        .query('subthemes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+      groups = await context.db
+        .query('groups')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    } else {
+      themes = await context.db.query('themes').collect();
+      subthemes = await context.db.query('subthemes').collect();
+      groups = await context.db.query('groups').collect();
+    }
 
     return {
       themes,
@@ -59,17 +93,29 @@ export const getHierarchicalData = query({
 // Mutations
 export const create = mutation({
   args: {
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     prefix: v.optional(v.string()),
   },
-  handler: async (context, { name, prefix }) => {
+  handler: async (context, { tenantId, name, prefix }) => {
     // Verify admin access
     await requireAdmin(context);
-    // Check if theme with same name already exists
-    const existing = await context.db
-      .query('themes')
-      .withIndex('by_name', q => q.eq('name', name))
-      .unique();
+
+    // Check if theme with same name already exists (within tenant if provided)
+    let existing;
+    if (tenantId) {
+      existing = await context.db
+        .query('themes')
+        .withIndex('by_tenant_and_name', q =>
+          q.eq('tenantId', tenantId).eq('name', name),
+        )
+        .unique();
+    } else {
+      existing = await context.db
+        .query('themes')
+        .withIndex('by_name', q => q.eq('name', name))
+        .unique();
+    }
 
     if (existing) {
       throw new Error(`Theme "${name}" already exists`);
@@ -82,6 +128,7 @@ export const create = mutation({
     actualPrefix = normalizeText(actualPrefix).toUpperCase();
 
     return await context.db.insert('themes', {
+      tenantId,
       name,
       prefix: actualPrefix,
     });
@@ -114,7 +161,7 @@ export const update = mutation({
     }
 
     // Normalize the prefix if one is provided
-    const updates: any = { name };
+    const updates: Record<string, unknown> = { name };
     if (prefix !== undefined) {
       updates.prefix = normalizeText(prefix).toUpperCase();
     }

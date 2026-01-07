@@ -3,7 +3,7 @@ import { v } from 'convex/values';
 import { mutation, query } from './_generated/server';
 
 export const list = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       _id: v.id('coupons'),
@@ -27,7 +27,14 @@ export const list = query({
       minimumPrice: v.optional(v.number()),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    if (tenantId) {
+      return await ctx.db
+        .query('coupons')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .order('desc')
+        .collect();
+    }
     return await ctx.db.query('coupons').order('desc').collect();
   },
 });
@@ -70,6 +77,7 @@ export const getByCode = query({
 
 export const create = mutation({
   args: {
+    tenantId: v.optional(v.id('apps')),
     code: v.string(),
     type: v.union(
       v.literal('percentage'),
@@ -94,16 +102,25 @@ export const create = mutation({
       throw new Error('Coupon code already exists');
     }
 
-    // Get default tenant for multi-tenancy
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
+    // Use provided tenantId or fall back to default tenant
+    let tenantId = args.tenantId;
+    if (!tenantId) {
+      const defaultApp = await ctx.db
+        .query('apps')
+        .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
+        .first();
+      tenantId = defaultApp?._id;
+    }
 
     return await ctx.db.insert('coupons', {
-      ...args,
       code,
-      tenantId: defaultApp?._id,
+      type: args.type,
+      value: args.value,
+      description: args.description,
+      active: args.active,
+      validFrom: args.validFrom,
+      validUntil: args.validUntil,
+      tenantId,
     });
   },
 });

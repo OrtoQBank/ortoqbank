@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { useMemo, useState } from 'react';
 
 import { Button } from '@/components/ui/button';
@@ -15,6 +15,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 
@@ -26,7 +27,7 @@ const fromEpoch = (n: number | undefined) =>
 type CouponType = 'percentage' | 'fixed' | 'fixed_price';
 
 export default function CouponsAdminPage() {
-  const coupons = useQuery(api.promoCoupons.list) || [];
+  const coupons = useTenantQuery(api.promoCoupons.list, {}) || [];
   const createCoupon = useMutation(api.promoCoupons.create);
   const updateCoupon = useMutation(api.promoCoupons.update);
   const removeCoupon = useMutation(api.promoCoupons.remove);

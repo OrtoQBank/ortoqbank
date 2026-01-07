@@ -1,6 +1,5 @@
 'use client';
 
-import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { Plus } from 'lucide-react';
 import Link from 'next/link';
 import { useState } from 'react';
@@ -8,6 +7,7 @@ import { useState } from 'react';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 import { formatRelativeTime } from '@/lib/utils';
 
 import { api } from '../../../../../convex/_generated/api';
@@ -36,12 +36,15 @@ export function TestesPreviosClient() {
   // No more need for Clerk user check - it's handled by the server component
   const [activeTab, setActiveTab] = useState('all');
 
-  // Always fetch data
-  const customQuizzesResult = useQuery(api.customQuizzes.getCustomQuizzes, {});
-  const themesResult = useQuery(api.themes.list, {});
-  const subthemesResult = useQuery(api.subthemes.list, {});
-  const groupsResult = useQuery(api.groups.list, {});
-  const completedSessionsResult = useQuery(
+  // Always fetch data using tenant-aware queries
+  const customQuizzesResult = useTenantQuery(
+    api.customQuizzes.getCustomQuizzes,
+    {},
+  );
+  const themesResult = useTenantQuery(api.themes.list, {});
+  const subthemesResult = useTenantQuery(api.subthemes.list, {});
+  const groupsResult = useTenantQuery(api.groups.list, {});
+  const completedSessionsResult = useTenantQuery(
     api.quizSessions.getCompletedQuizIds,
     {},
   );
