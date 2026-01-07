@@ -6,79 +6,108 @@ import {
   DollarSign,
   FilePlusIcon,
   FolderCogIcon,
+  Home,
   SettingsIcon,
+  Shield,
   Users,
 } from 'lucide-react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
+import { useSession } from '@/components/providers/SessionProvider';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
 import { cn } from '@/lib/utils';
 
-const navItems = [
+type NavItem = {
+  href: string;
+  label: string;
+  icon: typeof Home;
+  exact?: boolean;
+  prefetch?: boolean;
+  useHoverPrefetch?: boolean;
+  superAdminOnly?: boolean;
+};
+
+// Items accessible by all admins (moderators + super admins)
+const commonNavItems: NavItem[] = [
   {
     href: '/admin',
-    label: 'Usuários',
-    icon: Users,
+    label: 'Hub',
+    icon: Home,
     exact: true,
-    prefetch: true, // Main admin dashboard - prefetch immediately
+    prefetch: true,
     useHoverPrefetch: false,
   },
   {
     href: '/admin/criar-questao',
     label: 'Criar Questão',
     icon: FilePlusIcon,
-    prefetch: false, // Use hover prefetch for content creation pages
+    prefetch: false,
     useHoverPrefetch: true,
   },
   {
     href: '/admin/gerenciar-questoes',
     label: 'Gerenciar Questões',
     icon: FolderCogIcon,
-    prefetch: true, // Management pages - prefetch immediately
+    prefetch: true,
     useHoverPrefetch: false,
   },
   {
     href: '/admin/gerenciar-temas',
     label: 'Gerenciar Temas',
     icon: FolderCogIcon,
-    prefetch: true, // Management pages - prefetch immediately
+    prefetch: true,
     useHoverPrefetch: false,
   },
   {
     href: '/admin/gerenciar-trilhas',
     label: 'Trilhas e Simulados',
     icon: SettingsIcon,
-    prefetch: true, // Management pages - prefetch immediately
+    prefetch: true,
     useHoverPrefetch: false,
-  },
-  {
-    href: '/admin/coupons',
-    label: 'Cupons',
-    icon: CogIcon,
-    prefetch: false, // Use hover prefetch for less frequently used features
-    useHoverPrefetch: true,
-  },
-  {
-    href: '/admin/pricingPlans',
-    label: 'Planos de Preços',
-    icon: DollarSign,
-    prefetch: false, // Use hover prefetch for less frequently used features
-    useHoverPrefetch: true,
-  },
-  {
-    href: '/admin/waitlist',
-    label: 'Lista de Espera',
-    icon: Users,
-    prefetch: false, // Use hover prefetch for less frequently used features
-    useHoverPrefetch: true,
   },
   {
     href: '/admin/reports',
     label: 'Relatórios',
     icon: AlertTriangle,
-    prefetch: false, // Use hover prefetch for less frequently used features
+    prefetch: false,
     useHoverPrefetch: true,
+  },
+];
+
+// Items only accessible by super admins
+const superAdminNavItems: NavItem[] = [
+  {
+    href: '/admin/superadmin',
+    label: 'Super Admin',
+    icon: Shield,
+    prefetch: false,
+    useHoverPrefetch: true,
+    superAdminOnly: true,
+  },
+  {
+    href: '/admin/coupons',
+    label: 'Cupons',
+    icon: CogIcon,
+    prefetch: false,
+    useHoverPrefetch: true,
+    superAdminOnly: true,
+  },
+  {
+    href: '/admin/pricingPlans',
+    label: 'Planos de Preços',
+    icon: DollarSign,
+    prefetch: false,
+    useHoverPrefetch: true,
+    superAdminOnly: true,
+  },
+  {
+    href: '/admin/waitlist',
+    label: 'Lista de Espera',
+    icon: Users,
+    prefetch: false,
+    useHoverPrefetch: true,
+    superAdminOnly: true,
   },
 ];
 
@@ -88,8 +117,14 @@ interface AdminNavProps {
 
 export function AdminNav({ className }: AdminNavProps) {
   const pathname = usePathname();
+  const { isAdmin } = useSession();
 
-  const isActive = (item: (typeof navItems)[0]) => {
+  // Combine nav items based on user role
+  const navItems = isAdmin
+    ? [...commonNavItems, ...superAdminNavItems]
+    : commonNavItems;
+
+  const isActive = (item: NavItem) => {
     if (item.exact) {
       return pathname === item.href;
     }
@@ -105,6 +140,7 @@ export function AdminNav({ className }: AdminNavProps) {
             isActive(item)
               ? 'bg-primary text-primary-foreground'
               : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground',
+            item.superAdminOnly && 'border-amber-200 dark:border-amber-800',
           );
 
           const linkContent = (
