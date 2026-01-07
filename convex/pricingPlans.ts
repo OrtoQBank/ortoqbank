@@ -4,9 +4,16 @@ import { internalMutation, mutation, query } from './_generated/server';
 import { requireAdmin } from './users';
 
 export const getPricingPlans = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(v.any()),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    if (tenantId) {
+      return await ctx.db
+        .query('pricingPlans')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .order('asc')
+        .collect();
+    }
     return await ctx.db.query('pricingPlans').order('asc').collect();
   },
 });
@@ -82,13 +89,19 @@ export const removePricingPlan = mutation({
  * Get active pricing plans (products available for purchase)
  */
 export const getActiveProducts = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(v.any()),
-  handler: async ctx => {
-    return await ctx.db
+  handler: async (ctx, { tenantId }) => {
+    const plans = await ctx.db
       .query('pricingPlans')
       .withIndex('by_active', q => q.eq('isActive', true))
       .collect();
+
+    // Filter by tenant if provided
+    if (tenantId) {
+      return plans.filter(p => p.tenantId === tenantId);
+    }
+    return plans;
   },
 });
 

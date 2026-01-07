@@ -346,7 +346,7 @@ async function updateUserStatsCounts(
  * This replaces getUserStatsFromTable for much better performance
  */
 export const getUserStatsFast = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({
     overall: v.object({
       totalAnswered: v.number(),
@@ -366,7 +366,7 @@ export const getUserStatsFast = query({
     ),
     totalQuestions: v.number(),
   }),
-  handler: async (ctx): Promise<UserStats> => {
+  handler: async (ctx, { tenantId }): Promise<UserStats> => {
     const user = await getCurrentUser(ctx);
     if (!user) {
       // Return empty stats for unauthenticated users
@@ -385,10 +385,21 @@ export const getUserStatsFast = query({
     const userId = user._id;
 
     // Get pre-computed counts (ultra-fast single lookup)
-    const userCounts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .first();
+    // Filter by tenant if provided
+    let userCounts;
+    if (tenantId) {
+      userCounts = await ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId),
+        )
+        .first();
+    } else {
+      userCounts = await ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_user', q => q.eq('userId', userId))
+        .first();
+    }
 
     // Get total questions count using existing aggregate
     const totalQuestions = await getTotalQuestionCount(ctx);
@@ -464,7 +475,7 @@ export const getUserStatsFast = query({
  * Single fetch with all counts for efficient filtering UI
  */
 export const getUserCountsForQuizCreation = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({
     global: v.object({
       totalAnswered: v.number(),
@@ -496,14 +507,25 @@ export const getUserCountsForQuizCreation = query({
       }),
     ),
   }),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Single lookup gets all counts
-    const userCounts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .first();
+    // Filter by tenant if provided
+    let userCounts;
+    if (tenantId) {
+      userCounts = await ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .first();
+    } else {
+      userCounts = await ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_user', q => q.eq('userId', userId._id))
+        .first();
+    }
 
     // Handle new users with no counts
     if (!userCounts) {

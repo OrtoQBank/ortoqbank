@@ -120,16 +120,26 @@ export const getBookmarkStatusForQuestions = query({
 
 // Get all bookmarked question IDs for a user
 export const getBookmarkedQuestionIds = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
     const { db } = ctx;
 
     // Get all bookmarks for this user
-    const bookmarks = await db
-      .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
+    let bookmarks;
+    if (tenantId) {
+      bookmarks = await db
+        .query('userBookmarks')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .collect();
+    } else {
+      bookmarks = await db
+        .query('userBookmarks')
+        .withIndex('by_user', q => q.eq('userId', userId._id))
+        .collect();
+    }
 
     // Return just the question IDs
     return bookmarks.map(bookmark => bookmark.questionId);
@@ -138,16 +148,26 @@ export const getBookmarkedQuestionIds = query({
 
 // Get all bookmarked questions with full data
 export const getBookmarkedQuestions = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
     const { db } = ctx;
 
     // Get all bookmarks for this user
-    const bookmarks = await db
-      .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
+    let bookmarks;
+    if (tenantId) {
+      bookmarks = await db
+        .query('userBookmarks')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .collect();
+    } else {
+      bookmarks = await db
+        .query('userBookmarks')
+        .withIndex('by_user', q => q.eq('userId', userId._id))
+        .collect();
+    }
 
     if (bookmarks.length === 0) {
       return [];

@@ -12,6 +12,7 @@ import type * as aggregateQueries from "../aggregateQueries.js";
 import type * as aggregateRepairs from "../aggregateRepairs.js";
 import type * as aggregateWorkflows from "../aggregateWorkflows.js";
 import type * as aggregates from "../aggregates.js";
+import type * as apps from "../apps.js";
 import type * as asaas from "../asaas.js";
 import type * as bookmark from "../bookmark.js";
 import type * as clerkActions from "../clerkActions.js";
@@ -57,6 +58,7 @@ declare const fullApi: ApiFromModules<{
   aggregateRepairs: typeof aggregateRepairs;
   aggregateWorkflows: typeof aggregateWorkflows;
   aggregates: typeof aggregates;
+  apps: typeof apps;
   asaas: typeof asaas;
   bookmark: typeof bookmark;
   clerkActions: typeof clerkActions;

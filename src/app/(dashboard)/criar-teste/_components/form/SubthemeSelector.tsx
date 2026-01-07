@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useQuery } from 'convex/react';
 import { ChevronDown, ChevronRight } from 'lucide-react';
 import { memo, useCallback, useMemo, useState } from 'react';
 import { type Control, useWatch } from 'react-hook-form';

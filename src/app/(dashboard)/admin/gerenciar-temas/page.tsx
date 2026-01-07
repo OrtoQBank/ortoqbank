@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { Check, ChevronRight, Edit, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
@@ -18,6 +18,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
@@ -91,7 +92,8 @@ export default function GerenciarTemas() {
 
   const { toast } = useToast();
 
-  const hierarchicalData = useQuery(api.themes.getHierarchicalData);
+  // Use tenant-aware query for hierarchical data
+  const hierarchicalData = useTenantQuery(api.themes.getHierarchicalData, {});
   const createTheme = useMutation(api.themes.create);
   const createSubtheme = useMutation(api.subthemes.create);
   const createGroup = useMutation(api.groups.create);

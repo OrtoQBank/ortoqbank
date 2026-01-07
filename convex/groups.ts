@@ -6,14 +6,38 @@ import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
-  args: { subthemeId: v.optional(v.id('subthemes')) },
-  handler: async (context, { subthemeId }) => {
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    subthemeId: v.optional(v.id('subthemes')),
+  },
+  handler: async (context, { tenantId, subthemeId }) => {
+    // If both tenantId and subthemeId are provided, use the compound index
+    if (tenantId && subthemeId) {
+      return await context.db
+        .query('groups')
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', tenantId).eq('subthemeId', subthemeId),
+        )
+        .collect();
+    }
+
+    // If only tenantId is provided
+    if (tenantId) {
+      return await context.db
+        .query('groups')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
+
+    // If only subthemeId is provided (backward compatibility)
     if (subthemeId) {
       return await context.db
         .query('groups')
         .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
         .collect();
     }
+
+    // No filters - return all (backward compatibility)
     return await context.db.query('groups').collect();
   },
 });
@@ -28,11 +52,12 @@ export const getById = query({
 // Mutations
 export const create = mutation({
   args: {
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     subthemeId: v.id('subthemes'),
     prefix: v.optional(v.string()),
   },
-  handler: async (context, { name, subthemeId, prefix }) => {
+  handler: async (context, { tenantId, name, subthemeId, prefix }) => {
     // Verify admin access
     await requireAdmin(context);
     // Check if subtheme exists
@@ -48,6 +73,7 @@ export const create = mutation({
     actualPrefix = normalizeText(actualPrefix).toUpperCase();
 
     return await context.db.insert('groups', {
+      tenantId,
       name,
       subthemeId,
       prefix: actualPrefix,
@@ -78,7 +104,7 @@ export const update = mutation({
     }
 
     // Normalize the prefix if one is provided
-    const updates: any = { name, subthemeId };
+    const updates: Record<string, unknown> = { name, subthemeId };
     if (prefix !== undefined) {
       updates.prefix = normalizeText(prefix).toUpperCase();
     }

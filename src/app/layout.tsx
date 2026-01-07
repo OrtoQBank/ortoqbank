@@ -11,6 +11,7 @@ import { NuqsAdapter } from 'nuqs/adapters/next/app';
 import ErrorBoundary from '@/components/error-boundary';
 import { PostHogProvider } from '@/components/PostHogProvider';
 import { ErrorLogger } from '@/components/providers/error-logger';
+import { TenantProvider } from '@/components/providers/TenantProvider';
 import { Toaster } from '@/components/ui/toaster';
 
 import ConvexClientProvider from './convex-client-provider';
@@ -79,12 +80,14 @@ export default function RootLayout({
         <ErrorBoundary>
           <PostHogProvider>
             <ConvexClientProvider>
-              <NuqsAdapter>
-                <NextTopLoader />
-                {children}
-                <Analytics />
-                <Toaster />
-              </NuqsAdapter>
+              <TenantProvider>
+                <NuqsAdapter>
+                  <NextTopLoader />
+                  {children}
+                  <Analytics />
+                  <Toaster />
+                </NuqsAdapter>
+              </TenantProvider>
             </ConvexClientProvider>
           </PostHogProvider>
         </ErrorBoundary>

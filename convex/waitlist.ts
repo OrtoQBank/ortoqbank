@@ -61,7 +61,7 @@ export const createWaitlistEntry = mutation({
 });
 
 export const list = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       _id: v.id('waitlist'),
@@ -90,11 +90,16 @@ export const list = query({
       ),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
     // Require admin access to list waitlist entries
     await requireAdmin(ctx);
 
-    const entries = await ctx.db.query('waitlist').collect();
-    return entries;
+    if (tenantId) {
+      return await ctx.db
+        .query('waitlist')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
+    return await ctx.db.query('waitlist').collect();
   },
 });

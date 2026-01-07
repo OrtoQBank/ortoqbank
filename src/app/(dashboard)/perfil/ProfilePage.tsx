@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { useState } from 'react';
 import {
   Cell,
@@ -23,6 +23,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../convex/_generated/api';
 import { ProgressOverTimeChart } from './charts/progress-over-time-chart';
@@ -62,8 +63,8 @@ function getStatsValues(stats: any) {
 }
 
 export default function ProfilePage() {
-  // Use direct queries - Convex handles caching automatically
-  const userStats = useQuery(api.userStats.getUserStatsFast);
+  // Use tenant-aware queries - Convex handles caching automatically
+  const userStats = useTenantQuery(api.userStats.getUserStatsFast, {});
   const [showThemeStats, setShowThemeStats] = useState(false);
 
   // Determine if we're loading the data
