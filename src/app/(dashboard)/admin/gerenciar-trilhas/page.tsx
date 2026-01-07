@@ -143,7 +143,7 @@ export default function ManagePresetExams() {
   const deleteQuiz = useMutation(api.presetQuizzes.deleteQuiz);
 
   // Load the editing quiz details when needed
-  const editingQuizDetails = useQuery(
+  const editingQuizDetails = useTenantQuery(
     api.presetQuizzes.get,
     editingExam ? { id: editingExam.id as Id<'presetQuizzes'> } : 'skip',
   );
