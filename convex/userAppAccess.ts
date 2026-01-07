@@ -294,7 +294,7 @@ export const checkMyAccess = query({
     if (user.role === 'admin') {
       return {
         hasAccess: true,
-        role: 'moderator', // Super admins have moderator access everywhere
+        role: 'moderator' as const, // Super admins have moderator access everywhere
         expiresAt: undefined,
         isSuperAdmin: true,
       };

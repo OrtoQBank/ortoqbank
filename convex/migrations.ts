@@ -751,9 +751,14 @@ export const runRemoveHeavyContentMigration = migrations.runner([
  */
 export const verifyQuestionContentExists = internalQuery({
   args: {},
+  returns: v.object({
+    totalQuestions: v.number(),
+    questionsWithContent: v.number(),
+    missingContent: v.array(v.id('questions')),
+  }),
   handler: async ctx => {
     const questions = await ctx.db.query('questions').collect();
-    const missing: Id<'questions'>[] = [];
+    const missing: Array<Id<'questions'>> = [];
 
     for (const question of questions) {
       const content = await ctx.db
@@ -773,3 +778,64 @@ export const verifyQuestionContentExists = internalQuery({
     };
   },
 });
+
+// =============================================================================
+// USER APP ACCESS MIGRATION
+// =============================================================================
+
+/**
+ * Backfill userAppAccess for existing users
+ * Grants access to the default 'ortoqbank' app for paid users and admins.
+ *
+ * Usage:
+ * npx convex run migrations:grantExistingUsersAppAccess
+ */
+export const backfillUserAppAccess = migrations.define({
+  table: 'users',
+  migrateOne: async (ctx, doc): Promise<undefined> => {
+    // Skip unpaid non-admin users
+    if (!doc.paid && doc.role !== 'admin') {
+      return;
+    }
+
+    // Get default app
+    const defaultAppId = await ctx.runQuery(
+      internal.migrations.getDefaultAppId,
+      {},
+    );
+    if (!defaultAppId) {
+      throw new Error(
+        'Default app not found. Run getOrCreateDefaultApp first.',
+      );
+    }
+
+    // Check if access already exists
+    const existing = await ctx.db
+      .query('userAppAccess')
+      .withIndex('by_user_app', q =>
+        q.eq('userId', doc._id).eq('appId', defaultAppId),
+      )
+      .unique();
+
+    if (existing) {
+      return; // Already has access record
+    }
+
+    // Create new access record
+    const role = doc.role === 'admin' ? 'moderator' : 'user';
+    await ctx.db.insert('userAppAccess', {
+      userId: doc._id,
+      appId: defaultAppId,
+      hasAccess: true,
+      role: role as 'user' | 'moderator',
+      grantedAt: Date.now(),
+    });
+
+    return;
+  },
+});
+
+// Runner for user app access backfill
+export const runUserAppAccessMigration = migrations.runner([
+  internal.migrations.backfillUserAppAccess,
+]);
