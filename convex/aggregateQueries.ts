@@ -128,13 +128,18 @@ async function selectRandomIdsFromAggregate(
 
 // Query function to get total question count using aggregate - MOST EFFICIENT
 export const getTotalQuestionCountQuery = query({
-  args: {},
+  args: {
+    tenantId: v.optional(v.id('apps')),
+  },
   returns: v.number(),
-  handler: async ctx => {
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return 0;
+    }
     // Use the totalQuestionCount aggregate for O(log n) counting
     // This is the most efficient way to count all questions
     const count = await totalQuestionCount.count(ctx, {
-      namespace: 'global',
+      namespace: args.tenantId,
       bounds: {} as any,
     });
     return count;
@@ -236,8 +241,13 @@ export const getGroupQuestionCountQuery = query({
 // Legacy user-specific aggregate query functions have been removed.
 
 // Helper functions that call these queries
-export async function getTotalQuestionCount(ctx: QueryCtx): Promise<number> {
-  return await ctx.runQuery(api.aggregateQueries.getTotalQuestionCountQuery);
+export async function getTotalQuestionCount(
+  ctx: QueryCtx,
+  tenantId: Id<'apps'>,
+): Promise<number> {
+  return await ctx.runQuery(api.aggregateQueries.getTotalQuestionCountQuery, {
+    tenantId,
+  });
 }
 
 export async function getThemeQuestionCount(
@@ -278,6 +288,7 @@ export async function getGroupQuestionCount(
  */
 export const getQuestionCountByFilter = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     filter: v.union(
       v.literal('all'),
       v.literal('unanswered'),
@@ -287,8 +298,16 @@ export const getQuestionCountByFilter = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return 0;
+    }
     const userId = await getCurrentUserOrThrow(ctx);
-    return await getCountForFilterType(ctx, args.filter, userId._id);
+    return await getCountForFilterType(
+      ctx,
+      args.filter,
+      userId._id,
+      args.tenantId,
+    );
   },
 });
 
@@ -299,6 +318,7 @@ export const getQuestionCountByFilter = query({
  */
 export const getQuestionCountBySelection = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     filter: v.union(
       v.literal('all'),
       v.literal('unanswered'),
@@ -311,6 +331,9 @@ export const getQuestionCountBySelection = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return 0;
+    }
     const userId = await getCurrentUserOrThrow(ctx);
 
     const selectedThemes = args.selectedThemes || [];
@@ -323,7 +346,12 @@ export const getQuestionCountBySelection = query({
       selectedSubthemes.length === 0 &&
       selectedGroups.length === 0
     ) {
-      return await getCountForFilterType(ctx, args.filter, userId._id);
+      return await getCountForFilterType(
+        ctx,
+        args.filter,
+        userId._id,
+        args.tenantId,
+      );
     }
 
     // OPTIMIZATION: For user-specific filters with single selections, use hierarchical aggregates
@@ -522,15 +550,16 @@ async function getCountForFilterType(
   ctx: QueryCtx,
   filter: 'all' | 'unanswered' | 'incorrect' | 'bookmarked',
   userId: Id<'users'>,
+  tenantId: Id<'apps'>,
 ): Promise<number> {
   switch (filter) {
     case 'all': {
-      return await getTotalQuestionCount(ctx);
+      return await getTotalQuestionCount(ctx, tenantId);
     }
 
     case 'unanswered': {
       // Total questions minus answered questions
-      const totalQuestions = await getTotalQuestionCount(ctx);
+      const totalQuestions = await getTotalQuestionCount(ctx, tenantId);
       const answeredCount = await getUserAnsweredCount(ctx, userId);
       return Math.max(0, totalQuestions - answeredCount);
     }
@@ -554,19 +583,24 @@ async function getCountForFilterType(
  * This can be used to populate all counters in the UI with a single query
  */
 export const getAllQuestionCounts = query({
-  args: {},
+  args: {
+    tenantId: v.optional(v.id('apps')),
+  },
   returns: v.object({
     all: v.number(),
     unanswered: v.number(),
     incorrect: v.number(),
     bookmarked: v.number(),
   }),
-  handler: async ctx => {
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return { all: 0, unanswered: 0, incorrect: 0, bookmarked: 0 };
+    }
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Get all counts efficiently with parallel queries using aggregates
     const [all, answered, incorrect, bookmarked] = await Promise.all([
-      getTotalQuestionCount(ctx),
+      getTotalQuestionCount(ctx, args.tenantId),
       getUserAnsweredCount(ctx, userId._id),
       getUserIncorrectCount(ctx, userId._id),
       getUserBookmarksCount(ctx, userId._id),
@@ -584,22 +618,27 @@ export const getAllQuestionCounts = query({
 // Random question selection functions using aggregates for efficient randomization
 
 /**
- * Get random questions from the global pool
+ * Get random questions from the tenant's pool
  */
 export const getRandomQuestions = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     count: v.number(),
     seed: v.optional(v.string()),
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return [];
+    }
     return await selectRandomIdsFromAggregate(
       () =>
         (randomQuestions.count as any)(ctx, {
-          namespace: 'global',
+          namespace: args.tenantId,
           bounds: {},
         }),
-      (index: number) => (randomQuestions.at as any)(ctx, index),
+      (index: number) =>
+        (randomQuestions.at as any)(ctx, index, { namespace: args.tenantId }),
       args.count,
     );
   },
@@ -686,6 +725,7 @@ export const getRandomQuestionsByGroup = query({
  */
 export const getRandomQuestionsByUserModeOptimized = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     userId: v.id('users'),
     mode: v.union(
       v.literal('incorrect'),
@@ -705,7 +745,10 @@ export const getRandomQuestionsByUserModeOptimized = query({
     }
 
     // For unanswered, use the optimized fallback approach
-    return await getRandomUnansweredQuestions(ctx, args);
+    return await getRandomUnansweredQuestions(ctx, {
+      ...args,
+      tenantId: args.tenantId,
+    });
   },
 });
 
@@ -811,6 +854,7 @@ async function getRandomUnansweredQuestions(
     themeId?: Id<'themes'>;
     subthemeId?: Id<'subthemes'>;
     groupId?: Id<'groups'>;
+    tenantId?: Id<'apps'>;
   },
 ): Promise<Id<'questions'>[]> {
   // Get answered question IDs from userQuestionStats (lightweight - only IDs needed)
@@ -847,16 +891,17 @@ async function getRandomUnansweredQuestions(
       .withIndex('by_theme', q => q.eq('themeId', args.themeId!))
       .collect();
     allQuestionIds = docs.map(d => d._id);
-  } else {
+  } else if (args.tenantId) {
     // NO HIERARCHY FILTER: Use aggregate-based random selection
     // This avoids the 16MB limit by not loading the full questions table
     const randomIds = await selectRandomIdsFromAggregate(
       () =>
         (randomQuestions.count as any)(ctx, {
-          namespace: 'global',
+          namespace: args.tenantId,
           bounds: {},
         }),
-      (index: number) => (randomQuestions.at as any)(ctx, index),
+      (index: number) =>
+        (randomQuestions.at as any)(ctx, index, { namespace: args.tenantId }),
       args.count * 3, // Get more than needed since we'll filter out answered ones
     );
     allQuestionIds = randomIds;
@@ -975,6 +1020,7 @@ export const getRandomQuestionsByUserModeBatch = query({
  */
 export const getBatchQuestionCountsBySelection = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     filter: v.union(
       v.literal('all'),
       v.literal('unanswered'),
@@ -1013,6 +1059,9 @@ export const getBatchQuestionCountsBySelection = query({
       count: number;
     }>;
   }> => {
+    if (!args.tenantId) {
+      return { totalCount: 0, individualCounts: [] };
+    }
     const userId = await getCurrentUserOrThrow(ctx);
 
     if (args.filter === 'all' || args.filter === 'unanswered') {
@@ -1021,6 +1070,7 @@ export const getBatchQuestionCountsBySelection = query({
       const totalCount: number = await ctx.runQuery(
         api.aggregateQueries.getQuestionCountBySelection,
         {
+          tenantId: args.tenantId,
           filter: args.filter,
           selectedThemes: args.selections
             .filter(s => s.type === 'theme')
@@ -1129,6 +1179,7 @@ export const getBatchQuestionCountsBySelection = query({
     const totalCount: number = await ctx.runQuery(
       api.aggregateQueries.getQuestionCountBySelection,
       {
+        tenantId: args.tenantId,
         filter: args.filter,
         selectedThemes: args.selections
           .filter(s => s.type === 'theme')

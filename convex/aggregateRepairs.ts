@@ -24,10 +24,11 @@ import {
 // User statistics are now handled by the userStatsCounts table
 
 /**
- * Repair global question count with pagination (memory-safe)
+ * Repair question count for a tenant with pagination (memory-safe)
  */
 export const repairGlobalQuestionCount = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     batchSize: v.optional(v.number()),
     startCursor: v.optional(v.union(v.string(), v.null())),
   },
@@ -42,20 +43,23 @@ export const repairGlobalQuestionCount = internalMutation({
 
     // Only clear existing aggregates if this is the first call (no startCursor)
     if (!args.startCursor) {
-      await totalQuestionCount.clear(ctx, { namespace: 'global' });
+      await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
     }
 
-    // Process questions in paginated batches
+    // Process questions in paginated batches (filtered by tenant)
     let cursor: string | null = args.startCursor || null;
     let totalProcessed = 0;
     let batchCount = 0;
     let isComplete = false;
 
     do {
-      const result = await ctx.db.query('questions').paginate({
-        cursor,
-        numItems: batchSize,
-      });
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+        .paginate({
+          cursor,
+          numItems: batchSize,
+        });
 
       // Process this batch
       for (const question of result.page) {
@@ -67,7 +71,7 @@ export const repairGlobalQuestionCount = internalMutation({
       batchCount++;
 
       console.log(
-        `Processed batch ${batchCount}: ${result.page.length} questions`,
+        `Processed batch ${batchCount}: ${result.page.length} questions for tenant ${args.tenantId}`,
       );
 
       // Check if we're done with all data
@@ -88,7 +92,7 @@ export const repairGlobalQuestionCount = internalMutation({
     } while (cursor);
 
     const message = isComplete
-      ? `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches`
+      ? `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches for tenant ${args.tenantId}`
       : `Partial repair: ${totalProcessed} questions processed in ${batchCount} batches. Resume with returned cursor.`;
 
     console.log(message);
@@ -111,14 +115,24 @@ export const repairGlobalQuestionCount = internalMutation({
 // ============================================================================
 
 /**
- * Clear Section 1 aggregates (fast operation)
+ * Clear Section 1 aggregates for a tenant (fast operation)
+ * Note: tenantId is optional for backward compatibility with existing workflows.
+ * When tenantId is not provided, this function does nothing (workflow refactoring deferred).
  */
 export const internalRepairClearSection1Aggregates = internalMutation({
-  args: {},
+  args: {
+    tenantId: v.optional(v.id('apps')),
+  },
   returns: v.null(),
-  handler: async ctx => {
-    await totalQuestionCount.clear(ctx, { namespace: 'global' });
-    console.log('Section 1 aggregates cleared');
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      console.log(
+        'Section 1 clear skipped: tenantId not provided (workflow refactoring needed)',
+      );
+      return null;
+    }
+    await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
+    console.log(`Section 1 aggregates cleared for tenant ${args.tenantId}`);
     return null;
   },
 });
@@ -309,14 +323,24 @@ export const internalRepairGetAllGroupIds = internalMutation({
 // ============================================================================
 
 /**
- * Clear Section 2 aggregates (fast operation)
+ * Clear Section 2 aggregates for a tenant (fast operation)
+ * Note: tenantId is optional for backward compatibility with existing workflows.
+ * When tenantId is not provided, this function does nothing (workflow refactoring needed).
  */
 export const internalRepairClearSection2Aggregates = internalMutation({
-  args: {},
+  args: {
+    tenantId: v.optional(v.id('apps')),
+  },
   returns: v.null(),
-  handler: async ctx => {
-    await randomQuestions.clear(ctx, { namespace: 'global' });
-    console.log('Section 2 aggregates cleared');
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      console.log(
+        'Section 2 clear skipped: tenantId not provided (workflow refactoring needed)',
+      );
+      return null;
+    }
+    await randomQuestions.clear(ctx, { namespace: args.tenantId });
+    console.log(`Section 2 aggregates cleared for tenant ${args.tenantId}`);
     return null;
   },
 });

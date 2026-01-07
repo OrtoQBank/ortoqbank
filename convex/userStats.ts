@@ -402,7 +402,10 @@ export const getUserStatsFast = query({
     }
 
     // Get total questions count using existing aggregate
-    const totalQuestions = await getTotalQuestionCount(ctx);
+    // If no tenantId, return 0 (tenant context is required for accurate counts)
+    const totalQuestions = tenantId
+      ? await getTotalQuestionCount(ctx, tenantId)
+      : 0;
 
     // Handle new users with no counts yet
     if (!userCounts) {
