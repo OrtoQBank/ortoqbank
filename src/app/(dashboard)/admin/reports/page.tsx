@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import {
   AlertTriangle,
   CheckCircle,
@@ -34,6 +34,7 @@ import {
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/hooks/use-toast';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 import { formatDate } from '@/lib/utils';
 
 import { api } from '../../../../../convex/_generated/api';
@@ -85,8 +86,8 @@ export default function AdminReportsPage() {
   const [reviewNotes, setReviewNotes] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
 
-  const counts = useQuery(api.questionErrorReport.getReportCounts);
-  const reports = useQuery(api.questionErrorReport.getReportsForAdmin, {
+  const counts = useTenantQuery(api.questionErrorReport.getReportCounts, {});
+  const reports = useTenantQuery(api.questionErrorReport.getReportsForAdmin, {
     status: activeTab === 'all' ? undefined : activeTab,
   });
   const updateStatus = useMutation(api.questionErrorReport.updateReportStatus);

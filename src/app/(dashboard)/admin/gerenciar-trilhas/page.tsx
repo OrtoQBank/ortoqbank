@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import * as z from 'zod';
@@ -119,14 +119,14 @@ export default function ManagePresetExams() {
 
   // Use searchByName instead of list for quizzes - only when search is provided
   const presetQuizzes =
-    useQuery(
+    useTenantQuery(
       api.presetQuizzes.searchByName,
       quizSearchQuery.trim() ? { name: quizSearchQuery, limit: 10 } : 'skip',
     ) || [];
 
   // Use the searchByCode function for code-based question search
   const questionSearchResults =
-    useQuery(
+    useTenantQuery(
       api.questions.searchByCode,
       searchQuery.trim() ? { code: searchQuery, limit: 10 } : 'skip',
     ) || [];

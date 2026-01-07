@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
 import { FunctionReference, FunctionReturnType } from 'convex/server';
 import { useCallback, useMemo } from 'react';
 
@@ -151,5 +151,98 @@ export function useCurrentTenantId(): Id<'apps'> | null {
 export function useTenantReady(): boolean {
   const { tenantId, isLoading } = useTenant();
   return !isLoading && tenantId !== null;
+}
+
+/**
+ * Options for useTenantPaginatedQuery
+ */
+interface TenantPaginatedQueryOptions {
+  /**
+   * Initial number of items to load
+   */
+  initialNumItems: number;
+  /**
+   * If true, the query will skip if tenantId is not yet available.
+   * Default: true
+   */
+  requireTenant?: boolean;
+}
+
+/**
+ * Hook that wraps usePaginatedQuery and auto-injects tenantId from TenantProvider.
+ *
+ * Usage:
+ * ```typescript
+ * // Instead of:
+ * const { results, status, loadMore } = usePaginatedQuery(
+ *   api.questions.list,
+ *   {},
+ *   { initialNumItems: 10 }
+ * );
+ *
+ * // Use:
+ * const { results, status, loadMore } = useTenantPaginatedQuery(
+ *   api.questions.list,
+ *   {},
+ *   { initialNumItems: 10 }
+ * );
+ * ```
+ *
+ * The hook automatically injects the current tenant's ID into the query args.
+ * If tenantId is not yet available (loading), the query is skipped.
+ *
+ * @param query - The Convex query function reference
+ * @param args - Query arguments (or 'skip' to skip the query)
+ * @param options - Pagination options including initialNumItems
+ * @returns The paginated query result with results, status, and loadMore
+ */
+export function useTenantPaginatedQuery<Query extends FunctionReference<'query'>>(
+  query: Query,
+  args: Record<string, unknown>,
+  options: TenantPaginatedQueryOptions,
+) {
+  const { tenantId, isLoading: isTenantLoading } = useTenant();
+  const { initialNumItems, requireTenant = true } = options;
+
+  // Determine if we should skip the query
+  const shouldSkip = useMemo(() => {
+    // Skip if tenant is required but not yet available
+    if (requireTenant && isTenantLoading) return true;
+    if (requireTenant && !tenantId) return true;
+
+    return false;
+  }, [requireTenant, isTenantLoading, tenantId]);
+
+  // Build the final args with tenantId injected
+  const finalArgs = useMemo(() => {
+    if (shouldSkip) {
+      // Return empty object - usePaginatedQuery doesn't support 'skip'
+      // but we handle this by checking shouldSkip in the result
+      return { tenantId: undefined };
+    }
+
+    return {
+      ...args,
+      tenantId: tenantId ?? undefined,
+    };
+  }, [shouldSkip, args, tenantId]);
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const result = usePaginatedQuery(query, finalArgs as any, { initialNumItems });
+
+  // If we should skip, return empty results
+  if (shouldSkip) {
+    return {
+      results: [] as FunctionReturnType<Query> extends { page: infer P } ? P : never[],
+      status: 'LoadingFirstPage' as const,
+      loadMore: () => {},
+      isLoading: true,
+    };
+  }
+
+  return {
+    ...result,
+    isLoading: result.status === 'LoadingFirstPage',
+  };
 }
 

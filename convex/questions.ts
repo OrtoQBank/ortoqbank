@@ -254,11 +254,23 @@ export const list = query({
 });
 
 export const getById = query({
-  args: { id: v.id('questions') },
+  args: {
+    id: v.id('questions'),
+    tenantId: v.optional(v.id('apps')),
+  },
   handler: async (context, arguments_) => {
     const question = await context.db.get(arguments_.id);
     if (!question) {
       throw new Error('Question not found');
+    }
+
+    // Validate tenant access if tenantId is provided
+    if (
+      arguments_.tenantId &&
+      question.tenantId &&
+      question.tenantId !== arguments_.tenantId
+    ) {
+      throw new Error('Question not found'); // Don't reveal it exists in another tenant
     }
 
     const theme = await context.db.get(question.themeId);
