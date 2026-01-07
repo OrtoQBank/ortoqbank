@@ -16,7 +16,7 @@ import {
   _internalInsertQuestion,
   _internalUpdateQuestion,
 } from './questionsAggregateSync';
-import { requireAdmin } from './users';
+import { requireAppModerator } from './auth';
 import { validateNoBlobs } from './utils';
 // Question stats are now handled by aggregates and triggers
 
@@ -108,7 +108,7 @@ export const getQuestionContentBatch = query({
 export const create = mutation({
   args: {
     // Multi-tenancy
-    tenantId: v.optional(v.id('apps')),
+    tenantId: v.id('apps'),
     // Accept stringified content from frontend
     questionTextString: v.string(),
     explanationTextString: v.string(),
@@ -121,8 +121,8 @@ export const create = mutation({
     groupId: v.optional(v.id('groups')),
   },
   handler: async (ctx, args) => {
-    // Verify admin access
-    await requireAdmin(ctx);
+    // Verify moderator access for this app
+    await requireAppModerator(ctx, args.tenantId);
 
     // Validate JSON structure of string content
     try {
@@ -150,15 +150,8 @@ export const create = mutation({
       .unique();
     if (!user) throw new Error('User not found');
 
-    // Use provided tenantId or fall back to default tenant
-    let tenantId = args.tenantId;
-    if (!tenantId) {
-      const defaultApp = await ctx.db
-        .query('apps')
-        .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-        .first();
-      tenantId = defaultApp?._id;
-    }
+    // tenantId is now required (validated by requireAppModerator)
+    const tenantId = args.tenantId;
 
     // Lookup taxonomy names for denormalization
     const theme = await ctx.db.get(args.themeId);
@@ -315,8 +308,16 @@ export const update = mutation({
     isPublic: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    // Verify admin access
-    await requireAdmin(ctx);
+    // Get the existing question to check tenant
+    const existingQuestion = await ctx.db.get(args.id);
+    if (!existingQuestion) {
+      throw new Error('Question not found');
+    }
+
+    // Verify moderator access for the question's app
+    if (existingQuestion.tenantId) {
+      await requireAppModerator(ctx, existingQuestion.tenantId);
+    }
 
     // Validate JSON structure of string content
     try {
@@ -534,8 +535,16 @@ export const getQuestionCountForTheme = query({
 export const deleteQuestion = mutation({
   args: { id: v.id('questions') },
   handler: async (ctx, args) => {
-    // Verify admin access
-    await requireAdmin(ctx);
+    // Get the existing question to check tenant
+    const existingQuestion = await ctx.db.get(args.id);
+    if (!existingQuestion) {
+      throw new Error('Question not found');
+    }
+
+    // Verify moderator access for the question's app
+    if (existingQuestion.tenantId) {
+      await requireAppModerator(ctx, existingQuestion.tenantId);
+    }
 
     // First, remove the question from all preset quizzes that contain it
     const allPresetQuizzes = await ctx.db.query('presetQuizzes').collect();

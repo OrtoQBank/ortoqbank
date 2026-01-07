@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireSuperAdmin } from './auth';
 
 /**
  * App/Tenant validators for reuse
@@ -71,7 +71,7 @@ export const listActiveApps = query({
   args: {},
   returns: v.array(appValidator),
   handler: async ctx => {
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     const apps = await ctx.db
       .query('apps')
@@ -90,7 +90,7 @@ export const listAllApps = query({
   args: {},
   returns: v.array(appValidator),
   handler: async ctx => {
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     const apps = await ctx.db.query('apps').order('desc').collect();
 
@@ -113,7 +113,7 @@ export const createApp = mutation({
   },
   returns: v.id('apps'),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     // Check if slug already exists
     const existingBySlug = await ctx.db
@@ -164,7 +164,7 @@ export const updateApp = mutation({
   },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     const existingApp = await ctx.db.get(args.appId);
     if (!existingApp) {

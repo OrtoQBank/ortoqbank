@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator } from './auth';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
@@ -65,14 +65,15 @@ export const listByThemes = query({
 // Mutations
 export const create = mutation({
   args: {
-    tenantId: v.optional(v.id('apps')),
+    tenantId: v.id('apps'),
     name: v.string(),
     themeId: v.id('themes'),
     prefix: v.optional(v.string()),
   },
   handler: async (context, { tenantId, name, themeId, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
+    // Verify moderator access for this app
+    await requireAppModerator(context, tenantId);
+
     // Check if theme exists
     const theme = await context.db.get(themeId);
     if (!theme) {
@@ -102,12 +103,15 @@ export const update = mutation({
     prefix: v.optional(v.string()),
   },
   handler: async (context, { id, name, themeId, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
     // Check if subtheme exists
     const existing = await context.db.get(id);
     if (!existing) {
       throw new Error('Subtheme not found');
+    }
+
+    // Verify moderator access for the subtheme's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
     }
 
     // Check if theme exists
@@ -129,8 +133,17 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id('subthemes') },
   handler: async (context, { id }) => {
-    // Verify admin access
-    await requireAdmin(context);
+    // Check if subtheme exists first
+    const existing = await context.db.get(id);
+    if (!existing) {
+      throw new Error('Subtheme not found');
+    }
+
+    // Verify moderator access for the subtheme's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
+    }
+
     // Define dependencies to check
     const dependencies = [
       {
