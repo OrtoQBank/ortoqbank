@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Doc, Id } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { requireAppModerator } from './auth';
 import { mutation } from './triggers';
 
 // Helper to fetch question content from questionContent table
@@ -34,6 +35,7 @@ async function fetchQuestionContent(
 
 export const create = mutation({
   args: {
+    tenantId: v.id('apps'),
     name: v.string(),
     description: v.string(),
     category: v.union(v.literal('trilha'), v.literal('simulado')),
@@ -43,16 +45,13 @@ export const create = mutation({
     groupId: v.optional(v.id('groups')),
   },
   handler: async (ctx, args) => {
-    // Get default tenant for multi-tenancy
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
+    await requireAppModerator(ctx, args.tenantId);
 
+    const { tenantId, ...quizData } = args;
     return await ctx.db.insert('presetQuizzes', {
-      ...args,
+      ...quizData,
       isPublic: false, // Default to private
-      tenantId: defaultApp?._id,
+      tenantId,
     });
   },
 });
