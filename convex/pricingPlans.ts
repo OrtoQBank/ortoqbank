@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { internalMutation, mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator } from './auth';
 
 export const getPricingPlans = query({
   args: { tenantId: v.optional(v.id('apps')) },
@@ -20,6 +20,7 @@ export const getPricingPlans = query({
 
 export const savePricingPlan = mutation({
   args: {
+    tenantId: v.id('apps'), // Required for moderator access check
     id: v.optional(v.id('pricingPlans')), // Se não fornecido, cria novo
     name: v.string(),
     badge: v.string(),
@@ -48,26 +49,20 @@ export const savePricingPlan = mutation({
   },
   returns: v.id('pricingPlans'),
   handler: async (ctx, args) => {
-    // Verificação de admin usando a função existente do users.ts
-    await requireAdmin(ctx);
+    // Verify moderator access for this app
+    await requireAppModerator(ctx, args.tenantId);
 
-    const { id, ...planData } = args;
+    const { id, tenantId, ...planData } = args;
 
     if (id) {
       // Editar plano existente
       await ctx.db.patch(id, planData);
       return id;
     } else {
-      // Get default tenant for multi-tenancy
-      const defaultApp = await ctx.db
-        .query('apps')
-        .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-        .first();
-
-      // Criar novo plano
+      // Criar novo plano with the provided tenantId
       return await ctx.db.insert('pricingPlans', {
         ...planData,
-        tenantId: defaultApp?._id,
+        tenantId,
       });
     }
   },
@@ -77,8 +72,16 @@ export const removePricingPlan = mutation({
   args: { id: v.id('pricingPlans') },
   returns: v.null(),
   handler: async (ctx, args) => {
-    // Verificação de admin usando a função existente do users.ts
-    await requireAdmin(ctx);
+    // Get the existing plan to check tenant
+    const existingPlan = await ctx.db.get(args.id);
+    if (!existingPlan) {
+      throw new Error('Pricing plan not found');
+    }
+
+    // Verify moderator access for the plan's app
+    if (existingPlan.tenantId) {
+      await requireAppModerator(ctx, existingPlan.tenantId);
+    }
 
     await ctx.db.delete(args.id);
     return null;

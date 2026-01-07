@@ -163,8 +163,14 @@ async function userByClerkUserId(context: QueryContext, clerkUserId: string) {
     .unique();
 }
 
-// Função para verificar se o usuário atual é admin
-// Agora usa dados do banco de dados ao invés do JWT token
+/**
+ * Require super admin access (global admin).
+ * Use this for operations that should only be performed by super admins,
+ * like creating new apps or managing global settings.
+ *
+ * @deprecated Use requireSuperAdmin from './auth' instead for new code
+ * @throws Error if user is not a super admin
+ */
 export async function requireAdmin(
   context: QueryContext | MutationCtx,
 ): Promise<void> {
@@ -174,7 +180,7 @@ export async function requireAdmin(
   }
 
   if (user.role !== 'admin') {
-    throw new Error('Unauthorized: Admin access required');
+    throw new Error('Unauthorized: Super admin access required');
   }
 }
 

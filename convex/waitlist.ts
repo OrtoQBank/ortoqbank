@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator } from './auth';
 
 export const createWaitlistEntry = mutation({
   args: {
@@ -91,15 +91,15 @@ export const list = query({
     }),
   ),
   handler: async (ctx, { tenantId }) => {
-    // Require admin access to list waitlist entries
-    await requireAdmin(ctx);
-
+    // Require moderator access to list waitlist entries
     if (tenantId) {
+      await requireAppModerator(ctx, tenantId);
       return await ctx.db
         .query('waitlist')
         .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
         .collect();
     }
-    return await ctx.db.query('waitlist').collect();
+    // If no tenantId provided, return empty - should always filter by tenant
+    return [];
   },
 });

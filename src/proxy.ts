@@ -66,6 +66,13 @@ export default clerkMiddleware(async (auth, request) => {
   // ==========================================================================
   if (isProtectedRoute(request)) await auth.protect();
 
+  // NOTE: User-App access control is enforced at:
+  // 1. Convex backend (authoritative) - via requireAppAccess/requireAppModerator in mutations
+  // 2. Frontend (defense in depth) - via SessionProvider checking userAppAccess.checkMyAccess
+  // Middleware cannot directly query Convex (edge runtime limitation), so we rely on
+  // the above two layers. If a user accesses an app without permission, they will see
+  // an access denied UI and mutations will be blocked.
+
   // ==========================================================================
   // ADMIN ROUTES - Additional role verification
   // ==========================================================================

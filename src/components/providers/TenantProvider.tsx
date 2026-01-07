@@ -48,6 +48,22 @@ interface TenantData {
 }
 
 /**
+ * User's access status for the current app
+ */
+interface UserAppAccessStatus {
+  /** Whether the user has access to this app */
+  hasAccess: boolean;
+  /** Whether the user is a moderator for this app */
+  isModerator: boolean;
+  /** Whether the user is a super admin (global) */
+  isSuperAdmin: boolean;
+  /** When access expires (if applicable) */
+  expiresAt?: number;
+  /** Whether access data is still loading */
+  isLoading: boolean;
+}
+
+/**
  * Full tenant context combining static config and dynamic data
  */
 interface TenantContextValue {
@@ -65,6 +81,8 @@ interface TenantContextValue {
   isDefault: boolean;
   /** Whether the tenant was found in the database */
   isValid: boolean;
+  /** User's access status for this app */
+  access: UserAppAccessStatus;
 }
 
 const TenantContext = createContext<TenantContextValue | undefined>(undefined);
@@ -111,6 +129,12 @@ export function TenantProvider({ children, initialSlug }: TenantProviderProps) {
   // Query dynamic data from Convex
   const appData = useQuery(api.apps.getAppBySlug, { slug });
 
+  // Query user's access to this app (only if we have the app ID)
+  const userAccess = useQuery(
+    api.userAppAccess.checkMyAccess,
+    appData?._id ? { appId: appData._id } : 'skip',
+  );
+
   // Build context value
   const contextValue = useMemo<TenantContextValue>(() => {
     const isLoading = appData === undefined;
@@ -126,6 +150,15 @@ export function TenantProvider({ children, initialSlug }: TenantProviderProps) {
         }
       : null;
 
+    // Build access status
+    const access: UserAppAccessStatus = {
+      hasAccess: userAccess?.hasAccess ?? false,
+      isModerator: userAccess?.role === 'moderator' || userAccess?.isSuperAdmin === true,
+      isSuperAdmin: userAccess?.isSuperAdmin ?? false,
+      expiresAt: userAccess?.expiresAt,
+      isLoading: appData !== undefined && userAccess === undefined,
+    };
+
     return {
       slug,
       tenantId: appData?._id ?? null,
@@ -134,8 +167,9 @@ export function TenantProvider({ children, initialSlug }: TenantProviderProps) {
       isLoading,
       isDefault: slug === DEFAULT_TENANT_SLUG,
       isValid: appData !== null && appData !== undefined,
+      access,
     };
-  }, [slug, config, appData]);
+  }, [slug, config, appData, userAccess]);
 
   // Apply CSS variables for tenant branding
   useEffect(() => {
@@ -207,6 +241,31 @@ export function useTenantBranding() {
 export function useTenantContent() {
   const { config } = useTenant();
   return config.content;
+}
+
+/**
+ * Hook to get user's access status for the current tenant.
+ */
+export function useTenantAccess(): UserAppAccessStatus {
+  const { access } = useTenant();
+  return access;
+}
+
+/**
+ * Hook to check if user has moderator access to the current tenant.
+ * Returns true for app moderators and super admins.
+ */
+export function useIsTenantModerator(): boolean {
+  const { access } = useTenant();
+  return access.isModerator || access.isSuperAdmin;
+}
+
+/**
+ * Hook to check if user has access to the current tenant.
+ */
+export function useHasTenantAccess(): boolean {
+  const { access } = useTenant();
+  return access.hasAccess;
 }
 
 // Helper to check if a string is a valid tenant slug

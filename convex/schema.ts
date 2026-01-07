@@ -25,8 +25,8 @@ export default defineSchema({
     userId: v.id('users'),
     appId: v.id('apps'),
     hasAccess: v.boolean(),
-    // Per-app role: 'user' for regular users, 'admin' for app-specific admins
-    role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
+    // Per-app role: 'user' for regular users, 'moderator' for app-specific admins
+    role: v.optional(v.union(v.literal('user'), v.literal('moderator'))),
     grantedAt: v.number(),
     expiresAt: v.optional(v.number()),
     grantedBy: v.optional(v.id('users')), // Admin who granted access

@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator } from './auth';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
@@ -93,13 +93,13 @@ export const getHierarchicalData = query({
 // Mutations
 export const create = mutation({
   args: {
-    tenantId: v.optional(v.id('apps')),
+    tenantId: v.id('apps'),
     name: v.string(),
     prefix: v.optional(v.string()),
   },
   handler: async (context, { tenantId, name, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
+    // Verify moderator access for this app
+    await requireAppModerator(context, tenantId);
 
     // Check if theme with same name already exists (within tenant if provided)
     let existing;
@@ -142,12 +142,15 @@ export const update = mutation({
     prefix: v.optional(v.string()),
   },
   handler: async (context, { id, name, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
     // Check if theme exists
     const existing = await context.db.get(id);
     if (!existing) {
       throw new Error('Theme not found');
+    }
+
+    // Verify moderator access for the theme's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
     }
 
     // Check if new name conflicts with another theme
@@ -174,8 +177,17 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id('themes') },
   handler: async (context, { id }) => {
-    // Verify admin access
-    await requireAdmin(context);
+    // Check if theme exists first
+    const existing = await context.db.get(id);
+    if (!existing) {
+      throw new Error('Theme not found');
+    }
+
+    // Verify moderator access for the theme's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
+    }
+
     // Define dependencies to check
     const dependencies = [
       {
