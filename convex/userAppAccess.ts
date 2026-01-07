@@ -5,10 +5,11 @@
  * These are primarily admin functions for granting/revoking access.
  */
 
+import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireSuperAdmin } from './auth';
+import { requireAppModerator, requireSuperAdmin } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 /**
@@ -378,6 +379,214 @@ export const getAppUserCounts = query({
       users,
       expired,
     };
+  },
+});
+
+const appUserItemValidator = v.object({
+  _id: v.id('userAppAccess'),
+  userId: v.id('users'),
+  role: v.optional(v.union(v.literal('user'), v.literal('moderator'))),
+  hasAccess: v.boolean(),
+  grantedAt: v.number(),
+  expiresAt: v.optional(v.number()),
+  isExpired: v.boolean(),
+  user: v.union(
+    v.object({
+      _id: v.id('users'),
+      email: v.string(),
+      firstName: v.optional(v.string()),
+      lastName: v.optional(v.string()),
+      imageUrl: v.optional(v.string()),
+      clerkUserId: v.string(),
+    }),
+    v.null(),
+  ),
+});
+
+/**
+ * Get all users with access to an app for admin management (paginated)
+ * Uses tenantId parameter for consistency with useTenantQuery pattern
+ * Only moderators and super admins can view this
+ */
+export const getAppUsersForAdmin = query({
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    paginationOpts: paginationOptsValidator,
+  },
+  returns: v.object({
+    page: v.array(appUserItemValidator),
+    isDone: v.boolean(),
+    continueCursor: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return { page: [], isDone: true, continueCursor: '' };
+    }
+
+    const tenantId = args.tenantId;
+
+    // Require moderator access to view app users
+    await requireAppModerator(ctx, tenantId);
+
+    const now = Date.now();
+
+    const paginatedResult = await ctx.db
+      .query('userAppAccess')
+      .withIndex('by_app', q => q.eq('appId', tenantId))
+      .order('desc')
+      .paginate(args.paginationOpts);
+
+    const page = await Promise.all(
+      paginatedResult.page.map(async access => {
+        const user = await ctx.db.get(access.userId);
+        const isExpired = access.expiresAt ? now > access.expiresAt : false;
+
+        return {
+          _id: access._id,
+          userId: access.userId,
+          role: access.role,
+          hasAccess: access.hasAccess,
+          grantedAt: access.grantedAt,
+          expiresAt: access.expiresAt,
+          isExpired,
+          user: user
+            ? {
+                _id: user._id,
+                email: user.email,
+                firstName: user.firstName,
+                lastName: user.lastName,
+                imageUrl: user.imageUrl,
+                clerkUserId: user.clerkUserId,
+              }
+            : null,
+        };
+      }),
+    );
+
+    return {
+      page,
+      isDone: paginatedResult.isDone,
+      continueCursor: paginatedResult.continueCursor,
+    };
+  },
+});
+
+/**
+ * Search users with access to an app by email/name
+ * Uses tenantId parameter for consistency with useTenantQuery pattern
+ * Note: Search doesn't support cursor-based pagination since we need to filter in-memory
+ */
+export const searchAppUsersForAdmin = query({
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    searchQuery: v.string(),
+    limit: v.optional(v.number()),
+  },
+  returns: v.array(appUserItemValidator),
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      return [];
+    }
+
+    const tenantId = args.tenantId;
+
+    // Require moderator access to search app users
+    await requireAppModerator(ctx, tenantId);
+
+    const limit = args.limit ?? 100;
+    const now = Date.now();
+    const searchTerm = args.searchQuery.toLowerCase();
+
+    const accessRecords = await ctx.db
+      .query('userAppAccess')
+      .withIndex('by_app', q => q.eq('appId', tenantId))
+      .collect();
+
+    const results = await Promise.all(
+      accessRecords.map(async access => {
+        const user = await ctx.db.get(access.userId);
+        if (!user) return null;
+
+        // Filter by search query
+        const email = user.email?.toLowerCase() || '';
+        const firstName = user.firstName?.toLowerCase() || '';
+        const lastName = user.lastName?.toLowerCase() || '';
+        const fullName = `${firstName} ${lastName}`.trim();
+
+        if (
+          !email.includes(searchTerm) &&
+          !firstName.includes(searchTerm) &&
+          !lastName.includes(searchTerm) &&
+          !fullName.includes(searchTerm)
+        ) {
+          return null;
+        }
+
+        const isExpired = access.expiresAt ? now > access.expiresAt : false;
+
+        return {
+          _id: access._id,
+          userId: access.userId,
+          role: access.role,
+          hasAccess: access.hasAccess,
+          grantedAt: access.grantedAt,
+          expiresAt: access.expiresAt,
+          isExpired,
+          user: {
+            _id: user._id,
+            email: user.email,
+            firstName: user.firstName,
+            lastName: user.lastName,
+            imageUrl: user.imageUrl,
+            clerkUserId: user.clerkUserId,
+          },
+        };
+      }),
+    );
+
+    // Filter out nulls and limit
+    return results.filter(r => r !== null).slice(0, limit);
+  },
+});
+
+/**
+ * Set a user's role for an app (user or moderator)
+ * Uses tenantId parameter for consistency with useTenantMutation pattern
+ * Only moderators and super admins can change roles
+ */
+export const setUserRoleForApp = mutation({
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    userId: v.id('users'),
+    role: v.optional(v.union(v.literal('user'), v.literal('moderator'))),
+  },
+  returns: v.null(),
+  handler: async (ctx, args) => {
+    if (!args.tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+
+    const tenantId = args.tenantId;
+
+    // Require moderator access to change roles
+    await requireAppModerator(ctx, tenantId);
+
+    const access = await ctx.db
+      .query('userAppAccess')
+      .withIndex('by_user_app', q =>
+        q.eq('userId', args.userId).eq('appId', tenantId),
+      )
+      .unique();
+
+    if (!access) {
+      throw new Error('User does not have access to this app');
+    }
+
+    await ctx.db.patch(access._id, {
+      role: args.role ?? 'user',
+    });
+
+    return null;
   },
 });
 
