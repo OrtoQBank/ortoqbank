@@ -1,8 +1,9 @@
 'use client';
 
 import { useUser } from '@clerk/nextjs';
-import { useQuery } from 'convex-helpers/react/cache/hooks';
 import React, { createContext, useContext, useMemo } from 'react';
+
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
@@ -158,18 +159,18 @@ export function FormContextProvider({
   const { isLoaded, isSignedIn } = useUser();
   const isAuthenticated = isLoaded && isSignedIn;
 
-  // Fetch data once and cache it
-  const totalQuestions = useQuery(
+  // Fetch data once and cache it - now with tenant scoping
+  const totalQuestions = useTenantQuery(
     api.aggregateQueries.getTotalQuestionCountQuery,
     isAuthenticated ? {} : 'skip',
   );
 
-  const hierarchicalData = useQuery(
+  const hierarchicalData = useTenantQuery(
     api.themes.getHierarchicalData,
     isAuthenticated ? {} : 'skip',
   );
 
-  const userCountsForQuizCreation = useQuery(
+  const userCountsForQuizCreation = useTenantQuery(
     api.userStats.getUserCountsForQuizCreation,
     isAuthenticated ? {} : 'skip',
   );
