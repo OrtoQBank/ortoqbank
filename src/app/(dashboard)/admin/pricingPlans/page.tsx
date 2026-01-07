@@ -1,9 +1,11 @@
 'use client';
 
 import { useMutation } from 'convex/react';
-import { Check, Edit2, Plus, Save, Trash2, X } from 'lucide-react';
-import { useState } from 'react';
+import { Check, Edit2, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 
+import { useSession } from '@/components/providers/SessionProvider';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -44,6 +46,16 @@ type FormData = {
 };
 
 export default function PricingPlansAdminPage() {
+  const router = useRouter();
+  const { isAdmin, isLoading: sessionLoading } = useSession();
+
+  // Redirect non-super-admins
+  useEffect(() => {
+    if (!sessionLoading && !isAdmin) {
+      router.push('/admin');
+    }
+  }, [sessionLoading, isAdmin, router]);
+
   const plans = useTenantQuery(api.pricingPlans.getPricingPlans, {}) || [];
   const savePlan = useMutation(api.pricingPlans.savePricingPlan);
   const removePlan = useMutation(api.pricingPlans.removePricingPlan);
@@ -202,6 +214,20 @@ export default function PricingPlansAdminPage() {
   async function handleDelete(id: string) {
     if (!confirm('Excluir plano de preços?')) return;
     await removePlan({ id: id as Id<'pricingPlans'> });
+  }
+
+  // Show loading while checking permissions
+  if (sessionLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Don't render if not admin (will redirect)
+  if (!isAdmin) {
+    return null;
   }
 
   return (
