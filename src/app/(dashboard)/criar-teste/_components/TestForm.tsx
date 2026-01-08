@@ -23,7 +23,12 @@ export default function TestForm() {
   const [showNameModal, setShowNameModal] = useState(false);
   const [formData, setFormData] = useState<TestFormData | undefined>();
   const [submissionState, setSubmissionState] = useState<
-    'idle' | 'loading' | 'success' | 'error' | 'no-questions' | 'validation-error'
+    | 'idle'
+    | 'loading'
+    | 'success'
+    | 'error'
+    | 'no-questions'
+    | 'validation-error'
   >('idle');
   const [resultMessage, setResultMessage] = useState<{
     title: string;
@@ -292,7 +297,10 @@ export default function TestForm() {
             (currentValues.selectedGroups?.length || 0) > 0;
 
           // For "all" and "unanswered" modes, require at least one filter
-          if ((questionMode === 'all' || questionMode === 'unanswered') && !hasFilters) {
+          if (
+            (questionMode === 'all' || questionMode === 'unanswered') &&
+            !hasFilters
+          ) {
             e.preventDefault();
             setSubmissionState('validation-error');
             setResultMessage({

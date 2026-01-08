@@ -13,7 +13,13 @@ import {
 type FeedbackModalProps = {
   isOpen: boolean;
   onClose: () => void;
-  state: 'idle' | 'loading' | 'success' | 'error' | 'no-questions' | 'validation-error';
+  state:
+    | 'idle'
+    | 'loading'
+    | 'success'
+    | 'error'
+    | 'no-questions'
+    | 'validation-error';
   message: {
     title: string;
     description: string;

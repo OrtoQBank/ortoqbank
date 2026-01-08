@@ -954,11 +954,14 @@ function checkHierarchyMatch(
   // Check subtheme complement match (subtheme selected but has groups, question not in those groups)
   if (subthemeId && selectedSubthemes.has(subthemeId)) {
     const selectedGroupsForSubtheme = groupsBySubtheme.get(subthemeId);
-    if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0 && // This subtheme has selected groups
+    if (
+      selectedGroupsForSubtheme &&
+      selectedGroupsForSubtheme.size > 0 && // This subtheme has selected groups
       // Question matches if it's NOT in any of those groups
-      (!groupId || !selectedGroupsForSubtheme.has(groupId))) {
-        return true;
-      }
+      (!groupId || !selectedGroupsForSubtheme.has(groupId))
+    ) {
+      return true;
+    }
   }
 
   // Check theme match (lowest priority)
