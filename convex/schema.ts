@@ -292,6 +292,19 @@ export default defineSchema({
     .index('by_session', ['sessionId'])
     .index('by_tenant_and_user', ['tenantId', 'userId']),
 
+  // Lightweight table for tracking active (incomplete) quiz sessions
+  // This avoids reading heavy answerFeedback data when just checking active status
+  activeQuizSessions: defineTable({
+    tenantId: v.optional(v.id('apps')),
+    userId: v.id('users'),
+    quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+    sessionId: v.id('quizSessions'),
+    startedAt: v.number(),
+  })
+    .index('by_user', ['userId'])
+    .index('by_session', ['sessionId'])
+    .index('by_tenant_and_user', ['tenantId', 'userId']),
+
   userBookmarks: defineTable({
     // Multi-tenancy
     tenantId: v.optional(v.id('apps')),
