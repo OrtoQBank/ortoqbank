@@ -104,6 +104,15 @@ export const startQuizSession = mutation({
       tenantId: quiz?.tenantId,
     });
 
+    // Insert into lightweight tracking table for efficient incomplete session queries
+    await ctx.db.insert('activeQuizSessions', {
+      tenantId: quiz?.tenantId,
+      userId: userId._id,
+      quizId,
+      sessionId,
+      startedAt: Date.now(),
+    });
+
     return { sessionId };
   },
 });
@@ -182,8 +191,9 @@ export const submitAnswerAndProgress = mutation({
       isComplete: isQuizComplete,
     });
 
-    // 4b. If quiz is complete, insert into lightweight summary table for efficient queries
+    // 4b. If quiz is complete, update lightweight tracking tables
     if (isQuizComplete) {
+      // Insert into completed summaries table
       const existingSummary = await ctx.db
         .query('completedQuizSummaries')
         .withIndex('by_session', q => q.eq('sessionId', session._id))
@@ -197,6 +207,16 @@ export const submitAnswerAndProgress = mutation({
           sessionId: session._id,
           completedAt: Date.now(),
         });
+      }
+
+      // Remove from active sessions table
+      const activeSession = await ctx.db
+        .query('activeQuizSessions')
+        .withIndex('by_session', q => q.eq('sessionId', session._id))
+        .first();
+
+      if (activeSession) {
+        await ctx.db.delete(activeSession._id);
       }
     }
 
@@ -258,6 +278,15 @@ export const completeQuizSession = mutation({
         sessionId: session._id,
         completedAt: Date.now(),
       });
+    }
+
+    // Remove from active sessions table
+    const activeSession = await ctx.db
+      .query('activeQuizSessions')
+      .withIndex('by_session', q => q.eq('sessionId', session._id))
+      .first();
+    if (activeSession) {
+      await ctx.db.delete(activeSession._id);
     }
 
     return { success: true };
@@ -337,5 +366,60 @@ export const getCompletedQuizIds = query({
       .collect();
 
     return summaries.map(s => ({ quizId: s.quizId }));
+  },
+});
+
+// Lightweight query for getting incomplete quiz session IDs only (optimized for performance)
+// Uses denormalized activeQuizSessions table to avoid reading heavy answerFeedback data
+// Includes fallback to old query during migration period for safety
+export const getIncompleteQuizIds = query({
+  args: {},
+  returns: v.array(
+    v.object({
+      quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
+      sessionId: v.id('quizSessions'),
+    }),
+  ),
+  handler: async ctx => {
+    const userId = await getCurrentUserOrThrow(ctx);
+
+    // Try new lightweight table first
+    const activeSessions = await ctx.db
+      .query('activeQuizSessions')
+      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .collect();
+
+    if (activeSessions.length > 0) {
+      return activeSessions.map(s => ({
+        quizId: s.quizId,
+        sessionId: s.sessionId,
+      }));
+    }
+
+    // Fallback to old query during migration (only if new table is empty for this user)
+    // This ensures users with existing incomplete sessions still see them before migration runs
+    // Using async iteration to collect only the IDs we need, with a safety limit
+    const sessions: Array<{
+      quizId: Id<'presetQuizzes'> | Id<'customQuizzes'>;
+      sessionId: Id<'quizSessions'>;
+    }> = [];
+
+    const SAFETY_LIMIT = 200; // Should cover any realistic user
+
+    for await (const s of ctx.db
+      .query('quizSessions')
+      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+      .filter(q => q.eq(q.field('isComplete'), false))) {
+      sessions.push({ quizId: s.quizId, sessionId: s._id });
+
+      if (sessions.length >= SAFETY_LIMIT) {
+        console.warn(
+          `⚠️ User ${userId._id} has ${SAFETY_LIMIT}+ incomplete sessions. Run migration ASAP!`,
+        );
+        break;
+      }
+    }
+
+    return sessions;
   },
 });

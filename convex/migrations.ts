@@ -624,6 +624,50 @@ export const runCompletedQuizSummariesMigration = migrations.runner([
 ]);
 
 // =============================================================================
+// ACTIVE QUIZ SESSIONS MIGRATION
+// =============================================================================
+
+/**
+ * Backfill activeQuizSessions from existing incomplete quizSessions
+ * This creates lightweight tracking records for performance optimization
+ */
+export const backfillActiveQuizSessions = migrations.define({
+  table: 'quizSessions',
+  migrateOne: async (ctx, doc): Promise<undefined> => {
+    // Skip if complete
+    if (doc.isComplete) {
+      return;
+    }
+
+    // Check if active session record already exists
+    const existing = await ctx.db
+      .query('activeQuizSessions')
+      .withIndex('by_session', q => q.eq('sessionId', doc._id))
+      .first();
+
+    if (existing) {
+      return;
+    }
+
+    // Create active session tracking record
+    await ctx.db.insert('activeQuizSessions', {
+      tenantId: doc.tenantId,
+      userId: doc.userId,
+      quizId: doc.quizId,
+      sessionId: doc._id,
+      startedAt: doc._creationTime, // Use session creation time
+    });
+
+    return;
+  },
+});
+
+// Runner for active quiz sessions backfill
+export const runActiveQuizSessionsMigration = migrations.runner([
+  internal.migrations.backfillActiveQuizSessions,
+]);
+
+// =============================================================================
 // QUESTION CONTENT CLEANUP MIGRATION
 // =============================================================================
 

@@ -98,9 +98,9 @@ export default function SimuladoPage() {
   const simuladosQuery = useQuery(api.presetQuizzes.listSimuladosSorted);
   const simulados = simuladosQuery || [];
 
-  // Query to get incomplete sessions for the current user
+  // Query to get incomplete sessions for the current user (lightweight query for performance)
   const incompleteSessionsQuery = useQuery(
-    api.quizSessions.listIncompleteSessions,
+    api.quizSessions.getIncompleteQuizIds,
   );
   const incompleteSessions = incompleteSessionsQuery || [];
 
@@ -167,7 +167,7 @@ export default function SimuladoPage() {
   // Create a map of quizId to sessionId for incomplete sessions
   const incompleteSessionMap = incompleteSessions.reduce(
     (map: Record<string, Id<'quizSessions'>>, session) => {
-      map[session.quizId] = session._id;
+      map[session.quizId] = session.sessionId;
       return map;
     },
     {} as Record<string, Id<'quizSessions'>>,

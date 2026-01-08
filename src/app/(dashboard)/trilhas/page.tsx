@@ -66,7 +66,7 @@ export default function TrilhasPage() {
   const themesQuery = useQuery(api.themes.listSorted);
   const trilhasQuery = useQuery(api.presetQuizzes.listTrilhasSorted);
   const incompleteSessionsQuery = useQuery(
-    api.quizSessions.listIncompleteSessions,
+    api.quizSessions.getIncompleteQuizIds,
   );
   const completedSessionsQuery = useQuery(api.quizSessions.getCompletedQuizIds);
 
@@ -95,7 +95,7 @@ export default function TrilhasPage() {
   const incompleteSessionMap = useMemo(() => {
     return incompleteSessions.reduce(
       (map, session) => {
-        map[session.quizId] = session._id;
+        map[session.quizId] = session.sessionId;
         return map;
       },
       {} as Record<string, Id<'quizSessions'>>,

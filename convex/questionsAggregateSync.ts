@@ -242,8 +242,7 @@ export async function _internalUpdateQuestion(
 
   // Check if any taxonomy fields changed
   const themeChanged =
-    updates.themeId !== undefined &&
-    updates.themeId !== oldQuestionDoc.themeId;
+    updates.themeId !== undefined && updates.themeId !== oldQuestionDoc.themeId;
   const subthemeChanged =
     updates.subthemeId !== undefined &&
     updates.subthemeId !== oldQuestionDoc.subthemeId;
@@ -261,7 +260,9 @@ export async function _internalUpdateQuestion(
 
     // Query all userQuestionStats for this question (no direct by_question index, so we use by_user_question)
     // We need to iterate through all stats - this is acceptable since taxonomy changes are rare admin operations
-    const allUserQuestionStats = await ctx.db.query('userQuestionStats').collect();
+    const allUserQuestionStats = await ctx.db
+      .query('userQuestionStats')
+      .collect();
     const questionStats = allUserQuestionStats.filter(
       stat => stat.questionId === id,
     );
@@ -402,7 +403,9 @@ export async function _internalUpdateQuestion(
 
           // Move incorrect counts
           if (userStat?.isIncorrect) {
-            const oldIncorrectBySubtheme = { ...userCounts.incorrectBySubtheme };
+            const oldIncorrectBySubtheme = {
+              ...userCounts.incorrectBySubtheme,
+            };
             if (oldSubthemeId) {
               oldIncorrectBySubtheme[oldSubthemeId] = Math.max(
                 0,

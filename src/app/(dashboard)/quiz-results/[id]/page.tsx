@@ -67,17 +67,13 @@ export default function UniversalQuizResultsPage() {
     quiz?.questions?.flatMap(q => (q ? [q._id] : [])),
   );
 
-  // Get the completed sessions for this quiz
-  const completedSessions =
-    useQuery(
-      api.quizSessions.getCompletedSessions,
-      isLoaded && isSignedIn
-        ? { quizId: quizId as Id<'presetQuizzes'> | Id<'customQuizzes'> }
-        : 'skip',
-    ) || [];
-
-  // Get the most recent session (index 0)
-  const session = completedSessions[0];
+  // Get the most recent completed session for this quiz (optimized - fetches only one)
+  const session = useQuery(
+    api.quizSessions.getLatestCompletedSession,
+    isLoaded && isSignedIn
+      ? { quizId: quizId as Id<'presetQuizzes'> | Id<'customQuizzes'> }
+      : 'skip',
+  );
 
   // Calculate total questions (safe for hooks, defaults to 1 to avoid division issues)
   const totalQuestions = quiz?.questions?.length ?? 1;
