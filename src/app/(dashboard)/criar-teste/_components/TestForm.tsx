@@ -51,6 +51,7 @@ export default function TestForm() {
     handleSubmit,
     control,
     getCurrentQuestionCount,
+    tenantId,
     hierarchicalData,
     mapQuestionMode,
     isAuthenticated,
@@ -99,8 +100,14 @@ export default function TestForm() {
           }
         }
 
+        // Validate tenantId is available
+        if (!tenantId) {
+          throw new Error('Tenant not available. Please refresh the page.');
+        }
+
         // Use the direct mutation (no workflow)
         const result = await createQuiz({
+          tenantId,
           name: testName,
           description: `Teste criado em ${new Date().toLocaleDateString()}`,
           testMode: formData.testMode,
@@ -159,7 +166,7 @@ export default function TestForm() {
         setShowNameModal(false);
       }
     },
-    [formData, createQuiz, mapQuestionMode, hierarchicalData],
+    [formData, createQuiz, mapQuestionMode, hierarchicalData, tenantId],
   );
 
   // Memoized form handlers (same as v1)

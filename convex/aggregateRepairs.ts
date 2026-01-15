@@ -1,10 +1,27 @@
 // ============================================================================
-// SIMPLE AGGREGATE REPAIR FUNCTIONS
+// AGGREGATE REPAIR FUNCTIONS
+// ============================================================================
+//
+// This module provides functions to repair/rebuild aggregate data.
+//
+// SIMPLE API (recommended):
+// - repairTenantAggregates: Repair all aggregates for a specific tenant
+// - repairAllAggregates: Repair all aggregates for all tenants
+//
+// GRANULAR API (for advanced use):
+// - repairGlobalQuestionCount: Repair question count for a tenant
+// - repairThemeAggregates: Repair theme-level aggregates
+// - repairSubthemeAggregates: Repair subtheme-level aggregates
+// - repairGroupAggregates: Repair group-level aggregates
+//
+// USER STATS:
+// User statistics are handled by the userStatsCounts table, not aggregates.
+// Use userStats.initializeUserStatsCounts() to rebuild user stats.
 // ============================================================================
 
 import { v } from 'convex/values';
 
-import { internalMutation } from './_generated/server';
+import { internalMutation, mutation } from './_generated/server';
 import {
   questionCountByGroup,
   questionCountBySubtheme,
@@ -15,13 +32,6 @@ import {
   randomQuestionsByTheme,
   totalQuestionCount,
 } from './aggregates';
-
-// USER-SPECIFIC AGGREGATE REPAIR FUNCTIONS REMOVED
-// These functions are no longer needed as user-specific aggregates have been
-// replaced by the userStatsCounts table for better performance
-
-// All user-specific aggregate repair functions have been removed
-// User statistics are now handled by the userStatsCounts table
 
 /**
  * Repair question count for a tenant with pagination (memory-safe)
@@ -627,5 +637,261 @@ export const internalRepairProcessGroupRandomPage = internalMutation({
 // User statistics are now efficiently handled by the userStatsCounts table,
 // which provides much better performance than the old aggregate system.
 
-// All remaining user-specific aggregate repair functions have been removed.
-// The userStatsCounts table now handles all user statistics efficiently.
+// ============================================================================
+// SIMPLIFIED TENANT-AWARE REPAIR API
+// ============================================================================
+//
+// These functions provide a simpler, tenant-aware API for repairing aggregates.
+// Use these instead of the complex workflow system when you need quick repairs.
+// ============================================================================
+
+/**
+ * Repair all aggregates for a specific tenant.
+ *
+ * This is the recommended way to repair aggregates after data changes.
+ * It handles:
+ * - Total question count (namespaced by tenantId)
+ * - Random question selection (namespaced by tenantId)
+ * - Theme/subtheme/group counts (namespaced by their IDs)
+ *
+ * Usage:
+ *   npx convex run aggregateRepairs:repairTenantAggregates '{"tenantId":"<tenant-id>"}'
+ */
+export const repairTenantAggregates = mutation({
+  args: {
+    tenantId: v.id('apps'),
+  },
+  returns: v.object({
+    success: v.boolean(),
+    totalQuestions: v.number(),
+    themes: v.number(),
+    subthemes: v.number(),
+    groups: v.number(),
+    message: v.string(),
+  }),
+  handler: async (ctx, args) => {
+    const startTime = Date.now();
+    console.log(`Starting aggregate repair for tenant ${args.tenantId}...`);
+
+    // Step 1: Clear and rebuild totalQuestionCount aggregate
+    await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
+    await randomQuestions.clear(ctx, { namespace: args.tenantId });
+
+    // Step 2: Get all questions for this tenant and rebuild both aggregates
+    const questions = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
+
+    for (const question of questions) {
+      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+      await randomQuestions.insertIfDoesNotExist(ctx, question);
+    }
+
+    console.log(`Processed ${questions.length} questions for tenant`);
+
+    // Step 3: Get all themes for this tenant and rebuild their aggregates
+    const themes = await ctx.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
+
+    for (const theme of themes) {
+      await questionCountByTheme.clear(ctx, { namespace: theme._id });
+      await randomQuestionsByTheme.clear(ctx, { namespace: theme._id });
+
+      const themeQuestions = await ctx.db
+        .query('questions')
+        .withIndex('by_theme', q => q.eq('themeId', theme._id))
+        .collect();
+
+      for (const q of themeQuestions) {
+        await questionCountByTheme.insertIfDoesNotExist(ctx, q);
+        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, q);
+      }
+    }
+
+    console.log(`Processed ${themes.length} themes`);
+
+    // Step 4: Get all subthemes for this tenant and rebuild their aggregates
+    const subthemes = await ctx.db
+      .query('subthemes')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
+
+    for (const subtheme of subthemes) {
+      await questionCountBySubtheme.clear(ctx, { namespace: subtheme._id });
+      await randomQuestionsBySubtheme.clear(ctx, { namespace: subtheme._id });
+
+      const subthemeQuestions = await ctx.db
+        .query('questions')
+        .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
+        .collect();
+
+      for (const q of subthemeQuestions) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, q);
+        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, q);
+      }
+    }
+
+    console.log(`Processed ${subthemes.length} subthemes`);
+
+    // Step 5: Get all groups for this tenant and rebuild their aggregates
+    const groups = await ctx.db
+      .query('groups')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
+
+    for (const group of groups) {
+      await questionCountByGroup.clear(ctx, { namespace: group._id });
+      await randomQuestionsByGroup.clear(ctx, { namespace: group._id });
+
+      const groupQuestions = await ctx.db
+        .query('questions')
+        .withIndex('by_group', q => q.eq('groupId', group._id))
+        .collect();
+
+      for (const q of groupQuestions) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, q);
+        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, q);
+      }
+    }
+
+    console.log(`Processed ${groups.length} groups`);
+
+    const duration = Date.now() - startTime;
+
+    return {
+      success: true,
+      totalQuestions: questions.length,
+      themes: themes.length,
+      subthemes: subthemes.length,
+      groups: groups.length,
+      message: `Repair completed in ${duration}ms for tenant ${args.tenantId}`,
+    };
+  },
+});
+
+/**
+ * Repair aggregates for all tenants.
+ *
+ * Usage:
+ *   npx convex run aggregateRepairs:repairAllAggregates '{}'
+ */
+export const repairAllAggregates = mutation({
+  args: {},
+  returns: v.object({
+    success: v.boolean(),
+    tenantsProcessed: v.number(),
+    totalQuestions: v.number(),
+    message: v.string(),
+  }),
+  handler: async (ctx) => {
+    const startTime = Date.now();
+    console.log('Starting aggregate repair for all tenants...');
+
+    // Get all tenants
+    const tenants = await ctx.db.query('apps').collect();
+
+    let totalQuestions = 0;
+
+    for (const tenant of tenants) {
+      console.log(`Processing tenant: ${tenant.slug}`);
+
+      // Clear tenant-level aggregates
+      await totalQuestionCount.clear(ctx, { namespace: tenant._id });
+      await randomQuestions.clear(ctx, { namespace: tenant._id });
+
+      // Get questions for this tenant
+      const questions = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
+        .collect();
+
+      for (const question of questions) {
+        await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+        await randomQuestions.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalQuestions += questions.length;
+
+      // Process themes
+      const themes = await ctx.db
+        .query('themes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
+        .collect();
+
+      for (const theme of themes) {
+        await questionCountByTheme.clear(ctx, { namespace: theme._id });
+        await randomQuestionsByTheme.clear(ctx, { namespace: theme._id });
+
+        const themeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_theme', q => q.eq('themeId', theme._id))
+          .collect();
+
+        for (const q of themeQuestions) {
+          await questionCountByTheme.insertIfDoesNotExist(ctx, q);
+          await randomQuestionsByTheme.insertIfDoesNotExist(ctx, q);
+        }
+      }
+
+      // Process subthemes
+      const subthemes = await ctx.db
+        .query('subthemes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
+        .collect();
+
+      for (const subtheme of subthemes) {
+        await questionCountBySubtheme.clear(ctx, { namespace: subtheme._id });
+        await randomQuestionsBySubtheme.clear(ctx, {
+          namespace: subtheme._id,
+        });
+
+        const subthemeQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
+          .collect();
+
+        for (const q of subthemeQuestions) {
+          await questionCountBySubtheme.insertIfDoesNotExist(ctx, q);
+          await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, q);
+        }
+      }
+
+      // Process groups
+      const groups = await ctx.db
+        .query('groups')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
+        .collect();
+
+      for (const group of groups) {
+        await questionCountByGroup.clear(ctx, { namespace: group._id });
+        await randomQuestionsByGroup.clear(ctx, { namespace: group._id });
+
+        const groupQuestions = await ctx.db
+          .query('questions')
+          .withIndex('by_group', q => q.eq('groupId', group._id))
+          .collect();
+
+        for (const q of groupQuestions) {
+          await questionCountByGroup.insertIfDoesNotExist(ctx, q);
+          await randomQuestionsByGroup.insertIfDoesNotExist(ctx, q);
+        }
+      }
+
+      console.log(
+        `Tenant ${tenant.slug}: ${questions.length} questions, ${themes.length} themes`,
+      );
+    }
+
+    const duration = Date.now() - startTime;
+
+    return {
+      success: true,
+      tenantsProcessed: tenants.length,
+      totalQuestions,
+      message: `Repair completed in ${duration}ms for ${tenants.length} tenants`,
+    };
+  },
+});

@@ -363,13 +363,12 @@ export const getQuestionCountBySelection = query({
         selectedSubthemes.length === 0
       ) {
         const groupId = selectedGroups[0];
-        const namespace = `${userId._id}_${groupId}`;
 
         try {
           if (args.filter === 'incorrect') {
-            return await getUserIncorrectCountByGroup(ctx, userId._id, groupId);
+            return await getUserIncorrectCountByGroup(ctx, userId._id, args.tenantId, groupId);
           } else if (args.filter === 'bookmarked') {
-            return await getUserBookmarksCountByGroup(ctx, userId._id, groupId);
+            return await getUserBookmarksCountByGroup(ctx, userId._id, args.tenantId, groupId);
           }
         } catch (error) {
           console.warn(
@@ -387,19 +386,20 @@ export const getQuestionCountBySelection = query({
         selectedGroups.length === 0
       ) {
         const subthemeId = selectedSubthemes[0];
-        const namespace = `${userId._id}_${subthemeId}`;
 
         try {
           if (args.filter === 'incorrect') {
             return await getUserIncorrectCountBySubtheme(
               ctx,
               userId._id,
+              args.tenantId,
               subthemeId,
             );
           } else if (args.filter === 'bookmarked') {
             return await getUserBookmarksCountBySubtheme(
               ctx,
               userId._id,
+              args.tenantId,
               subthemeId,
             );
           }
@@ -419,13 +419,12 @@ export const getQuestionCountBySelection = query({
         selectedGroups.length === 0
       ) {
         const themeId = selectedThemes[0];
-        const namespace = `${userId._id}_${themeId}`;
 
         try {
           if (args.filter === 'incorrect') {
-            return await getUserIncorrectCountByTheme(ctx, userId._id, themeId);
+            return await getUserIncorrectCountByTheme(ctx, userId._id, args.tenantId, themeId);
           } else if (args.filter === 'bookmarked') {
-            return await getUserBookmarksCountByTheme(ctx, userId._id, themeId);
+            return await getUserBookmarksCountByTheme(ctx, userId._id, args.tenantId, themeId);
           }
         } catch (error) {
           console.warn(
@@ -560,16 +559,16 @@ async function getCountForFilterType(
     case 'unanswered': {
       // Total questions minus answered questions
       const totalQuestions = await getTotalQuestionCount(ctx, tenantId);
-      const answeredCount = await getUserAnsweredCount(ctx, userId);
+      const answeredCount = await getUserAnsweredCount(ctx, userId, tenantId);
       return Math.max(0, totalQuestions - answeredCount);
     }
 
     case 'incorrect': {
-      return await getUserIncorrectCount(ctx, userId);
+      return await getUserIncorrectCount(ctx, userId, tenantId);
     }
 
     case 'bookmarked': {
-      return await getUserBookmarksCount(ctx, userId);
+      return await getUserBookmarksCount(ctx, userId, tenantId);
     }
 
     default: {
@@ -601,9 +600,9 @@ export const getAllQuestionCounts = query({
     // Get all counts efficiently with parallel queries using aggregates
     const [all, answered, incorrect, bookmarked] = await Promise.all([
       getTotalQuestionCount(ctx, args.tenantId),
-      getUserAnsweredCount(ctx, userId._id),
-      getUserIncorrectCount(ctx, userId._id),
-      getUserBookmarksCount(ctx, userId._id),
+      getUserAnsweredCount(ctx, userId._id, args.tenantId),
+      getUserIncorrectCount(ctx, userId._id, args.tenantId),
+      getUserBookmarksCount(ctx, userId._id, args.tenantId),
     ]);
 
     return {
@@ -1062,6 +1061,9 @@ export const getBatchQuestionCountsBySelection = query({
     if (!args.tenantId) {
       return { totalCount: 0, individualCounts: [] };
     }
+
+    // Capture tenantId after validation for type narrowing
+    const tenantId = args.tenantId;
     const userId = await getCurrentUserOrThrow(ctx);
 
     if (args.filter === 'all' || args.filter === 'unanswered') {
@@ -1070,7 +1072,7 @@ export const getBatchQuestionCountsBySelection = query({
       const totalCount: number = await ctx.runQuery(
         api.aggregateQueries.getQuestionCountBySelection,
         {
-          tenantId: args.tenantId,
+          tenantId,
           filter: args.filter,
           selectedThemes: args.selections
             .filter(s => s.type === 'theme')
@@ -1093,8 +1095,6 @@ export const getBatchQuestionCountsBySelection = query({
     // For user-specific modes, use hierarchical aggregates
     const individualCounts = await Promise.all(
       args.selections.map(async selection => {
-        const namespace = `${userId._id}_${selection.id}`;
-
         try {
           let count = 0;
 
@@ -1104,6 +1104,7 @@ export const getBatchQuestionCountsBySelection = query({
                 count = await getUserIncorrectCountByTheme(
                   ctx,
                   userId._id,
+                  tenantId,
                   selection.id as Id<'themes'>,
                 );
                 break;
@@ -1112,6 +1113,7 @@ export const getBatchQuestionCountsBySelection = query({
                 count = await getUserIncorrectCountBySubtheme(
                   ctx,
                   userId._id,
+                  tenantId,
                   selection.id as Id<'subthemes'>,
                 );
                 break;
@@ -1120,6 +1122,7 @@ export const getBatchQuestionCountsBySelection = query({
                 count = await getUserIncorrectCountByGroup(
                   ctx,
                   userId._id,
+                  tenantId,
                   selection.id as Id<'groups'>,
                 );
                 break;
@@ -1132,6 +1135,7 @@ export const getBatchQuestionCountsBySelection = query({
                 count = await getUserBookmarksCountByTheme(
                   ctx,
                   userId._id,
+                  tenantId,
                   selection.id as Id<'themes'>,
                 );
                 break;
@@ -1140,6 +1144,7 @@ export const getBatchQuestionCountsBySelection = query({
                 count = await getUserBookmarksCountBySubtheme(
                   ctx,
                   userId._id,
+                  tenantId,
                   selection.id as Id<'subthemes'>,
                 );
                 break;
@@ -1148,6 +1153,7 @@ export const getBatchQuestionCountsBySelection = query({
                 count = await getUserBookmarksCountByGroup(
                   ctx,
                   userId._id,
+                  tenantId,
                   selection.id as Id<'groups'>,
                 );
                 break;
@@ -1179,7 +1185,7 @@ export const getBatchQuestionCountsBySelection = query({
     const totalCount: number = await ctx.runQuery(
       api.aggregateQueries.getQuestionCountBySelection,
       {
-        tenantId: args.tenantId,
+        tenantId,
         filter: args.filter,
         selectedThemes: args.selections
           .filter(s => s.type === 'theme')

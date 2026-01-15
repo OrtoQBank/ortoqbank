@@ -33,6 +33,7 @@ export const mapQuestionMode = (
 export function useTestFormState() {
   // Get cached data and memoized calculations from context
   const {
+    tenantId,
     userCountsForQuizCreation,
     totalQuestions,
     hierarchicalData,
@@ -99,6 +100,7 @@ export function useTestFormState() {
     handleSubmit,
     control,
     getCurrentQuestionCount,
+    tenantId,
     hierarchicalData,
     userCountsForQuizCreation,
     totalQuestions,

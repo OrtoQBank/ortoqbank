@@ -3,6 +3,7 @@
 import { useUser } from '@clerk/nextjs';
 import React, { createContext, useContext, useMemo } from 'react';
 
+import { useTenant } from '@/components/providers/TenantProvider';
 import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../../convex/_generated/api';
@@ -19,6 +20,9 @@ export interface QuestionCounts {
 }
 
 export interface FormContextValue {
+  // Multi-tenancy
+  tenantId: Id<'apps'> | null;
+
   // Core data (fetched once, cached)
   userCountsForQuizCreation: any;
   totalQuestions: number | undefined;
@@ -159,6 +163,9 @@ export function FormContextProvider({
   const { isLoaded, isSignedIn } = useUser();
   const isAuthenticated = isLoaded && isSignedIn;
 
+  // Get tenant info for mutations
+  const { tenantId } = useTenant();
+
   // Fetch data once and cache it - now with tenant scoping
   const totalQuestions = useTenantQuery(
     api.aggregateQueries.getTotalQuestionCountQuery,
@@ -223,6 +230,7 @@ export function FormContextProvider({
 
   const contextValue: FormContextValue = useMemo(
     () => ({
+      tenantId,
       userCountsForQuizCreation,
       totalQuestions,
       hierarchicalData,
@@ -231,6 +239,7 @@ export function FormContextProvider({
       calculateQuestionCounts,
     }),
     [
+      tenantId,
       userCountsForQuizCreation,
       totalQuestions,
       hierarchicalData,

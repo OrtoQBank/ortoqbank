@@ -33,6 +33,8 @@ export const MAX_QUESTIONS = 120;
 
 export const create = mutation({
   args: {
+    // Multi-tenancy: required for proper data isolation
+    tenantId: v.id('apps'),
     name: v.string(),
     description: v.string(),
     testMode: v.union(v.literal('study'), v.literal('exam')),
@@ -88,10 +90,11 @@ export const create = mutation({
     const selectedSubthemes = args.selectedSubthemes || [];
     const selectedGroups = args.selectedGroups || [];
 
-    // Collect questions using optimized strategy
+    // Collect questions using optimized strategy (tenant-scoped)
     const questionIds = await collectQuestionIds(
       ctx,
       user._id,
+      args.tenantId,
       args.questionMode,
       selectedThemes,
       selectedSubthemes,
@@ -125,13 +128,7 @@ export const create = mutation({
     const quizDescription =
       args.description || `Custom quiz with ${questionIds.length} questions`;
 
-    // Get default tenant for multi-tenancy
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
-
-    // Create the custom quiz
+    // Create the custom quiz (tenant-scoped)
     const quizId = await ctx.db.insert('customQuizzes', {
       name: quizName,
       description: quizDescription,
@@ -142,10 +139,10 @@ export const create = mutation({
       selectedThemes: args.selectedThemes,
       selectedSubthemes: args.selectedSubthemes,
       selectedGroups: args.selectedGroups,
-      tenantId: defaultApp?._id,
+      tenantId: args.tenantId,
     });
 
-    // Create quiz session immediately
+    // Create quiz session immediately (tenant-scoped)
     await ctx.db.insert('quizSessions', {
       userId: user._id,
       quizId,
@@ -154,7 +151,7 @@ export const create = mutation({
       answers: [],
       answerFeedback: [],
       isComplete: false,
-      tenantId: defaultApp?._id,
+      tenantId: args.tenantId,
     });
 
     return {
@@ -179,10 +176,12 @@ type SubthemeParents = Record<Id<'subthemes'>, { themeId: Id<'themes'> }>;
 /**
  * Main entry point for question collection.
  * Routes to the appropriate strategy based on mode and filters.
+ * Multi-tenant: tenantId ensures questions are only selected from the current tenant.
  */
 async function collectQuestionIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
+  tenantId: Id<'apps'>,
   questionMode: QuestionMode,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
@@ -197,7 +196,7 @@ async function collectQuestionIds(
     selectedGroups.length > 0;
 
   console.log(
-    `🚀 Collecting questions: mode=${questionMode}, hasFilters=${hasFilters}, max=${maxQuestions}, hasPrecomputedParents=${!!groupParents}`,
+    `🚀 Collecting questions: tenant=${tenantId}, mode=${questionMode}, hasFilters=${hasFilters}, max=${maxQuestions}`,
   );
 
   // Route to the appropriate strategy
@@ -205,6 +204,7 @@ async function collectQuestionIds(
     case 'all': {
       return collectAllModeQuestions(
         ctx,
+        tenantId,
         selectedThemes,
         selectedSubthemes,
         selectedGroups,
@@ -218,6 +218,7 @@ async function collectQuestionIds(
       return collectUnansweredQuestions(
         ctx,
         userId,
+        tenantId,
         selectedThemes,
         selectedSubthemes,
         selectedGroups,
@@ -231,6 +232,7 @@ async function collectQuestionIds(
       return collectIncorrectQuestions(
         ctx,
         userId,
+        tenantId,
         selectedThemes,
         selectedSubthemes,
         selectedGroups,
@@ -244,6 +246,7 @@ async function collectQuestionIds(
       return collectBookmarkedQuestions(
         ctx,
         userId,
+        tenantId,
         selectedThemes,
         selectedSubthemes,
         selectedGroups,
@@ -266,9 +269,11 @@ async function collectQuestionIds(
 /**
  * For 'all' mode, use aggregate-based random selection.
  * This is ultra-fast and avoids loading question documents.
+ * Multi-tenant: tenantId ensures questions are scoped to current tenant.
  */
 async function collectAllModeQuestions(
   ctx: QueryCtx | MutationCtx,
+  tenantId: Id<'apps'>,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -276,13 +281,14 @@ async function collectAllModeQuestions(
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  // No filters: global random selection
+  // No filters: global random selection (tenant-scoped)
   if (
     selectedThemes.length === 0 &&
     selectedSubthemes.length === 0 &&
     selectedGroups.length === 0
   ) {
     return await ctx.runQuery(api.aggregateQueries.getRandomQuestions, {
+      tenantId,
       count: maxQuestions,
     });
   }
@@ -382,13 +388,14 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
  *
  * Strategy:
  * 1. If filters exist: Query questions by hierarchy using indexes
- * 2. Get user's answered question IDs (fast, uses index)
+ * 2. Get user's answered question IDs (fast, uses index) - tenant scoped
  * 3. Filter out answered questions
  * 4. Randomly select from the remaining
  */
 async function collectUnansweredQuestions(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
+  tenantId: Id<'apps'>,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -396,23 +403,25 @@ async function collectUnansweredQuestions(
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  // Get user's answered question IDs (lightweight query)
+  // Get user's answered question IDs (tenant-scoped query)
   const answeredStats = await ctx.db
     .query('userQuestionStats')
-    .withIndex('by_user_answered', q =>
-      q.eq('userId', userId).eq('hasAnswered', true),
+    .withIndex('by_tenant_and_user', q =>
+      q.eq('tenantId', tenantId).eq('userId', userId),
     )
+    .filter(q => q.eq(q.field('hasAnswered'), true))
     .collect();
 
   const answeredIds = new Set<Id<'questions'>>(
     answeredStats.map(s => s.questionId),
   );
 
-  console.log(`📊 User has answered ${answeredIds.size} questions`);
+  console.log(`📊 User has answered ${answeredIds.size} questions in tenant`);
 
   // Get candidate question IDs from hierarchy
   const candidateIds = await getQuestionIdsByHierarchy(
     ctx,
+    tenantId,
     selectedThemes,
     selectedSubthemes,
     selectedGroups,
@@ -449,6 +458,7 @@ async function collectUnansweredQuestions(
 async function collectIncorrectQuestions(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
+  tenantId: Id<'apps'>,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -456,15 +466,15 @@ async function collectIncorrectQuestions(
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  // Get user's incorrect question IDs
+  // Get user's incorrect question IDs (tenant-scoped)
   const incorrectStats = await ctx.db
     .query('userQuestionStats')
-    .withIndex('by_user_incorrect', q =>
-      q.eq('userId', userId).eq('isIncorrect', true),
+    .withIndex('by_tenant_and_user_incorrect', q =>
+      q.eq('tenantId', tenantId).eq('userId', userId).eq('isIncorrect', true),
     )
     .collect();
 
-  console.log(`📊 User has ${incorrectStats.length} incorrect questions`);
+  console.log(`📊 User has ${incorrectStats.length} incorrect questions in tenant`);
 
   if (incorrectStats.length === 0) {
     return [];
@@ -509,10 +519,12 @@ async function collectIncorrectQuestions(
 
 /**
  * For 'bookmarked' mode, the user's bookmarks are the primary filter.
+ * Multi-tenant: tenantId ensures bookmarks are scoped to current tenant.
  */
 async function collectBookmarkedQuestions(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
+  tenantId: Id<'apps'>,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -520,10 +532,12 @@ async function collectBookmarkedQuestions(
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  // Get user's bookmarks
+  // Get user's bookmarks (tenant-scoped)
   const bookmarks = await ctx.db
     .query('userBookmarks')
-    .withIndex('by_user', q => q.eq('userId', userId))
+    .withIndex('by_tenant_and_user', q =>
+      q.eq('tenantId', tenantId).eq('userId', userId),
+    )
     .collect();
 
   console.log(`📊 User has ${bookmarks.length} bookmarks`);
@@ -724,9 +738,11 @@ async function collectSubthemeQuestions(
 /**
  * Get question IDs by hierarchy using indexed queries.
  * This is the core function for filter-first approaches.
+ * Multi-tenant: tenantId ensures questions are scoped to current tenant.
  */
 async function getQuestionIdsByHierarchy(
   ctx: QueryCtx | MutationCtx,
+  tenantId: Id<'apps'>,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -739,9 +755,10 @@ async function getQuestionIdsByHierarchy(
     selectedSubthemes.length > 0 ||
     selectedGroups.length > 0;
 
-  // No filters: use global random aggregate
+  // No filters: use global random aggregate (tenant-scoped)
   if (!hasFilters) {
     return await ctx.runQuery(api.aggregateQueries.getRandomQuestions, {
+      tenantId,
       count: maxQuestions,
     });
   }
@@ -759,11 +776,13 @@ async function getQuestionIdsByHierarchy(
 
   const allIds: Id<'questions'>[] = [];
 
-  // Collect from groups (most specific)
+  // Collect from groups (most specific) - tenant scoped via taxonomy
   for (const groupId of selectedGroups) {
     const docs = await ctx.db
       .query('questions')
-      .withIndex('by_group', q => q.eq('groupId', groupId))
+      .withIndex('by_tenant_and_group', q =>
+        q.eq('tenantId', tenantId).eq('groupId', groupId),
+      )
       .collect();
     allIds.push(...docs.map(d => d._id));
   }
@@ -777,7 +796,9 @@ async function getQuestionIdsByHierarchy(
 
     const docs = await ctx.db
       .query('questions')
-      .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+      .withIndex('by_tenant_and_subtheme', q =>
+        q.eq('tenantId', tenantId).eq('subthemeId', subthemeId),
+      )
       .collect();
     allIds.push(...docs.map(d => d._id));
   }
@@ -786,7 +807,9 @@ async function getQuestionIdsByHierarchy(
   for (const themeId of effectiveThemes) {
     const docs = await ctx.db
       .query('questions')
-      .withIndex('by_theme', q => q.eq('themeId', themeId))
+      .withIndex('by_tenant_and_theme', q =>
+        q.eq('tenantId', tenantId).eq('themeId', themeId),
+      )
       .collect();
     allIds.push(...docs.map(d => d._id));
   }
@@ -800,7 +823,9 @@ async function getQuestionIdsByHierarchy(
 
     const docs = await ctx.db
       .query('questions')
-      .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+      .withIndex('by_tenant_and_subtheme', q =>
+        q.eq('tenantId', tenantId).eq('subthemeId', subthemeId),
+      )
       .collect();
 
     // Include questions not in any of the selected groups
@@ -981,6 +1006,7 @@ function checkHierarchyMatch(
  */
 export const debugQuestionCollection = mutation({
   args: {
+    tenantId: v.id('apps'),
     questionMode: v.union(
       v.literal('all'),
       v.literal('unanswered'),
@@ -1012,6 +1038,7 @@ export const debugQuestionCollection = mutation({
     const questionIds = await collectQuestionIds(
       ctx,
       user._id,
+      args.tenantId,
       args.questionMode,
       args.selectedThemes || [],
       args.selectedSubthemes || [],
