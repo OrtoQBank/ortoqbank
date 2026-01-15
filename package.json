@@ -75,6 +75,7 @@
     "@tiptap/react": "^3.14.0",
     "@tiptap/starter-kit": "^3.14.0",
     "@vercel/analytics": "^1.5.0",
+    "@xstate/react": "^6.0.0",
     "card-validator": "^10.0.3",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -106,6 +107,7 @@
     "tiptap-extension-resize-image": "^1.3.2",
     "uuid": "^11.1.0",
     "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
+    "xstate": "^5.25.0",
     "zod": "^3.25.28",
     "zustand": "^5.0.9"
   },
