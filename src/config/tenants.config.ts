@@ -141,6 +141,62 @@ export const tenantsConfig = {
       },
     },
   },
+
+  // DermaQBank tenant
+  derma: {
+    branding: {
+      name: 'DermaQBank',
+      shortName: 'DQB',
+      primaryColor: '#e11d48', // Rose
+      secondaryColor: '#be123c',
+      accentColor: '#fb7185',
+      sidebarBackground: '347 77% 50%', // Rose background
+      sidebarForeground: '0 0% 100%', // White text
+      logo: '/logos/derma.svg',
+      logoDark: '/logos/derma-dark.svg',
+      favicon: '/favicon.ico',
+    },
+    content: {
+      tagline: 'Preparatório para o TED - Título de Especialista em Dermatologia',
+      metaDescription:
+        'Prepare-se para a prova do TED com questões comentadas de dermatologia.',
+      labels: {
+        themes: 'Áreas',
+        subthemes: 'Subtemas',
+        groups: 'Tópicos',
+        questions: 'Questões',
+        quiz: 'Simulado',
+      },
+    },
+  },
+
+  // CardioQBank tenant
+  cardio: {
+    branding: {
+      name: 'CardioQBank',
+      shortName: 'CQB',
+      primaryColor: '#dc2626', // Red
+      secondaryColor: '#b91c1c',
+      accentColor: '#f87171',
+      sidebarBackground: '0 72% 51%', // Red background
+      sidebarForeground: '0 0% 100%', // White text
+      logo: '/logos/cardio.svg',
+      logoDark: '/logos/cardio-dark.svg',
+      favicon: '/favicon.ico',
+    },
+    content: {
+      tagline: 'Preparatório para o TEC - Título de Especialista em Cardiologia',
+      metaDescription:
+        'Prepare-se para a prova do TEC com questões comentadas de cardiologia.',
+      labels: {
+        themes: 'Áreas',
+        subthemes: 'Subtemas',
+        groups: 'Tópicos',
+        questions: 'Questões',
+        quiz: 'Simulado',
+      },
+    },
+  },
 } as const satisfies Record<string, TenantConfig>;
 
 /** Type for valid tenant slugs */

@@ -301,21 +301,19 @@ export const listIncompleteSessions = query({
 
     // Query for all incomplete sessions for this user
     let sessions;
-    if (tenantId) {
-      sessions = await ctx.db
-        .query('quizSessions')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', userId._id),
-        )
-        .filter(q => q.eq(q.field('isComplete'), false))
-        .collect();
-    } else {
-      sessions = await ctx.db
-        .query('quizSessions')
-        .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-        .filter(q => q.eq(q.field('isComplete'), false))
-        .collect();
-    }
+    sessions = await (tenantId
+      ? ctx.db
+          .query('quizSessions')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .filter(q => q.eq(q.field('isComplete'), false))
+          .collect()
+      : ctx.db
+          .query('quizSessions')
+          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+          .filter(q => q.eq(q.field('isComplete'), false))
+          .collect());
 
     return sessions;
   },
@@ -349,23 +347,21 @@ export const getAllCompletedSessions = query({
 
     // Get all completed sessions for this user, ordered by newest first
     let sessions;
-    if (tenantId) {
-      sessions = await ctx.db
-        .query('quizSessions')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', userId._id),
-        )
-        .filter(q => q.eq(q.field('isComplete'), true))
-        .order('desc')
-        .collect();
-    } else {
-      sessions = await ctx.db
-        .query('quizSessions')
-        .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-        .filter(q => q.eq(q.field('isComplete'), true))
-        .order('desc')
-        .collect();
-    }
+    sessions = await (tenantId
+      ? ctx.db
+          .query('quizSessions')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .filter(q => q.eq(q.field('isComplete'), true))
+          .order('desc')
+          .collect()
+      : ctx.db
+          .query('quizSessions')
+          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+          .filter(q => q.eq(q.field('isComplete'), true))
+          .order('desc')
+          .collect());
 
     return sessions;
   },
@@ -384,19 +380,17 @@ export const getCompletedQuizIds = query({
     const userId = await getCurrentUserOrThrow(ctx);
 
     let summaries;
-    if (tenantId) {
-      summaries = await ctx.db
-        .query('completedQuizSummaries')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', userId._id),
-        )
-        .collect();
-    } else {
-      summaries = await ctx.db
-        .query('completedQuizSummaries')
-        .withIndex('by_user', q => q.eq('userId', userId._id))
-        .collect();
-    }
+    summaries = await (tenantId
+      ? ctx.db
+          .query('completedQuizSummaries')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .collect()
+      : ctx.db
+          .query('completedQuizSummaries')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .collect());
 
     return summaries.map(s => ({ quizId: s.quizId }));
   },
@@ -406,20 +400,22 @@ export const getCompletedQuizIds = query({
 // Uses denormalized activeQuizSessions table to avoid reading heavy answerFeedback data
 // Includes fallback to old query during migration period for safety
 export const getIncompleteQuizIds = query({
-  args: {},
+  args: { tenantId: v.id('apps') },
   returns: v.array(
     v.object({
       quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
       sessionId: v.id('quizSessions'),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Try new lightweight table first
     const activeSessions = await ctx.db
       .query('activeQuizSessions')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
       .collect();
 
     if (activeSessions.length > 0) {
@@ -441,7 +437,9 @@ export const getIncompleteQuizIds = query({
 
     for await (const s of ctx.db
       .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
       .filter(q => q.eq(q.field('isComplete'), false))) {
       sessions.push({ quizId: s.quizId, sessionId: s._id });
 

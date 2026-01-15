@@ -202,6 +202,13 @@
   }
 }
 
+/* Performance: content-visibility for long lists */
+/* Defers rendering of off-screen accordion items for faster initial paint */
+[data-radix-accordion-content] > div > div {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 100px;
+}
+
 /* TipTap Menu Editor */
 .ProseMirror ul {
   padding: 0 1rem;

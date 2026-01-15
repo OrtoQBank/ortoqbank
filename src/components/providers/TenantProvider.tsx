@@ -271,7 +271,8 @@ export function useHasTenantAccess(): boolean {
 // Helper to check if a string is a valid tenant slug
 function isValidSlug(slug: string): boolean {
   // Import would cause circular dependency, so check against known slugs
-  const validSlugs = ['ortoqbank', 'app1', 'teot'];
+  // This list must match the keys in tenantsConfig from tenants.config.ts
+  const validSlugs = ['ortoqbank', 'app1', 'teot', 'derma', 'cardio'];
   return validSlugs.includes(slug);
 }
 
