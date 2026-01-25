@@ -23,33 +23,43 @@ export const TENANT_COOKIE_NAME = 'x-tenant-slug';
 export const TENANT_COOKIE_MAX_AGE = 60 * 60 * 24 * 365;
 
 /**
- * Extract the subdomain from a hostname.
+ * Resolve tenant slug from hostname.
+ * Handles both Vercel preview (--) and production (.) formats.
  *
- * Examples:
- * - "app1.localhost" -> "app1"
- * - "app1.localhost:3000" -> "app1"
- * - "teot.ortoqbank.com" -> "teot"
- * - "localhost:3000" -> null
- * - "ortoqbank.com" -> null
- * - "www.ortoqbank.com" -> "www" (would need special handling)
+ * Hostname formats:
+ * - Local development: "app1.localhost:3000" -> "app1"
+ * - Vercel preview: "app1--project-git-branch.vercel.app" -> "app1"
+ * - Production: "app1.domain.com" -> "app1"
  *
- * @param hostname - The full hostname (e.g., "app1.localhost:3000")
- * @returns The subdomain or null if none detected
+ * Environment detection:
+ * - Uses VERCEL_ENV to detect preview vs production
+ * - Falls back to NODE_ENV for local development
+ *
+ * @param host - The full hostname (e.g., "app1--project.vercel.app")
+ * @returns The tenant slug or null if none detected
  */
-export function extractSubdomain(hostname: string): string | null {
-  // Remove port if present
-  const hostWithoutPort = hostname.split(':')[0];
+export function resolveTenant(host: string): string | null {
+  const hostWithoutPort = host.split(':')[0];
+
+  // Check environment
+  const isPreviewOrDev =
+    process.env.VERCEL_ENV === 'preview' ||
+    process.env.VERCEL_ENV === 'development' ||
+    process.env.NODE_ENV === 'development';
 
   // Handle localhost subdomains (e.g., "app1.localhost")
   if (hostWithoutPort.endsWith('.localhost')) {
-    const subdomain = hostWithoutPort.replace('.localhost', '');
-    return subdomain || null;
+    return hostWithoutPort.replace('.localhost', '') || null;
   }
 
-  // Handle production domains (e.g., "teot.ortoqbank.com")
-  const parts = hostWithoutPort.split('.');
+  // Preview: app1--project(-git-branch).vercel.app
+  // The -- separator is used by Vercel for preview deployments
+  if (isPreviewOrDev && hostWithoutPort.includes('--')) {
+    return hostWithoutPort.split('--')[0];
+  }
 
-  // Need at least 3 parts for a subdomain (sub.domain.tld)
+  // Production: app1.domain.com (3+ parts)
+  const parts = hostWithoutPort.split('.');
   if (parts.length >= 3) {
     const subdomain = parts[0];
 
@@ -62,6 +72,18 @@ export function extractSubdomain(hostname: string): string | null {
   }
 
   return null;
+}
+
+/**
+ * Extract the subdomain from a hostname.
+ * This is an alias for resolveTenant() for backward compatibility.
+ *
+ * @param hostname - The full hostname (e.g., "app1.localhost:3000")
+ * @returns The subdomain or null if none detected
+ * @deprecated Use resolveTenant() directly for new code
+ */
+export function extractSubdomain(hostname: string): string | null {
+  return resolveTenant(hostname);
 }
 
 /**
@@ -155,6 +177,9 @@ export {
   type TenantBranding,
   type TenantConfig,
   type TenantContent,
-  type TenantSlug,
+  type TenantSlug
 } from '@/config/tenants.config';
+
+// Note: resolveTenant is the primary function for tenant resolution
+// extractSubdomain is kept for backward compatibility but marked as deprecated
 
