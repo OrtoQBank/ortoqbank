@@ -11,14 +11,14 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
+    Select,
+    SelectContent,
+    SelectItem,
+    SelectTrigger,
+    SelectValue,
 } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { useTenantQuery } from '@/hooks/useTenantQuery';
+import { useTenantMutation, useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Doc, Id } from '../../../../../convex/_generated/dataModel';
@@ -57,7 +57,7 @@ export default function PricingPlansAdminPage() {
   }, [sessionLoading, isAdmin, router]);
 
   const plans = useTenantQuery(api.pricingPlans.getPricingPlans, {}) || [];
-  const savePlan = useMutation(api.pricingPlans.savePricingPlan);
+  const savePlan = useTenantMutation(api.pricingPlans.savePricingPlan);
   const removePlan = useMutation(api.pricingPlans.removePricingPlan);
 
   const [editingId, setEditingId] = useState<string | null>(null);

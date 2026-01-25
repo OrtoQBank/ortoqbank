@@ -10,7 +10,7 @@ export const revalidate = 3600;
 // Helper function to fetch plans with error handling
 async function getPlans() {
   try {
-    return await fetchQuery(api.pricingPlans.getPricingPlans);
+    return await fetchQuery(api.pricingPlans.getPricingPlans, {});
   } catch (error) {
     console.error('Failed to fetch pricing plans:', error);
     return [];

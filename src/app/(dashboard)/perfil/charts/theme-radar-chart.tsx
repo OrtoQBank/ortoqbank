@@ -1,15 +1,15 @@
 'use client';
 
-import { useQuery } from 'convex-helpers/react/cache/hooks';
 import { PolarAngleAxis, PolarGrid, Radar, RadarChart } from 'recharts';
 
 import {
-  ChartConfig,
-  ChartContainer,
-  ChartTooltip,
-  ChartTooltipContent,
+    ChartConfig,
+    ChartContainer,
+    ChartTooltip,
+    ChartTooltipContent,
 } from '@/components/ui/chart';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 
@@ -37,7 +37,7 @@ function breakThemeName(name: string): string {
 }
 
 export function ThemeRadarChart() {
-  const userStats = useQuery(api.userStats.getUserStatsFast);
+  const userStats = useTenantQuery(api.userStats.getUserStatsFast, {});
 
   if (userStats === undefined) {
     return (
