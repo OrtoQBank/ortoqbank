@@ -16,7 +16,7 @@ import {
   _internalInsertQuestion,
   _internalUpdateQuestion,
 } from './questionsAggregateSync';
-import { requireAppModerator } from './auth';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 import { validateNoBlobs } from './utils';
 // Question stats are now handled by aggregates and triggers
 
@@ -217,6 +217,9 @@ export const list = query({
     paginationOpts: paginationOptsValidator,
   },
   handler: async (context, { tenantId, paginationOpts }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     let questions;
     if (tenantId) {
       questions = await context.db
@@ -252,6 +255,9 @@ export const getById = query({
     tenantId: v.optional(v.id('apps')),
   },
   handler: async (context, arguments_) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, arguments_.tenantId);
+
     const question = await context.db.get(arguments_.id);
     if (!question) {
       throw new Error('Question not found');
@@ -398,6 +404,9 @@ export const listAll = query({
   // Consider using paginated queries (like 'list') or filtering server-side instead.
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     if (tenantId) {
       return await context.db
         .query('questions')
@@ -427,6 +436,9 @@ export const countQuestionsByMode = query({
     ),
   },
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error('Not authenticated');

@@ -1,6 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 
 export const create = mutation({
   args: {
@@ -52,6 +53,9 @@ export const create = mutation({
 export const list = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     if (tenantId) {
       return await ctx.db
         .query('presetQuizzes')
@@ -87,6 +91,9 @@ export const listTrilhasSorted = query({
     }),
   ),
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     let trilhas;
     if (tenantId) {
       // Use compound index for tenant + category
@@ -145,6 +152,9 @@ export const listSimuladosSorted = query({
     }),
   ),
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     let simulados;
     if (tenantId) {
       // Use compound index for tenant + category
@@ -278,6 +288,9 @@ export const searchByName = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.name || args.name.trim() === '') {
       return [];
     }

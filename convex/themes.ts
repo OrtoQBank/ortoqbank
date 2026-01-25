@@ -1,13 +1,16 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAppModerator } from './auth';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     if (tenantId) {
       return await context.db
         .query('themes')
@@ -23,6 +26,9 @@ export const list = query({
 export const listSorted = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     let themes;
     if (tenantId) {
       themes = await context.db
@@ -59,6 +65,9 @@ export const getById = query({
 export const getHierarchicalData = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     let themes;
     let subthemes;
     let groups;

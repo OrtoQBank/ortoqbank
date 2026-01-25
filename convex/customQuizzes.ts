@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 // Helper to fetch question content from questionContent table
@@ -40,6 +41,9 @@ export const getCustomQuizzes = query({
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Use an index on authorId if available or limit the number of results

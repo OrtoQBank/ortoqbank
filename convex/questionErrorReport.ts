@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 /**
@@ -94,6 +95,9 @@ export const getReportsForAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     const limit = args.limit ?? 50;
 
     let reports;
@@ -218,6 +222,9 @@ export const getReportCounts = query({
     total: v.number(),
   }),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     let allReports;
     if (args.tenantId) {
       allReports = await ctx.db

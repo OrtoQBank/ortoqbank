@@ -4,6 +4,7 @@ import { internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { internalMutation, mutation, query } from './_generated/server';
 import { getTotalQuestionCount } from './aggregateQueries.js';
+import { verifyTenantAccess } from './auth';
 // Removed user-specific aggregate imports - replaced by userStatsCounts table
 import { getCurrentUser, getCurrentUserOrThrow } from './users';
 import { getWeekString } from './utils';
@@ -367,6 +368,9 @@ export const getUserStatsFast = query({
     totalQuestions: v.number(),
   }),
   handler: async (ctx, { tenantId }): Promise<UserStats> => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const user = await getCurrentUser(ctx);
     if (!user) {
       // Return empty stats for unauthenticated users
@@ -511,6 +515,9 @@ export const getUserCountsForQuizCreation = query({
     ),
   }),
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Single lookup gets all counts

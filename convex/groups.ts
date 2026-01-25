@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAppModerator } from './auth';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
@@ -11,6 +11,9 @@ export const list = query({
     subthemeId: v.optional(v.id('subthemes')),
   },
   handler: async (context, { tenantId, subthemeId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     // If both tenantId and subthemeId are provided, use the compound index
     if (tenantId && subthemeId) {
       return await context.db

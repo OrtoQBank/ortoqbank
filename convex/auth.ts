@@ -237,6 +237,30 @@ export async function checkAppAccess(
 }
 
 /**
+ * Verify tenant access for queries that accept optional tenantId.
+ * Use this during migration when tenantId is still optional.
+ *
+ * - If tenantId is provided, verifies the user has access
+ * - If tenantId is undefined, allows the query (backward compatibility)
+ *
+ * After migration is complete, switch to requireAppAccess with required tenantId.
+ *
+ * @throws Error if tenantId is provided but user doesn't have access
+ */
+export async function verifyTenantAccess(
+  ctx: QueryCtx | MutationCtx,
+  tenantId: Id<'apps'> | undefined,
+): Promise<void> {
+  if (!tenantId) {
+    // During migration, allow queries without tenantId
+    // TODO: Remove this fallback after migration is complete
+    return;
+  }
+
+  await requireAppAccess(ctx, tenantId);
+}
+
+/**
  * Query to check if current user has access to specified app
  * Used by frontend to determine what to show
  */

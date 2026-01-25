@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
 
@@ -122,6 +123,9 @@ export const getBookmarkStatusForQuestions = query({
 export const getBookmarkedQuestionIds = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
     const { db } = ctx;
 
@@ -150,6 +154,9 @@ export const getBookmarkedQuestionIds = query({
 export const getBookmarkedQuestions = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
     const { db } = ctx;
 

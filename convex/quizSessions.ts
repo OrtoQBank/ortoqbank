@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
 
@@ -297,6 +298,9 @@ export const completeQuizSession = mutation({
 export const listIncompleteSessions = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Query for all incomplete sessions for this user
@@ -343,6 +347,9 @@ export const getCompletedSessions = query({
 export const getAllCompletedSessions = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Get all completed sessions for this user, ordered by newest first
@@ -377,6 +384,9 @@ export const getCompletedQuizIds = query({
     }),
   ),
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     let summaries;

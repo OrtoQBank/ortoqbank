@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAppModerator } from './auth';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 
 export const createWaitlistEntry = mutation({
   args: {

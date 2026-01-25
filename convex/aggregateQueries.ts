@@ -16,6 +16,7 @@ import {
   query,
   type QueryCtx,
 } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import {
   questionCountByGroup,
   questionCountBySubtheme,
@@ -133,6 +134,9 @@ export const getTotalQuestionCountQuery = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.tenantId) {
       return 0;
     }
@@ -298,6 +302,9 @@ export const getQuestionCountByFilter = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.tenantId) {
       return 0;
     }
@@ -331,6 +338,9 @@ export const getQuestionCountBySelection = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.tenantId) {
       return 0;
     }
@@ -592,6 +602,9 @@ export const getAllQuestionCounts = query({
     bookmarked: v.number(),
   }),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.tenantId) {
       return { all: 0, unanswered: 0, incorrect: 0, bookmarked: 0 };
     }
@@ -627,6 +640,9 @@ export const getRandomQuestions = query({
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.tenantId) {
       return [];
     }
@@ -738,6 +754,9 @@ export const getRandomQuestionsByUserModeOptimized = query({
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     // For incorrect and bookmarked modes, use hierarchical aggregates for O(log n) performance
     if (args.mode === 'incorrect' || args.mode === 'bookmarked') {
       return await getRandomFromHierarchicalAggregates(ctx, args as any);
@@ -1058,6 +1077,9 @@ export const getBatchQuestionCountsBySelection = query({
       count: number;
     }>;
   }> => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.tenantId) {
       return { totalCount: 0, individualCounts: [] };
     }

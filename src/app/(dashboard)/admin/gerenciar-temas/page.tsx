@@ -4,6 +4,7 @@ import { useMutation } from 'convex/react';
 import { Check, ChevronRight, Edit, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { useTenant } from '@/components/providers/TenantProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -91,6 +92,7 @@ export default function GerenciarTemas() {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
   // Use tenant-aware query for hierarchical data
   const hierarchicalData = useTenantQuery(api.themes.getHierarchicalData, {});
@@ -117,7 +119,7 @@ export default function GerenciarTemas() {
     : [];
 
   const handleCreateTheme = async () => {
-    if (!newTheme.trim()) return;
+    if (!newTheme.trim() || !tenantId) return;
     try {
       // Ensure prefix is properly sanitized before saving
       const sanitizedPrefix = newThemePrefix
@@ -125,6 +127,7 @@ export default function GerenciarTemas() {
         : '';
 
       await createTheme({
+        tenantId,
         name: newTheme,
         prefix: sanitizedPrefix || generateDefaultPrefix(newTheme, 3),
       });
@@ -144,7 +147,7 @@ export default function GerenciarTemas() {
   };
 
   const handleCreateSubtheme = async () => {
-    if (!newSubtheme.trim() || !selectedTheme) return;
+    if (!newSubtheme.trim() || !selectedTheme || !tenantId) return;
     try {
       // Ensure prefix is properly sanitized before saving
       const sanitizedPrefix = newSubthemePrefix
@@ -152,6 +155,7 @@ export default function GerenciarTemas() {
         : '';
 
       await createSubtheme({
+        tenantId,
         name: newSubtheme,
         themeId: selectedTheme as Id<'themes'>,
         prefix: sanitizedPrefix || generateDefaultPrefix(newSubtheme, 2),
@@ -172,7 +176,7 @@ export default function GerenciarTemas() {
   };
 
   const handleCreateGroup = async () => {
-    if (!newGroup.trim() || !selectedSubtheme) return;
+    if (!newGroup.trim() || !selectedSubtheme || !tenantId) return;
     try {
       // Ensure prefix is properly sanitized before saving
       const sanitizedPrefix = newGroupPrefix
@@ -180,6 +184,7 @@ export default function GerenciarTemas() {
         : '';
 
       await createGroup({
+        tenantId,
         name: newGroup,
         subthemeId: selectedSubtheme as Id<'subthemes'>,
         prefix: sanitizedPrefix || generateDefaultPrefix(newGroup, 1),
