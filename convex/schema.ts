@@ -357,7 +357,9 @@ export default defineSchema({
       'subthemeId',
       'isIncorrect',
     ])
-    .index('by_user_group_incorrect', ['userId', 'groupId', 'isIncorrect']),
+    .index('by_user_group_incorrect', ['userId', 'groupId', 'isIncorrect'])
+    // Index for finding all stats for a specific question (used when updating question taxonomy)
+    .index('by_question', ['questionId']),
 
   // Table for pre-computed user statistics counts (Performance optimization)
   userStatsCounts: defineTable({

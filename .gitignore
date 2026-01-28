@@ -62,3 +62,5 @@ node_modules/
 .sentryclirc
 
 notes.txt
+# next-agents-md
+.next-docs/

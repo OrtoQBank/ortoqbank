@@ -11,12 +11,12 @@ import {
   query,
 } from './_generated/server';
 import { questionCountByTheme, totalQuestionCount } from './aggregates';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 import {
   _internalDeleteQuestion,
   _internalInsertQuestion,
   _internalUpdateQuestion,
 } from './questionsAggregateSync';
-import { requireAppModerator, verifyTenantAccess } from './auth';
 import { validateNoBlobs } from './utils';
 // Question stats are now handled by aggregates and triggers
 
@@ -478,7 +478,10 @@ export const countQuestionsByMode = query({
       incorrectStats = await ctx.db
         .query('userQuestionStats')
         .withIndex('by_tenant_and_user_incorrect', q =>
-          q.eq('tenantId', tenantId).eq('userId', user._id).eq('isIncorrect', true),
+          q
+            .eq('tenantId', tenantId)
+            .eq('userId', user._id)
+            .eq('isIncorrect', true),
         )
         .collect();
     } else {

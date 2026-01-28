@@ -258,14 +258,11 @@ export async function _internalUpdateQuestion(
     // UPDATE DENORMALIZED TAXONOMY FIELDS IN RELATED TABLES
     // ============================================================================
 
-    // Query all userQuestionStats for this question (no direct by_question index, so we use by_user_question)
-    // We need to iterate through all stats - this is acceptable since taxonomy changes are rare admin operations
-    const allUserQuestionStats = await ctx.db
+    // Use the by_question index for efficient O(log n) lookup
+    const questionStats = await ctx.db
       .query('userQuestionStats')
+      .withIndex('by_question', q => q.eq('questionId', id))
       .collect();
-    const questionStats = allUserQuestionStats.filter(
-      stat => stat.questionId === id,
-    );
 
     if (questionStats.length > 0) {
       console.log(
