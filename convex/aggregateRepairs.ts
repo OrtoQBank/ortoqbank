@@ -185,9 +185,11 @@ export const internalRepairProcessQuestionsBatchGlobal = internalMutation({
 
 /**
  * Process theme aggregates batch (15-second safe)
+ * Uses composite namespace: "tenantId:themeId"
  */
 export const internalRepairProcessThemeAggregatesBatch = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     themeIds: v.array(v.id('themes')),
   },
   returns: v.object({
@@ -197,12 +199,15 @@ export const internalRepairProcessThemeAggregatesBatch = internalMutation({
     let processed = 0;
 
     for (const themeId of args.themeIds) {
-      // Clear theme aggregate
-      await questionCountByTheme.clear(ctx, { namespace: themeId });
-      // Get questions for this theme
+      // Clear theme aggregate with composite namespace
+      const namespace = `${args.tenantId}:${themeId}`;
+      await questionCountByTheme.clear(ctx, { namespace });
+      // Get questions for this theme (tenant-scoped)
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_theme', q => q.eq('themeId', themeId))
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', themeId),
+        )
         .collect();
 
       // Insert all questions for this theme
@@ -220,9 +225,11 @@ export const internalRepairProcessThemeAggregatesBatch = internalMutation({
 
 /**
  * Process subtheme aggregates batch (15-second safe)
+ * Uses composite namespace: "tenantId:subthemeId"
  */
 export const internalRepairProcessSubthemeAggregatesBatch = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     subthemeIds: v.array(v.id('subthemes')),
   },
   returns: v.object({
@@ -232,13 +239,16 @@ export const internalRepairProcessSubthemeAggregatesBatch = internalMutation({
     let processed = 0;
 
     for (const subthemeId of args.subthemeIds) {
-      // Clear subtheme aggregate
-      await questionCountBySubtheme.clear(ctx, { namespace: subthemeId });
+      // Clear subtheme aggregate with composite namespace
+      const namespace = `${args.tenantId}:${subthemeId}`;
+      await questionCountBySubtheme.clear(ctx, { namespace });
 
-      // Get questions for this subtheme
+      // Get questions for this subtheme (tenant-scoped)
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', subthemeId),
+        )
         .collect();
 
       // Insert all questions for this subtheme
@@ -258,9 +268,11 @@ export const internalRepairProcessSubthemeAggregatesBatch = internalMutation({
 
 /**
  * Process group aggregates batch (15-second safe)
+ * Uses composite namespace: "tenantId:groupId"
  */
 export const internalRepairProcessGroupAggregatesBatch = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     groupIds: v.array(v.id('groups')),
   },
   returns: v.object({
@@ -270,13 +282,16 @@ export const internalRepairProcessGroupAggregatesBatch = internalMutation({
     let processed = 0;
 
     for (const groupId of args.groupIds) {
-      // Clear group aggregate
-      await questionCountByGroup.clear(ctx, { namespace: groupId });
+      // Clear group aggregate with composite namespace
+      const namespace = `${args.tenantId}:${groupId}`;
+      await questionCountByGroup.clear(ctx, { namespace });
 
-      // Get questions for this group
+      // Get questions for this group (tenant-scoped)
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_group', q => q.eq('groupId', groupId))
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', groupId),
+        )
         .collect();
 
       // Insert all questions for this group
@@ -395,10 +410,12 @@ export const internalRepairProcessQuestionsBatchRandom = internalMutation({
 
 /**
  * Process theme random aggregates batch (15-second safe)
+ * Uses composite namespace: "tenantId:themeId"
  */
 export const internalRepairProcessThemeRandomAggregatesBatch = internalMutation(
   {
     args: {
+      tenantId: v.id('apps'),
       themeIds: v.array(v.id('themes')),
     },
     returns: v.object({
@@ -408,12 +425,15 @@ export const internalRepairProcessThemeRandomAggregatesBatch = internalMutation(
       let processed = 0;
 
       for (const themeId of args.themeIds) {
-        // Clear theme random aggregate
-        await randomQuestionsByTheme.clear(ctx, { namespace: themeId });
-        // Get questions for this theme
+        // Clear theme random aggregate with composite namespace
+        const namespace = `${args.tenantId}:${themeId}`;
+        await randomQuestionsByTheme.clear(ctx, { namespace });
+        // Get questions for this theme (tenant-scoped)
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_theme', q => q.eq('themeId', themeId))
+          .withIndex('by_tenant_and_theme', q =>
+            q.eq('tenantId', args.tenantId).eq('themeId', themeId),
+          )
           .collect();
 
         // Insert all questions for this theme
@@ -433,17 +453,23 @@ export const internalRepairProcessThemeRandomAggregatesBatch = internalMutation(
 );
 
 // 15s-safe: process one theme's random aggregate in pages
+// Uses composite namespace: "tenantId:themeId"
 export const internalRepairClearThemeRandomAggregate = internalMutation({
-  args: { themeId: v.id('themes') },
+  args: {
+    tenantId: v.id('apps'),
+    themeId: v.id('themes'),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await randomQuestionsByTheme.clear(ctx, { namespace: args.themeId });
+    const namespace = `${args.tenantId}:${args.themeId}`;
+    await randomQuestionsByTheme.clear(ctx, { namespace });
     return null;
   },
 });
 
 export const internalRepairProcessThemeRandomPage = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     themeId: v.id('themes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
@@ -457,7 +483,9 @@ export const internalRepairProcessThemeRandomPage = internalMutation({
     const batchSize = args.batchSize || 25;
     const result = await ctx.db
       .query('questions')
-      .withIndex('by_theme', q => q.eq('themeId', args.themeId))
+      .withIndex('by_tenant_and_theme', q =>
+        q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+      )
       .paginate({ cursor: args.cursor, numItems: batchSize });
 
     for (const question of result.page) {
@@ -474,10 +502,12 @@ export const internalRepairProcessThemeRandomPage = internalMutation({
 
 /**
  * Process subtheme random aggregates batch (15-second safe)
+ * Uses composite namespace: "tenantId:subthemeId"
  */
 export const internalRepairProcessSubthemeRandomAggregatesBatch =
   internalMutation({
     args: {
+      tenantId: v.id('apps'),
       subthemeIds: v.array(v.id('subthemes')),
     },
     returns: v.object({
@@ -487,13 +517,16 @@ export const internalRepairProcessSubthemeRandomAggregatesBatch =
       let processed = 0;
 
       for (const subthemeId of args.subthemeIds) {
-        // Clear subtheme random aggregate
-        await randomQuestionsBySubtheme.clear(ctx, { namespace: subthemeId });
+        // Clear subtheme random aggregate with composite namespace
+        const namespace = `${args.tenantId}:${subthemeId}`;
+        await randomQuestionsBySubtheme.clear(ctx, { namespace });
 
-        // Get questions for this subtheme
+        // Get questions for this subtheme (tenant-scoped)
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+          .withIndex('by_tenant_and_subtheme', q =>
+            q.eq('tenantId', args.tenantId).eq('subthemeId', subthemeId),
+          )
           .collect();
 
         // Insert all questions for this subtheme
@@ -511,17 +544,23 @@ export const internalRepairProcessSubthemeRandomAggregatesBatch =
     },
   });
 
+// Uses composite namespace: "tenantId:subthemeId"
 export const internalRepairClearSubthemeRandomAggregate = internalMutation({
-  args: { subthemeId: v.id('subthemes') },
+  args: {
+    tenantId: v.id('apps'),
+    subthemeId: v.id('subthemes'),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await randomQuestionsBySubtheme.clear(ctx, { namespace: args.subthemeId });
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
+    await randomQuestionsBySubtheme.clear(ctx, { namespace });
     return null;
   },
 });
 
 export const internalRepairProcessSubthemeRandomPage = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     subthemeId: v.id('subthemes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
@@ -535,7 +574,9 @@ export const internalRepairProcessSubthemeRandomPage = internalMutation({
     const batchSize = args.batchSize || 25;
     const result = await ctx.db
       .query('questions')
-      .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId))
+      .withIndex('by_tenant_and_subtheme', q =>
+        q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+      )
       .paginate({ cursor: args.cursor, numItems: batchSize });
 
     for (const question of result.page) {
@@ -552,10 +593,12 @@ export const internalRepairProcessSubthemeRandomPage = internalMutation({
 
 /**
  * Process group random aggregates batch (15-second safe)
+ * Uses composite namespace: "tenantId:groupId"
  */
 export const internalRepairProcessGroupRandomAggregatesBatch = internalMutation(
   {
     args: {
+      tenantId: v.id('apps'),
       groupIds: v.array(v.id('groups')),
     },
     returns: v.object({
@@ -565,13 +608,16 @@ export const internalRepairProcessGroupRandomAggregatesBatch = internalMutation(
       let processed = 0;
 
       for (const groupId of args.groupIds) {
-        // Clear group random aggregate
-        await randomQuestionsByGroup.clear(ctx, { namespace: groupId });
+        // Clear group random aggregate with composite namespace
+        const namespace = `${args.tenantId}:${groupId}`;
+        await randomQuestionsByGroup.clear(ctx, { namespace });
 
-        // Get questions for this group
+        // Get questions for this group (tenant-scoped)
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_group', q => q.eq('groupId', groupId))
+          .withIndex('by_tenant_and_group', q =>
+            q.eq('tenantId', args.tenantId).eq('groupId', groupId),
+          )
           .collect();
 
         // Insert all questions for this group
@@ -590,17 +636,23 @@ export const internalRepairProcessGroupRandomAggregatesBatch = internalMutation(
   },
 );
 
+// Uses composite namespace: "tenantId:groupId"
 export const internalRepairClearGroupRandomAggregate = internalMutation({
-  args: { groupId: v.id('groups') },
+  args: {
+    tenantId: v.id('apps'),
+    groupId: v.id('groups'),
+  },
   returns: v.null(),
   handler: async (ctx, args) => {
-    await randomQuestionsByGroup.clear(ctx, { namespace: args.groupId });
+    const namespace = `${args.tenantId}:${args.groupId}`;
+    await randomQuestionsByGroup.clear(ctx, { namespace });
     return null;
   },
 });
 
 export const internalRepairProcessGroupRandomPage = internalMutation({
   args: {
+    tenantId: v.id('apps'),
     groupId: v.id('groups'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
@@ -614,7 +666,9 @@ export const internalRepairProcessGroupRandomPage = internalMutation({
     const batchSize = args.batchSize || 25;
     const result = await ctx.db
       .query('questions')
-      .withIndex('by_group', q => q.eq('groupId', args.groupId))
+      .withIndex('by_tenant_and_group', q =>
+        q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+      )
       .paginate({ cursor: args.cursor, numItems: batchSize });
 
     for (const question of result.page) {
@@ -652,7 +706,7 @@ export const internalRepairProcessGroupRandomPage = internalMutation({
  * It handles:
  * - Total question count (namespaced by tenantId)
  * - Random question selection (namespaced by tenantId)
- * - Theme/subtheme/group counts (namespaced by their IDs)
+ * - Theme/subtheme/group counts (namespaced by "tenantId:entityId" composite key)
  *
  * Usage:
  *   npx convex run aggregateRepairs:repairTenantAggregates '{"tenantId":"<tenant-id>"}'
@@ -691,18 +745,22 @@ export const repairTenantAggregates = mutation({
     console.log(`Processed ${questions.length} questions for tenant`);
 
     // Step 3: Get all themes for this tenant and rebuild their aggregates
+    // Use composite namespace: "tenantId:themeId"
     const themes = await ctx.db
       .query('themes')
       .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
       .collect();
 
     for (const theme of themes) {
-      await questionCountByTheme.clear(ctx, { namespace: theme._id });
-      await randomQuestionsByTheme.clear(ctx, { namespace: theme._id });
+      const themeNamespace = `${args.tenantId}:${theme._id}`;
+      await questionCountByTheme.clear(ctx, { namespace: themeNamespace });
+      await randomQuestionsByTheme.clear(ctx, { namespace: themeNamespace });
 
       const themeQuestions = await ctx.db
         .query('questions')
-        .withIndex('by_theme', q => q.eq('themeId', theme._id))
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', theme._id),
+        )
         .collect();
 
       for (const q of themeQuestions) {
@@ -714,18 +772,26 @@ export const repairTenantAggregates = mutation({
     console.log(`Processed ${themes.length} themes`);
 
     // Step 4: Get all subthemes for this tenant and rebuild their aggregates
+    // Use composite namespace: "tenantId:subthemeId"
     const subthemes = await ctx.db
       .query('subthemes')
       .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
       .collect();
 
     for (const subtheme of subthemes) {
-      await questionCountBySubtheme.clear(ctx, { namespace: subtheme._id });
-      await randomQuestionsBySubtheme.clear(ctx, { namespace: subtheme._id });
+      const subthemeNamespace = `${args.tenantId}:${subtheme._id}`;
+      await questionCountBySubtheme.clear(ctx, {
+        namespace: subthemeNamespace,
+      });
+      await randomQuestionsBySubtheme.clear(ctx, {
+        namespace: subthemeNamespace,
+      });
 
       const subthemeQuestions = await ctx.db
         .query('questions')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', subtheme._id),
+        )
         .collect();
 
       for (const q of subthemeQuestions) {
@@ -737,18 +803,22 @@ export const repairTenantAggregates = mutation({
     console.log(`Processed ${subthemes.length} subthemes`);
 
     // Step 5: Get all groups for this tenant and rebuild their aggregates
+    // Use composite namespace: "tenantId:groupId"
     const groups = await ctx.db
       .query('groups')
       .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
       .collect();
 
     for (const group of groups) {
-      await questionCountByGroup.clear(ctx, { namespace: group._id });
-      await randomQuestionsByGroup.clear(ctx, { namespace: group._id });
+      const groupNamespace = `${args.tenantId}:${group._id}`;
+      await questionCountByGroup.clear(ctx, { namespace: groupNamespace });
+      await randomQuestionsByGroup.clear(ctx, { namespace: groupNamespace });
 
       const groupQuestions = await ctx.db
         .query('questions')
-        .withIndex('by_group', q => q.eq('groupId', group._id))
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', group._id),
+        )
         .collect();
 
       for (const q of groupQuestions) {
@@ -786,7 +856,7 @@ export const repairAllAggregates = mutation({
     totalQuestions: v.number(),
     message: v.string(),
   }),
-  handler: async (ctx) => {
+  handler: async ctx => {
     const startTime = Date.now();
     console.log('Starting aggregate repair for all tenants...');
 
@@ -815,19 +885,22 @@ export const repairAllAggregates = mutation({
 
       totalQuestions += questions.length;
 
-      // Process themes
+      // Process themes with composite namespace: "tenantId:themeId"
       const themes = await ctx.db
         .query('themes')
         .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
         .collect();
 
       for (const theme of themes) {
-        await questionCountByTheme.clear(ctx, { namespace: theme._id });
-        await randomQuestionsByTheme.clear(ctx, { namespace: theme._id });
+        const themeNamespace = `${tenant._id}:${theme._id}`;
+        await questionCountByTheme.clear(ctx, { namespace: themeNamespace });
+        await randomQuestionsByTheme.clear(ctx, { namespace: themeNamespace });
 
         const themeQuestions = await ctx.db
           .query('questions')
-          .withIndex('by_theme', q => q.eq('themeId', theme._id))
+          .withIndex('by_tenant_and_theme', q =>
+            q.eq('tenantId', tenant._id).eq('themeId', theme._id),
+          )
           .collect();
 
         for (const q of themeQuestions) {
@@ -836,21 +909,26 @@ export const repairAllAggregates = mutation({
         }
       }
 
-      // Process subthemes
+      // Process subthemes with composite namespace: "tenantId:subthemeId"
       const subthemes = await ctx.db
         .query('subthemes')
         .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
         .collect();
 
       for (const subtheme of subthemes) {
-        await questionCountBySubtheme.clear(ctx, { namespace: subtheme._id });
+        const subthemeNamespace = `${tenant._id}:${subtheme._id}`;
+        await questionCountBySubtheme.clear(ctx, {
+          namespace: subthemeNamespace,
+        });
         await randomQuestionsBySubtheme.clear(ctx, {
-          namespace: subtheme._id,
+          namespace: subthemeNamespace,
         });
 
         const subthemeQuestions = await ctx.db
           .query('questions')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subtheme._id))
+          .withIndex('by_tenant_and_subtheme', q =>
+            q.eq('tenantId', tenant._id).eq('subthemeId', subtheme._id),
+          )
           .collect();
 
         for (const q of subthemeQuestions) {
@@ -859,19 +937,22 @@ export const repairAllAggregates = mutation({
         }
       }
 
-      // Process groups
+      // Process groups with composite namespace: "tenantId:groupId"
       const groups = await ctx.db
         .query('groups')
         .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
         .collect();
 
       for (const group of groups) {
-        await questionCountByGroup.clear(ctx, { namespace: group._id });
-        await randomQuestionsByGroup.clear(ctx, { namespace: group._id });
+        const groupNamespace = `${tenant._id}:${group._id}`;
+        await questionCountByGroup.clear(ctx, { namespace: groupNamespace });
+        await randomQuestionsByGroup.clear(ctx, { namespace: groupNamespace });
 
         const groupQuestions = await ctx.db
           .query('questions')
-          .withIndex('by_group', q => q.eq('groupId', group._id))
+          .withIndex('by_tenant_and_group', q =>
+            q.eq('tenantId', tenant._id).eq('groupId', group._id),
+          )
           .collect();
 
         for (const q of groupQuestions) {

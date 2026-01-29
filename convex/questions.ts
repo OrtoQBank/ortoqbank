@@ -1,32 +1,13 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
-import { api, internal } from './_generated/api';
-import { Doc } from './_generated/dataModel';
-import {
-  // Keep these for defining the actual mutations/queries
-  internalAction,
-  internalMutation,
-  mutation,
-  query,
-} from './_generated/server';
-import { questionCountByTheme, totalQuestionCount } from './aggregates';
+import { query } from './_generated/server';
+import { questionCountByTheme } from './aggregates';
 import { requireAppModerator, verifyTenantAccess } from './auth';
-import {
-  _internalDeleteQuestion,
-  _internalInsertQuestion,
-  _internalUpdateQuestion,
-} from './questionsAggregateSync';
+import { mutationWithTriggers } from './functions';
+import { updateTaxonomyDenormalization } from './questionsTaxonomySync';
 import { validateNoBlobs } from './utils';
-// Question stats are now handled by aggregates and triggers
-
-// Helper function to stringify content if it's an object
-function stringifyContent(content: any): string {
-  if (typeof content === 'string') {
-    return content; // Already a string
-  }
-  return JSON.stringify(content);
-}
+// Question aggregates are now handled automatically via triggers in functions.ts
 
 // =============================================================================
 // QUESTION CONTENT QUERIES
@@ -105,7 +86,7 @@ export const getQuestionContentBatch = query({
   },
 });
 
-export const create = mutation({
+export const create = mutationWithTriggers({
   args: {
     // Multi-tenancy
     tenantId: v.id('apps'),
@@ -194,19 +175,17 @@ export const create = mutation({
       contentMigrated: true,
     };
 
-    // Store heavy content ONLY in questionContent table
-    const contentData = {
+    // Insert question - triggers automatically update all 8 aggregates
+    const questionId = await ctx.db.insert('questions', questionData);
+
+    // Store heavy content in questionContent table (separate from aggregates)
+    await ctx.db.insert('questionContent', {
+      questionId,
       questionTextString: args.questionTextString,
       explanationTextString: args.explanationTextString,
       alternatives: args.alternatives,
-    };
+    });
 
-    // Use the helper function (stores in both tables)
-    const questionId = await _internalInsertQuestion(
-      ctx,
-      questionData,
-      contentData,
-    );
     return questionId;
   },
 });
@@ -298,7 +277,7 @@ export const getById = query({
   },
 });
 
-export const update = mutation({
+export const update = mutationWithTriggers({
   args: {
     id: v.id('questions'),
     // Accept stringified content from frontend
@@ -371,8 +350,20 @@ export const update = mutation({
       alternativeCount: alternatives.length,
     };
 
-    // Use the helper function for question table (no heavy content)
-    await _internalUpdateQuestion(ctx, id, updates);
+    // Update question - triggers automatically handle aggregate sync
+    await ctx.db.patch(id, updates);
+
+    // Get the updated question for denormalization
+    const updatedQuestion = await ctx.db.get(id);
+    if (updatedQuestion) {
+      // Update denormalized taxonomy fields in related tables (userQuestionStats, userBookmarks, userStatsCounts)
+      await updateTaxonomyDenormalization(
+        ctx,
+        id,
+        existingQuestion,
+        updatedQuestion,
+      );
+    }
 
     // Update heavy content in questionContent table ONLY
     const existingContent = await ctx.db
@@ -547,7 +538,7 @@ export const getQuestionCountForTheme = query({
   },
 });
 
-export const deleteQuestion = mutation({
+export const deleteQuestion = mutationWithTriggers({
   args: { id: v.id('questions') },
   handler: async (ctx, args) => {
     // Get the existing question to check tenant
@@ -579,54 +570,19 @@ export const deleteQuestion = mutation({
       }
     }
 
-    // Then delete the question itself using the helper function
-    const success = await _internalDeleteQuestion(ctx, args.id);
-    return success;
-  },
-});
+    // Delete associated questionContent record first
+    const questionContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', args.id))
+      .first();
 
-// --- Backfill Action ---
-// This action should be run manually ONCE after deployment
-// to populate the aggregate with existing question data.
-export const backfillThemeCounts = internalAction({
-  handler: async ctx => {
-    console.log('Starting backfill for question theme counts...');
-    let count = 0;
-    // Fetch all existing questions using api (no tenantId filter to backfill all)
-    const questions = await ctx.runQuery(api.questions.listAll, {});
-
-    // Iterate and insert each question into the aggregate using internal
-    for (const questionDoc of questions) {
-      try {
-        await ctx.runMutation(internal.questions.insertIntoThemeAggregate, {
-          questionDoc,
-        });
-        count++;
-      } catch (error) {
-        console.error(
-          `Failed to insert question ${questionDoc._id} into theme aggregate:`,
-          error,
-        );
-      }
+    if (questionContent) {
+      await ctx.db.delete(questionContent._id);
     }
 
-    console.log(
-      `Successfully backfilled ${count} questions into theme aggregate.`,
-    );
-    return { count };
-  },
-});
-
-// Helper internal mutation for the backfill action to call
-// Using a mutation ensures atomicity for each aggregate insert
-export const insertIntoThemeAggregate = internalMutation({
-  args: { questionDoc: v.any() }, // Pass the whole doc
-  handler: async (ctx, args) => {
-    // We need to cast the doc because internal mutations don't
-    // have full type inference across action/mutation boundary easily.
-    const questionDoc = args.questionDoc as Doc<'questions'>;
-    await questionCountByTheme.insert(ctx, questionDoc);
-    await totalQuestionCount.insert(ctx, questionDoc);
+    // Delete the question - triggers automatically handle aggregate sync
+    await ctx.db.delete(args.id);
+    return true;
   },
 });
 

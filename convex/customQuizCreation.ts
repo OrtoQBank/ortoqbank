@@ -293,9 +293,10 @@ async function collectAllModeQuestions(
     });
   }
 
-  // With filters: use hierarchy-aware aggregate selection
+  // With filters: use hierarchy-aware aggregate selection (tenant-scoped)
   return collectHierarchyFilteredQuestionsViaAggregates(
     ctx,
+    tenantId,
     selectedThemes,
     selectedSubthemes,
     selectedGroups,
@@ -308,9 +309,11 @@ async function collectAllModeQuestions(
 /**
  * Hierarchy-aware aggregate selection for 'all' mode with filters.
  * Handles hierarchy overrides: groups > subthemes > themes.
+ * Multi-tenant: tenantId ensures questions are scoped to current tenant.
  */
 async function collectHierarchyFilteredQuestionsViaAggregates(
   ctx: QueryCtx | MutationCtx,
+  tenantId: Id<'apps'>,
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
@@ -329,12 +332,13 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
       subthemeParents,
     );
 
-  // Collect IDs from each level in parallel
+  // Collect IDs from each level in parallel (all tenant-scoped)
   const [groupResults, subthemeResults, themeResults] = await Promise.all([
     // Groups: always include all selected groups
     Promise.all(
       selectedGroups.map(groupId =>
         ctx.runQuery(api.aggregateQueries.getRandomQuestionsByGroup, {
+          tenantId,
           groupId,
           count: maxQuestions,
         }),
@@ -344,6 +348,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
     // Subthemes: include complement for overridden ones, full for effective ones
     collectSubthemeQuestions(
       ctx,
+      tenantId,
       selectedSubthemes,
       effectiveSubthemes,
       groupsBySubtheme,
@@ -354,6 +359,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
     Promise.all(
       effectiveThemes.map(themeId =>
         ctx.runQuery(api.aggregateQueries.getRandomQuestionsByTheme, {
+          tenantId,
           themeId,
           count: maxQuestions,
         }),
@@ -691,9 +697,11 @@ async function computeEffectiveHierarchy(
 /**
  * Collect subtheme questions handling the group override case.
  * For subthemes with selected groups, only include the complement.
+ * Multi-tenant: tenantId ensures questions are scoped to current tenant.
  */
 async function collectSubthemeQuestions(
   ctx: QueryCtx | MutationCtx,
+  tenantId: Id<'apps'>,
   selectedSubthemes: Id<'subthemes'>[],
   effectiveSubthemes: Set<Id<'subthemes'>> | Id<'subthemes'>[],
   groupsBySubtheme: Map<Id<'subthemes'>, Set<Id<'groups'>>>,
@@ -712,9 +720,12 @@ async function collectSubthemeQuestions(
     if (selectedGroupsForSubtheme && selectedGroupsForSubtheme.size > 0) {
       // This subtheme has selected groups - include only complement
       // (questions in subtheme but NOT in any of the selected groups)
+      // Use tenant-scoped index
       const qDocs = await ctx.db
         .query('questions')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', tenantId).eq('subthemeId', subthemeId),
+        )
         .collect();
 
       const complementIds = qDocs
@@ -723,10 +734,10 @@ async function collectSubthemeQuestions(
 
       results.push(complementIds);
     } else if (effectiveSet.has(subthemeId)) {
-      // Effective subtheme (not overridden) - use aggregate
+      // Effective subtheme (not overridden) - use tenant-scoped aggregate
       const ids = await ctx.runQuery(
         api.aggregateQueries.getRandomQuestionsBySubtheme,
-        { subthemeId, count: maxQuestions },
+        { tenantId, subthemeId, count: maxQuestions },
       );
       results.push(ids);
     }

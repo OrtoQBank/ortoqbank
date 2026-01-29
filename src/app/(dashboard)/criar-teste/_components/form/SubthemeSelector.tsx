@@ -83,9 +83,16 @@ function BookmarkedSubthemeCount({ subthemeId }: { subthemeId: string }) {
 }
 
 function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
-  const count = useQuery(api.aggregateQueries.getSubthemeQuestionCountQuery, {
-    subthemeId: subthemeId as Id<'subthemes'>,
-  });
+  const { tenantId } = useFormContext();
+  const count = useQuery(
+    api.aggregateQueries.getSubthemeQuestionCountQuery,
+    tenantId
+      ? {
+          tenantId,
+          subthemeId: subthemeId as Id<'subthemes'>,
+        }
+      : 'skip',
+  );
 
   if (count === undefined) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
@@ -99,10 +106,16 @@ function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
 }
 
 function UnansweredSubthemeCount({ subthemeId }: { subthemeId: string }) {
-  const total = useQuery(api.aggregateQueries.getSubthemeQuestionCountQuery, {
-    subthemeId: subthemeId as Id<'subthemes'>,
-  });
-  const { userCountsForQuizCreation, isLoading } = useFormContext();
+  const { tenantId, userCountsForQuizCreation, isLoading } = useFormContext();
+  const total = useQuery(
+    api.aggregateQueries.getSubthemeQuestionCountQuery,
+    tenantId
+      ? {
+          tenantId,
+          subthemeId: subthemeId as Id<'subthemes'>,
+        }
+      : 'skip',
+  );
 
   if (total === undefined || isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
@@ -173,9 +186,16 @@ function BookmarkedGroupCount({ groupId }: { groupId: string }) {
 }
 
 function StandardGroupCount({ groupId }: { groupId: string }) {
-  const count = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
-    groupId: groupId as Id<'groups'>,
-  });
+  const { tenantId } = useFormContext();
+  const count = useQuery(
+    api.aggregateQueries.getGroupQuestionCountQuery,
+    tenantId
+      ? {
+          tenantId,
+          groupId: groupId as Id<'groups'>,
+        }
+      : 'skip',
+  );
 
   if (count === undefined) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;
@@ -189,10 +209,16 @@ function StandardGroupCount({ groupId }: { groupId: string }) {
 }
 
 function UnansweredGroupCount({ groupId }: { groupId: string }) {
-  const total = useQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
-    groupId: groupId as Id<'groups'>,
-  });
-  const { userCountsForQuizCreation, isLoading } = useFormContext();
+  const { tenantId, userCountsForQuizCreation, isLoading } = useFormContext();
+  const total = useQuery(
+    api.aggregateQueries.getGroupQuestionCountQuery,
+    tenantId
+      ? {
+          tenantId,
+          groupId: groupId as Id<'groups'>,
+        }
+      : 'skip',
+  );
 
   if (total === undefined || isLoading || !userCountsForQuizCreation) {
     return <span className="ml-1 text-xs text-gray-400">...</span>;

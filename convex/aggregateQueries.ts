@@ -10,13 +10,7 @@ import { v } from 'convex/values';
 
 import { api } from './_generated/api';
 import { Id } from './_generated/dataModel';
-import {
-  mutation,
-  type MutationCtx,
-  query,
-  type QueryCtx,
-} from './_generated/server';
-import { verifyTenantAccess } from './auth';
+import { query, type QueryCtx } from './_generated/server';
 import {
   questionCountByGroup,
   questionCountBySubtheme,
@@ -27,12 +21,10 @@ import {
   randomQuestionsByTheme,
   totalQuestionCount,
 } from './aggregates';
+import { verifyTenantAccess } from './auth';
 import { getCurrentUserOrThrow } from './users';
 import {
   getUserAnsweredCount,
-  getUserAnsweredCountByGroup,
-  getUserAnsweredCountBySubtheme,
-  getUserAnsweredCountByTheme,
   getUserBookmarksCount,
   getUserBookmarksCountByGroup,
   getUserBookmarksCountBySubtheme,
@@ -42,7 +34,6 @@ import {
   getUserIncorrectCountBySubtheme,
   getUserIncorrectCountByTheme,
 } from './userStatsCounts';
-import { getWeekString } from './utils';
 
 // ----------------------------------------------------------------------------
 // Internal helpers (keep public APIs unchanged)
@@ -150,9 +141,10 @@ export const getTotalQuestionCountQuery = query({
   },
 });
 
-// Query function to get theme question count using proven aggregate
+// Query function to get theme question count using proven aggregate (tenant-scoped)
 export const getThemeQuestionCountQuery = query({
   args: {
+    tenantId: v.id('apps'),
     themeId: v.id('themes'),
     bounds: v.optional(
       v.object({
@@ -173,69 +165,82 @@ export const getThemeQuestionCountQuery = query({
   },
   returns: v.number(),
   handler: async (ctx, args) => {
-    // Use the working aggregate pattern from questions.ts
+    // Use composite namespace: "tenantId:themeId"
+    const namespace = `${args.tenantId}:${args.themeId}`;
     try {
       const count = await questionCountByTheme.count(ctx, {
-        namespace: args.themeId,
+        namespace,
         bounds: (args.bounds || {}) as any,
       });
       return count;
     } catch (error) {
       console.warn(`Aggregate failed for theme ${args.themeId}:`, error);
-      // Fallback to efficient index-based query
+      // Fallback to efficient index-based query (tenant-scoped)
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_theme', q => q.eq('themeId', args.themeId))
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+        )
         .collect();
       return questions.length;
     }
   },
 });
 
-// Query function to get subtheme question count using aggregate
+// Query function to get subtheme question count using aggregate (tenant-scoped)
 export const getSubthemeQuestionCountQuery = query({
   args: {
+    tenantId: v.id('apps'),
     subthemeId: v.id('subthemes'),
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    // Use composite namespace: "tenantId:subthemeId"
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
     try {
       const count = await questionCountBySubtheme.count(ctx, {
-        namespace: args.subthemeId,
+        namespace,
         bounds: {} as any,
       });
       return count;
     } catch (error) {
       console.warn(`Aggregate failed for subtheme ${args.subthemeId}:`, error);
-      // Fallback to efficient index-based query
+      // Fallback to efficient index-based query (tenant-scoped)
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', args.subthemeId))
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+        )
         .collect();
       return questions.length;
     }
   },
 });
 
-// Query function to get group question count using aggregate
+// Query function to get group question count using aggregate (tenant-scoped)
 export const getGroupQuestionCountQuery = query({
   args: {
+    tenantId: v.id('apps'),
     groupId: v.id('groups'),
   },
   returns: v.number(),
   handler: async (ctx, args) => {
+    // Use composite namespace: "tenantId:groupId"
+    const namespace = `${args.tenantId}:${args.groupId}`;
     try {
       const count = await questionCountByGroup.count(ctx, {
-        namespace: args.groupId,
+        namespace,
         bounds: {} as any,
       });
       return count;
     } catch (error) {
       console.warn(`Aggregate failed for group ${args.groupId}:`, error);
-      // Fallback to efficient index-based query
+      // Fallback to efficient index-based query (tenant-scoped)
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_group', q => q.eq('groupId', args.groupId))
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+        )
         .collect();
       return questions.length;
     }
@@ -244,7 +249,7 @@ export const getGroupQuestionCountQuery = query({
 
 // Legacy user-specific aggregate query functions have been removed.
 
-// Helper functions that call these queries
+// Helper functions that call these queries (all tenant-scoped)
 export async function getTotalQuestionCount(
   ctx: QueryCtx,
   tenantId: Id<'apps'>,
@@ -256,20 +261,24 @@ export async function getTotalQuestionCount(
 
 export async function getThemeQuestionCount(
   ctx: QueryCtx,
+  tenantId: Id<'apps'>,
   themeId: Id<'themes'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
+    tenantId,
     themeId,
   });
 }
 
 export async function getSubthemeQuestionCount(
   ctx: QueryCtx,
+  tenantId: Id<'apps'>,
   subthemeId: Id<'subthemes'>,
 ): Promise<number> {
   return await ctx.runQuery(
     api.aggregateQueries.getSubthemeQuestionCountQuery,
     {
+      tenantId,
       subthemeId,
     },
   );
@@ -277,9 +286,11 @@ export async function getSubthemeQuestionCount(
 
 export async function getGroupQuestionCount(
   ctx: QueryCtx,
+  tenantId: Id<'apps'>,
   groupId: Id<'groups'>,
 ): Promise<number> {
   return await ctx.runQuery(api.aggregateQueries.getGroupQuestionCountQuery, {
+    tenantId,
     groupId,
   });
 }
@@ -376,9 +387,19 @@ export const getQuestionCountBySelection = query({
 
         try {
           if (args.filter === 'incorrect') {
-            return await getUserIncorrectCountByGroup(ctx, userId._id, args.tenantId, groupId);
+            return await getUserIncorrectCountByGroup(
+              ctx,
+              userId._id,
+              args.tenantId,
+              groupId,
+            );
           } else if (args.filter === 'bookmarked') {
-            return await getUserBookmarksCountByGroup(ctx, userId._id, args.tenantId, groupId);
+            return await getUserBookmarksCountByGroup(
+              ctx,
+              userId._id,
+              args.tenantId,
+              groupId,
+            );
           }
         } catch (error) {
           console.warn(
@@ -432,9 +453,19 @@ export const getQuestionCountBySelection = query({
 
         try {
           if (args.filter === 'incorrect') {
-            return await getUserIncorrectCountByTheme(ctx, userId._id, args.tenantId, themeId);
+            return await getUserIncorrectCountByTheme(
+              ctx,
+              userId._id,
+              args.tenantId,
+              themeId,
+            );
           } else if (args.filter === 'bookmarked') {
-            return await getUserBookmarksCountByTheme(ctx, userId._id, args.tenantId, themeId);
+            return await getUserBookmarksCountByTheme(
+              ctx,
+              userId._id,
+              args.tenantId,
+              themeId,
+            );
           }
         } catch (error) {
           console.warn(
@@ -660,24 +691,27 @@ export const getRandomQuestions = query({
 });
 
 /**
- * Get random questions from a specific theme
+ * Get random questions from a specific theme (tenant-scoped)
  */
 export const getRandomQuestionsByTheme = query({
   args: {
+    tenantId: v.id('apps'),
     themeId: v.id('themes'),
     count: v.number(),
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
+    // Use composite namespace: "tenantId:themeId"
+    const namespace = `${args.tenantId}:${args.themeId}`;
     return await selectRandomIdsFromAggregate(
       () =>
         (randomQuestionsByTheme.count as any)(ctx, {
-          namespace: args.themeId,
+          namespace,
           bounds: {},
         }),
       (index: number) =>
         (randomQuestionsByTheme.at as any)(ctx, index, {
-          namespace: args.themeId,
+          namespace,
         }),
       args.count,
     );
@@ -685,24 +719,27 @@ export const getRandomQuestionsByTheme = query({
 });
 
 /**
- * Get random questions from a specific subtheme
+ * Get random questions from a specific subtheme (tenant-scoped)
  */
 export const getRandomQuestionsBySubtheme = query({
   args: {
+    tenantId: v.id('apps'),
     subthemeId: v.id('subthemes'),
     count: v.number(),
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
+    // Use composite namespace: "tenantId:subthemeId"
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
     return await selectRandomIdsFromAggregate(
       () =>
         (randomQuestionsBySubtheme.count as any)(ctx, {
-          namespace: args.subthemeId,
+          namespace,
           bounds: {},
         }),
       (index: number) =>
         (randomQuestionsBySubtheme.at as any)(ctx, index, {
-          namespace: args.subthemeId,
+          namespace,
         }),
       args.count,
     );
@@ -710,24 +747,27 @@ export const getRandomQuestionsBySubtheme = query({
 });
 
 /**
- * Get random questions from a specific group
+ * Get random questions from a specific group (tenant-scoped)
  */
 export const getRandomQuestionsByGroup = query({
   args: {
+    tenantId: v.id('apps'),
     groupId: v.id('groups'),
     count: v.number(),
   },
   returns: v.array(v.id('questions')),
   handler: async (ctx, args) => {
+    // Use composite namespace: "tenantId:groupId"
+    const namespace = `${args.tenantId}:${args.groupId}`;
     return await selectRandomIdsFromAggregate(
       () =>
         (randomQuestionsByGroup.count as any)(ctx, {
-          namespace: args.groupId,
+          namespace,
           bounds: {},
         }),
       (index: number) =>
         (randomQuestionsByGroup.at as any)(ctx, index, {
-          namespace: args.groupId,
+          namespace,
         }),
       args.count,
     );
