@@ -168,7 +168,7 @@ export function FormContextProvider({
 
   // Fetch data once and cache it - now with tenant scoping
   const totalQuestions = useTenantQuery(
-    api.aggregateQueries.getTotalQuestionCountQuery,
+    api.aggregateCounts.getTotalQuestionCountQuery,
     isAuthenticated ? {} : 'skip',
   );
 

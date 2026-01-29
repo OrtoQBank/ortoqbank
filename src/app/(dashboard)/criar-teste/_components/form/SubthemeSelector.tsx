@@ -85,7 +85,7 @@ function BookmarkedSubthemeCount({ subthemeId }: { subthemeId: string }) {
 function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
   const { tenantId } = useFormContext();
   const count = useQuery(
-    api.aggregateQueries.getSubthemeQuestionCountQuery,
+    api.aggregateCounts.getSubthemeQuestionCountQuery,
     tenantId
       ? {
           tenantId,
@@ -108,7 +108,7 @@ function StandardSubthemeCount({ subthemeId }: { subthemeId: string }) {
 function UnansweredSubthemeCount({ subthemeId }: { subthemeId: string }) {
   const { tenantId, userCountsForQuizCreation, isLoading } = useFormContext();
   const total = useQuery(
-    api.aggregateQueries.getSubthemeQuestionCountQuery,
+    api.aggregateCounts.getSubthemeQuestionCountQuery,
     tenantId
       ? {
           tenantId,
@@ -188,7 +188,7 @@ function BookmarkedGroupCount({ groupId }: { groupId: string }) {
 function StandardGroupCount({ groupId }: { groupId: string }) {
   const { tenantId } = useFormContext();
   const count = useQuery(
-    api.aggregateQueries.getGroupQuestionCountQuery,
+    api.aggregateCounts.getGroupQuestionCountQuery,
     tenantId
       ? {
           tenantId,
@@ -211,7 +211,7 @@ function StandardGroupCount({ groupId }: { groupId: string }) {
 function UnansweredGroupCount({ groupId }: { groupId: string }) {
   const { tenantId, userCountsForQuizCreation, isLoading } = useFormContext();
   const total = useQuery(
-    api.aggregateQueries.getGroupQuestionCountQuery,
+    api.aggregateCounts.getGroupQuestionCountQuery,
     tenantId
       ? {
           tenantId,

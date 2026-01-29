@@ -22,7 +22,7 @@ export const list = query({
   },
 });
 
-// Optimized query that returns themes sorted by displayOrder, then name
+// Returns themes sorted by displayOrder, then name
 export const listSorted = query({
   args: { tenantId: v.optional(v.id('apps')) },
   handler: async (context, { tenantId }) => {

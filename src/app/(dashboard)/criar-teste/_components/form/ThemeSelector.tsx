@@ -81,7 +81,7 @@ BookmarkedThemeCount.displayName = 'BookmarkedThemeCount';
 const StandardThemeCount = memo(({ themeId }: { themeId: string }) => {
   const { tenantId } = useFormContext();
   const count = useQuery(
-    api.aggregateQueries.getThemeQuestionCountQuery,
+    api.aggregateCounts.getThemeQuestionCountQuery,
     tenantId
       ? {
           tenantId,
@@ -105,7 +105,7 @@ StandardThemeCount.displayName = 'StandardThemeCount';
 const UnansweredThemeCount = memo(({ themeId }: { themeId: string }) => {
   const { tenantId, userCountsForQuizCreation, isLoading } = useFormContext();
   const total = useQuery(
-    api.aggregateQueries.getThemeQuestionCountQuery,
+    api.aggregateCounts.getThemeQuestionCountQuery,
     tenantId
       ? {
           tenantId,

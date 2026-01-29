@@ -287,7 +287,7 @@ async function collectAllModeQuestions(
     selectedSubthemes.length === 0 &&
     selectedGroups.length === 0
   ) {
-    return await ctx.runQuery(api.aggregateQueries.getRandomQuestions, {
+    return await ctx.runQuery(api.aggregateRandom.getRandomQuestions, {
       tenantId,
       count: maxQuestions,
     });
@@ -337,7 +337,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
     // Groups: always include all selected groups
     Promise.all(
       selectedGroups.map(groupId =>
-        ctx.runQuery(api.aggregateQueries.getRandomQuestionsByGroup, {
+        ctx.runQuery(api.aggregateRandom.getRandomQuestionsByGroup, {
           tenantId,
           groupId,
           count: maxQuestions,
@@ -358,7 +358,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
     // Themes: only effective (non-overridden) themes
     Promise.all(
       effectiveThemes.map(themeId =>
-        ctx.runQuery(api.aggregateQueries.getRandomQuestionsByTheme, {
+        ctx.runQuery(api.aggregateRandom.getRandomQuestionsByTheme, {
           tenantId,
           themeId,
           count: maxQuestions,
@@ -736,7 +736,7 @@ async function collectSubthemeQuestions(
     } else if (effectiveSet.has(subthemeId)) {
       // Effective subtheme (not overridden) - use tenant-scoped aggregate
       const ids = await ctx.runQuery(
-        api.aggregateQueries.getRandomQuestionsBySubtheme,
+        api.aggregateRandom.getRandomQuestionsBySubtheme,
         { tenantId, subthemeId, count: maxQuestions },
       );
       results.push(ids);
@@ -768,7 +768,7 @@ async function getQuestionIdsByHierarchy(
 
   // No filters: use global random aggregate (tenant-scoped)
   if (!hasFilters) {
-    return await ctx.runQuery(api.aggregateQueries.getRandomQuestions, {
+    return await ctx.runQuery(api.aggregateRandom.getRandomQuestions, {
       tenantId,
       count: maxQuestions,
     });

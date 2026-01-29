@@ -3,7 +3,7 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { internalMutation, mutation, query } from './_generated/server';
-import { getTotalQuestionCount } from './aggregateQueries.js';
+import { getTotalQuestionCount } from './aggregateCounts.js';
 import { verifyTenantAccess } from './auth';
 // Removed user-specific aggregate imports - replaced by userStatsCounts table
 import { getCurrentUser, getCurrentUserOrThrow } from './users';

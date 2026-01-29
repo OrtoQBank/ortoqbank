@@ -4,7 +4,7 @@
 //
 // This workflow provides:
 // - Real-time progress tracking via quizCreationJobs table
-// - Optimized data passing (pre-computed hierarchy maps from frontend)
+// - Efficient data passing (pre-computed hierarchy maps from frontend)
 // - Proper error recovery and idempotent steps
 // - Production-safe implementation alongside existing create mutation
 //
@@ -533,7 +533,7 @@ export const sampleAndFilterByMode = internalMutation({
 
     // Get a random sample from the global pool
     const randomSample: Id<'questions'>[] = await ctx.runQuery(
-      api.aggregateQueries.getRandomQuestions,
+      api.aggregateRandom.getRandomQuestions,
       { count: args.sampleSize },
     );
 
@@ -941,7 +941,7 @@ export const quizCreationWorkflow = workflow.define({
           );
 
           questionIds = await step.runQuery(
-            api.aggregateQueries.getRandomQuestions,
+            api.aggregateRandom.getRandomQuestions,
             { count: maxQuestions },
           );
         }

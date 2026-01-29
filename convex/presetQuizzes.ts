@@ -66,7 +66,7 @@ export const list = query({
   },
 });
 
-// Optimized query that returns trilhas filtered and sorted
+// Returns trilhas filtered and sorted by displayOrder
 export const listTrilhasSorted = query({
   args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
@@ -127,7 +127,7 @@ export const listTrilhasSorted = query({
   },
 });
 
-// Optimized query that returns simulados filtered and sorted
+// Returns simulados filtered and sorted by displayOrder
 export const listSimuladosSorted = query({
   args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
