@@ -1,27 +1,20 @@
 /**
- * Custom Quiz Creation Module
+ * Custom Quiz Creation
  *
- * This module handles the creation of custom quizzes with optimized question selection.
+ * Creates quizzes with mode-aware question selection (all/unanswered/incorrect/bookmarked).
+ * Uses hierarchy-first filtering and aggregate-based random selection for performance.
+ * Supports deterministic selection via optional seed parameter.
  *
- * ARCHITECTURE:
- * - Mode-aware selection: Different strategies for all/unanswered/incorrect/bookmarked
- * - Hierarchy-first filtering: When filters are applied, query by hierarchy FIRST
- * - Aggregate-based for 'all' mode: Ultra-fast random selection using aggregates
- * - Index-based for filtered modes: Use DB indexes to query efficiently
- *
- * PERFORMANCE CONSIDERATIONS:
- * - Never do global table scans followed by post-filtering
- * - Use hierarchy indexes when theme/subtheme/group filters are applied
- * - Limit document fetches to only what's needed
+ * See plan file for detailed flow diagrams: .cursor/plans/refactor_customquizcreation_*.plan.md
  */
 
 import { v } from 'convex/values';
 
 import { api } from './_generated/api';
-import { Doc, Id } from './_generated/dataModel';
+import { Id } from './_generated/dataModel';
 import { mutation, type MutationCtx, type QueryCtx } from './_generated/server';
 import { QuestionMode } from './customQuizzes';
-import { selectRandom, shuffleArray } from './lib/shuffle';
+import { createSeededRandom, shuffleAndLimit } from './lib/shuffle';
 import { getCurrentUserOrThrow } from './users';
 
 // Maximum number of questions allowed in a custom quiz
@@ -66,6 +59,8 @@ export const create = mutation({
         }),
       ),
     ),
+    // Optional seed for deterministic question selection (same seed = same questions)
+    seed: v.optional(v.string()),
   },
   returns: v.union(
     v.object({
@@ -81,6 +76,7 @@ export const create = mutation({
   ),
   handler: async (ctx, args) => {
     const user = await getCurrentUserOrThrow(ctx);
+    const random = createSeededRandom(args.seed);
 
     const requestedQuestions = args.numQuestions
       ? Math.min(args.numQuestions, MAX_QUESTIONS)
@@ -90,7 +86,7 @@ export const create = mutation({
     const selectedSubthemes = args.selectedSubthemes || [];
     const selectedGroups = args.selectedGroups || [];
 
-    // Collect questions using optimized strategy (tenant-scoped)
+    // Collect questions using strategy based on mode (tenant-scoped)
     const questionIds = await collectQuestionIds(
       ctx,
       user._id,
@@ -100,6 +96,7 @@ export const create = mutation({
       selectedSubthemes,
       selectedGroups,
       requestedQuestions,
+      random,
       args.groupParents,
       args.subthemeParents,
     );
@@ -173,11 +170,14 @@ type GroupParents = Record<
 >;
 type SubthemeParents = Record<Id<'subthemes'>, { themeId: Id<'themes'> }>;
 
-/**
- * Main entry point for question collection.
- * Routes to the appropriate strategy based on mode and filters.
- * Multi-tenant: tenantId ensures questions are only selected from the current tenant.
- */
+/** Check if any hierarchy filters are selected */
+const hasHierarchyFilters = (
+  themes: Id<'themes'>[],
+  subthemes: Id<'subthemes'>[],
+  groups: Id<'groups'>[],
+) => themes.length > 0 || subthemes.length > 0 || groups.length > 0;
+
+/** Main entry point for question collection */
 async function collectQuestionIds(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
@@ -187,13 +187,15 @@ async function collectQuestionIds(
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
+  random: () => number,
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  const hasFilters =
-    selectedThemes.length > 0 ||
-    selectedSubthemes.length > 0 ||
-    selectedGroups.length > 0;
+  const hasFilters = hasHierarchyFilters(
+    selectedThemes,
+    selectedSubthemes,
+    selectedGroups,
+  );
 
   console.log(
     `🚀 Collecting questions: tenant=${tenantId}, mode=${questionMode}, hasFilters=${hasFilters}, max=${maxQuestions}`,
@@ -209,6 +211,7 @@ async function collectQuestionIds(
         selectedSubthemes,
         selectedGroups,
         maxQuestions,
+        random,
         groupParents,
         subthemeParents,
       );
@@ -223,34 +226,24 @@ async function collectQuestionIds(
         selectedSubthemes,
         selectedGroups,
         maxQuestions,
+        random,
         groupParents,
         subthemeParents,
       );
     }
 
-    case 'incorrect': {
-      return collectIncorrectQuestions(
-        ctx,
-        userId,
-        tenantId,
-        selectedThemes,
-        selectedSubthemes,
-        selectedGroups,
-        maxQuestions,
-        groupParents,
-        subthemeParents,
-      );
-    }
-
+    case 'incorrect':
     case 'bookmarked': {
-      return collectBookmarkedQuestions(
+      return collectUserModeQuestions(
         ctx,
         userId,
         tenantId,
+        questionMode,
         selectedThemes,
         selectedSubthemes,
         selectedGroups,
         maxQuestions,
+        random,
         groupParents,
         subthemeParents,
       );
@@ -268,8 +261,7 @@ async function collectQuestionIds(
 
 /**
  * For 'all' mode, use aggregate-based random selection.
- * This is ultra-fast and avoids loading question documents.
- * Multi-tenant: tenantId ensures questions are scoped to current tenant.
+ * Ultra-fast and avoids loading question documents.
  */
 async function collectAllModeQuestions(
   ctx: QueryCtx | MutationCtx,
@@ -278,6 +270,7 @@ async function collectAllModeQuestions(
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
+  random: () => number,
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
@@ -301,6 +294,7 @@ async function collectAllModeQuestions(
     selectedSubthemes,
     selectedGroups,
     maxQuestions,
+    random,
     groupParents,
     subthemeParents,
   );
@@ -309,7 +303,6 @@ async function collectAllModeQuestions(
 /**
  * Hierarchy-aware aggregate selection for 'all' mode with filters.
  * Handles hierarchy overrides: groups > subthemes > themes.
- * Multi-tenant: tenantId ensures questions are scoped to current tenant.
  */
 async function collectHierarchyFilteredQuestionsViaAggregates(
   ctx: QueryCtx | MutationCtx,
@@ -318,6 +311,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
+  random: () => number,
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
@@ -377,9 +371,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
   const uniqueIds = [...new Set(combined)];
   console.log(`🚀 'all' mode collected ${uniqueIds.length} unique questions`);
 
-  return uniqueIds.length <= maxQuestions
-    ? uniqueIds
-    : selectRandom(uniqueIds, maxQuestions);
+  return shuffleAndLimit(uniqueIds, maxQuestions, random);
 }
 
 // ============================================================================
@@ -387,16 +379,7 @@ async function collectHierarchyFilteredQuestionsViaAggregates(
 // ============================================================================
 
 /**
- * For 'unanswered' mode, we MUST query by hierarchy FIRST.
- *
- * CRITICAL: Do NOT use global random selection then post-filter.
- * That approach fails when the random sample has few matching questions.
- *
- * Strategy:
- * 1. If filters exist: Query questions by hierarchy using indexes
- * 2. Get user's answered question IDs (fast, uses index) - tenant scoped
- * 3. Filter out answered questions
- * 4. Randomly select from the remaining
+ * For 'unanswered' mode, query by hierarchy FIRST then filter answered.
  */
 async function collectUnansweredQuestions(
   ctx: QueryCtx | MutationCtx,
@@ -406,6 +389,7 @@ async function collectUnansweredQuestions(
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
+  random: () => number,
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
@@ -443,66 +427,70 @@ async function collectUnansweredQuestions(
 
   console.log(`📊 Unanswered questions after filter: ${unansweredIds.length}`);
 
-  // Randomly select the requested number
-  return unansweredIds.length <= maxQuestions
-    ? shuffleArray(unansweredIds)
-    : selectRandom(unansweredIds, maxQuestions);
+  return shuffleAndLimit(unansweredIds, maxQuestions, random);
 }
 
 // ============================================================================
-// MODE: INCORRECT - Query user stats first, then filter by hierarchy
+// MODE: INCORRECT/BOOKMARKED - Query user data first, then filter by hierarchy
 // ============================================================================
 
 /**
- * For 'incorrect' mode, the user's incorrect questions are the primary filter.
- *
- * Strategy:
- * 1. Get user's incorrect question IDs from stats
- * 2. If filters exist: filter by hierarchy
- * 3. Randomly select from the remaining
+ * Unified handler for 'incorrect' and 'bookmarked' modes.
+ * Both follow the same pattern: fetch user records, filter by hierarchy, shuffle.
  */
-async function collectIncorrectQuestions(
+async function collectUserModeQuestions(
   ctx: QueryCtx | MutationCtx,
   userId: Id<'users'>,
   tenantId: Id<'apps'>,
+  mode: 'incorrect' | 'bookmarked',
   selectedThemes: Id<'themes'>[],
   selectedSubthemes: Id<'subthemes'>[],
   selectedGroups: Id<'groups'>[],
   maxQuestions: number,
+  random: () => number,
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  // Get user's incorrect question IDs (tenant-scoped)
-  const incorrectStats = await ctx.db
-    .query('userQuestionStats')
-    .withIndex('by_tenant_and_user_incorrect', q =>
-      q.eq('tenantId', tenantId).eq('userId', userId).eq('isIncorrect', true),
-    )
-    .collect();
+  // Fetch records based on mode
+  type RecordWithQuestion = {
+    questionId: Id<'questions'>;
+    themeId?: Id<'themes'>;
+    subthemeId?: Id<'subthemes'>;
+    groupId?: Id<'groups'>;
+  };
 
-  console.log(`📊 User has ${incorrectStats.length} incorrect questions in tenant`);
+  const records: RecordWithQuestion[] =
+    mode === 'incorrect'
+      ? await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_tenant_and_user_incorrect', q =>
+            q
+              .eq('tenantId', tenantId)
+              .eq('userId', userId)
+              .eq('isIncorrect', true),
+          )
+          .collect()
+      : await ctx.db
+          .query('userBookmarks')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId),
+          )
+          .collect();
 
-  if (incorrectStats.length === 0) {
+  console.log(`📊 User has ${records.length} ${mode} questions in tenant`);
+
+  if (records.length === 0) {
     return [];
   }
 
-  const hasFilters =
-    selectedThemes.length > 0 ||
-    selectedSubthemes.length > 0 ||
-    selectedGroups.length > 0;
-
-  if (!hasFilters) {
-    // No filters: just shuffle and select
-    const ids = incorrectStats.map(s => s.questionId);
-    return ids.length <= maxQuestions
-      ? shuffleArray(ids)
-      : selectRandom(ids, maxQuestions);
+  if (!hasHierarchyFilters(selectedThemes, selectedSubthemes, selectedGroups)) {
+    const ids = records.map(r => r.questionId);
+    return shuffleAndLimit(ids, maxQuestions, random);
   }
 
-  // With filters: use taxonomy data from stats if available, else fetch questions
   const filteredIds = await filterQuestionsByHierarchy(
     ctx,
-    incorrectStats,
+    records,
     selectedThemes,
     selectedSubthemes,
     selectedGroups,
@@ -511,76 +499,10 @@ async function collectIncorrectQuestions(
   );
 
   console.log(
-    `📊 Incorrect questions after hierarchy filter: ${filteredIds.length}`,
+    `📊 ${mode} questions after hierarchy filter: ${filteredIds.length}`,
   );
 
-  return filteredIds.length <= maxQuestions
-    ? shuffleArray(filteredIds)
-    : selectRandom(filteredIds, maxQuestions);
-}
-
-// ============================================================================
-// MODE: BOOKMARKED - Query bookmarks first, then filter by hierarchy
-// ============================================================================
-
-/**
- * For 'bookmarked' mode, the user's bookmarks are the primary filter.
- * Multi-tenant: tenantId ensures bookmarks are scoped to current tenant.
- */
-async function collectBookmarkedQuestions(
-  ctx: QueryCtx | MutationCtx,
-  userId: Id<'users'>,
-  tenantId: Id<'apps'>,
-  selectedThemes: Id<'themes'>[],
-  selectedSubthemes: Id<'subthemes'>[],
-  selectedGroups: Id<'groups'>[],
-  maxQuestions: number,
-  groupParents?: GroupParents,
-  subthemeParents?: SubthemeParents,
-): Promise<Id<'questions'>[]> {
-  // Get user's bookmarks (tenant-scoped)
-  const bookmarks = await ctx.db
-    .query('userBookmarks')
-    .withIndex('by_tenant_and_user', q =>
-      q.eq('tenantId', tenantId).eq('userId', userId),
-    )
-    .collect();
-
-  console.log(`📊 User has ${bookmarks.length} bookmarks`);
-
-  if (bookmarks.length === 0) {
-    return [];
-  }
-
-  const hasFilters =
-    selectedThemes.length > 0 ||
-    selectedSubthemes.length > 0 ||
-    selectedGroups.length > 0;
-
-  if (!hasFilters) {
-    // No filters: just shuffle and select
-    const ids = bookmarks.map(b => b.questionId);
-    return ids.length <= maxQuestions
-      ? shuffleArray(ids)
-      : selectRandom(ids, maxQuestions);
-  }
-
-  // With filters: use taxonomy data from bookmarks if available
-  const filteredIds = await filterBookmarksByHierarchy(
-    ctx,
-    bookmarks,
-    selectedThemes,
-    selectedSubthemes,
-    selectedGroups,
-    groupParents,
-    subthemeParents,
-  );
-
-  console.log(`📊 Bookmarks after hierarchy filter: ${filteredIds.length}`);
-
-  return filteredIds.length <= maxQuestions
-    ? shuffleArray(filteredIds)
-    : selectRandom(filteredIds, maxQuestions);
+  return shuffleAndLimit(filteredIds, maxQuestions, random);
 }
 
 // ============================================================================
@@ -761,13 +683,8 @@ async function getQuestionIdsByHierarchy(
   groupParents?: GroupParents,
   subthemeParents?: SubthemeParents,
 ): Promise<Id<'questions'>[]> {
-  const hasFilters =
-    selectedThemes.length > 0 ||
-    selectedSubthemes.length > 0 ||
-    selectedGroups.length > 0;
-
   // No filters: use global random aggregate (tenant-scoped)
-  if (!hasFilters) {
+  if (!hasHierarchyFilters(selectedThemes, selectedSubthemes, selectedGroups)) {
     return await ctx.runQuery(api.aggregateRandom.getRandomQuestions, {
       tenantId,
       count: maxQuestions,
@@ -936,35 +853,6 @@ async function filterQuestionsByHierarchy(
 }
 
 /**
- * Filter bookmarks by hierarchy.
- */
-async function filterBookmarksByHierarchy(
-  ctx: QueryCtx | MutationCtx,
-  bookmarks: Array<{
-    questionId: Id<'questions'>;
-    themeId?: Id<'themes'>;
-    subthemeId?: Id<'subthemes'>;
-    groupId?: Id<'groups'>;
-  }>,
-  selectedThemes: Id<'themes'>[],
-  selectedSubthemes: Id<'subthemes'>[],
-  selectedGroups: Id<'groups'>[],
-  groupParents?: GroupParents,
-  subthemeParents?: SubthemeParents,
-): Promise<Id<'questions'>[]> {
-  // Reuse the same logic as filterQuestionsByHierarchy
-  return filterQuestionsByHierarchy(
-    ctx,
-    bookmarks,
-    selectedThemes,
-    selectedSubthemes,
-    selectedGroups,
-    groupParents,
-    subthemeParents,
-  );
-}
-
-/**
  * Check if a question matches the hierarchy filters.
  */
 function checkHierarchyMatch(
@@ -1007,73 +895,3 @@ function checkHierarchyMatch(
 
   return false;
 }
-
-// ============================================================================
-// DEBUG MUTATION
-// ============================================================================
-
-/**
- * Debug mutation to test question collection without creating a quiz.
- */
-export const debugQuestionCollection = mutation({
-  args: {
-    tenantId: v.id('apps'),
-    questionMode: v.union(
-      v.literal('all'),
-      v.literal('unanswered'),
-      v.literal('incorrect'),
-      v.literal('bookmarked'),
-    ),
-    selectedThemes: v.optional(v.array(v.id('themes'))),
-    selectedSubthemes: v.optional(v.array(v.id('subthemes'))),
-    selectedGroups: v.optional(v.array(v.id('groups'))),
-    maxQuestions: v.optional(v.number()),
-  },
-  returns: v.object({
-    questionMode: v.string(),
-    hasFilters: v.boolean(),
-    filtersApplied: v.object({
-      themes: v.number(),
-      subthemes: v.number(),
-      groups: v.number(),
-    }),
-    questionsCollected: v.number(),
-    executionTimeMs: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    const user = await getCurrentUserOrThrow(ctx);
-    const maxQuestions = args.maxQuestions || 50;
-
-    const startTime = Date.now();
-
-    const questionIds = await collectQuestionIds(
-      ctx,
-      user._id,
-      args.tenantId,
-      args.questionMode,
-      args.selectedThemes || [],
-      args.selectedSubthemes || [],
-      args.selectedGroups || [],
-      maxQuestions,
-    );
-
-    const executionTimeMs = Date.now() - startTime;
-
-    const hasFilters =
-      (args.selectedThemes?.length || 0) > 0 ||
-      (args.selectedSubthemes?.length || 0) > 0 ||
-      (args.selectedGroups?.length || 0) > 0;
-
-    return {
-      questionMode: args.questionMode,
-      hasFilters,
-      filtersApplied: {
-        themes: args.selectedThemes?.length || 0,
-        subthemes: args.selectedSubthemes?.length || 0,
-        groups: args.selectedGroups?.length || 0,
-      },
-      questionsCollected: questionIds.length,
-      executionTimeMs,
-    };
-  },
-});
