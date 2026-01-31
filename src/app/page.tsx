@@ -1,16 +1,32 @@
+import {
+  getServerTenantContext,
+  getServerTenantId,
+} from '@/lib/tenant-server';
+
 import About from './components/about';
 import FAQ from './components/faq';
+import Footer from './components/footer';
 import Header from './components/header';
 import Hero from './components/hero';
 import Pricing from './components/pricing';
 import StaffSection from './components/staff-section';
 import WaitlistHero from './components/waitlist-hero';
 
-// Force static generation with revalidation every 1 hour
-export const dynamic = 'force-static';
-export const revalidate = 3600;
+// Dynamic rendering to support tenant-specific content
+export const dynamic = 'force-dynamic';
 
-export default function Home() {
+export async function generateMetadata() {
+  const { config } = await getServerTenantContext();
+
+  return {
+    title: `${config.branding.name} - ${config.content.tagline}`,
+    description: config.content.metaDescription,
+  };
+}
+
+export default async function Home() {
+  const tenantId = await getServerTenantId();
+
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
@@ -20,14 +36,10 @@ export default function Home() {
 
         <About />
         <StaffSection />
-        <Pricing />
+        <Pricing tenantId={tenantId} />
         <FAQ />
       </main>
-      <footer className="bg-brand-blue mt-auto py-4 text-white">
-        <div className="container mx-auto px-4 text-center">
-          <p>&copy; 2025 OrtoQBank. Todos os direitos reservados.</p>
-        </div>
-      </footer>
+      <Footer />
     </div>
   );
 }

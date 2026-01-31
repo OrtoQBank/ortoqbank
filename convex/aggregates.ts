@@ -1,4 +1,4 @@
-import { TableAggregate } from '@convex-dev/aggregate';
+import { DirectAggregate, TableAggregate } from '@convex-dev/aggregate';
 
 import { components } from './_generated/api';
 import { DataModel, Id } from './_generated/dataModel';
@@ -8,6 +8,11 @@ import { DataModel, Id } from './_generated/dataModel';
 // Used for question mode 'all' (non-user-specific)
 // These count total available questions by category, scoped per tenant
 // =============================================================================
+
+const example = new DirectAggregate<{ Key: number; Id: string }>({
+  key: 'example',
+  id: 'example',
+});
 
 // Track total question count per tenant
 export const totalQuestionCount = new TableAggregate<{

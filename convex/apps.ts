@@ -26,10 +26,18 @@ export const getAppBySlug = query({
   args: { slug: v.string() },
   returns: v.union(appValidator, v.null()),
   handler: async (ctx, args) => {
+    console.log(`[DEBUG:Convex:apps.getAppBySlug] Query received - { slug: "${args.slug}" }`);
+
     const app = await ctx.db
       .query('apps')
       .withIndex('by_slug', q => q.eq('slug', args.slug))
       .first();
+
+    if (app) {
+      console.log(`[DEBUG:Convex:apps.getAppBySlug] App FOUND - { _id: "${app._id}", slug: "${app.slug}", name: "${app.name}", isActive: ${app.isActive} }`);
+    } else {
+      console.log(`[DEBUG:Convex:apps.getAppBySlug] App NOT FOUND for slug "${args.slug}"`);
+    }
 
     return app;
   },

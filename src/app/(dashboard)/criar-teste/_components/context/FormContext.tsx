@@ -1,7 +1,7 @@
 'use client';
 
 import { useUser } from '@clerk/nextjs';
-import React, { createContext, useContext, useMemo } from 'react';
+import React, { createContext, useContext, useEffect, useMemo } from 'react';
 
 import { useTenant } from '@/components/providers/TenantProvider';
 import { useTenantQuery } from '@/hooks/useTenantQuery';
@@ -164,7 +164,12 @@ export function FormContextProvider({
   const isAuthenticated = isLoaded && isSignedIn;
 
   // Get tenant info for mutations
-  const { tenantId } = useTenant();
+  const { tenantId, isLoading: isTenantLoading } = useTenant();
+
+  // DEBUG: Log tenant state from useTenant
+  useEffect(() => {
+    console.log(`[DEBUG:FormContext] Tenant state - { tenantId: "${tenantId || 'null'}", isTenantLoading: ${isTenantLoading}, isAuthenticated: ${isAuthenticated}, isLoaded: ${isLoaded}, isSignedIn: ${isSignedIn} }`);
+  }, [tenantId, isTenantLoading, isAuthenticated, isLoaded, isSignedIn]);
 
   // Fetch data once and cache it - now with tenant scoping
   const totalQuestions = useTenantQuery(
@@ -185,6 +190,11 @@ export function FormContextProvider({
   const isLoading =
     (userCountsForQuizCreation === undefined || totalQuestions === undefined) &&
     isAuthenticated;
+
+  // DEBUG: Log query results
+  useEffect(() => {
+    console.log(`[DEBUG:FormContext] Query states - { totalQuestions: ${totalQuestions === undefined ? 'undefined (loading)' : totalQuestions}, hierarchicalDataLoaded: ${hierarchicalData !== undefined}, userCountsLoaded: ${userCountsForQuizCreation !== undefined}, isLoading: ${isLoading} }`);
+  }, [totalQuestions, hierarchicalData, userCountsForQuizCreation, isLoading]);
 
   // Memoized calculation function that returns all counts at once
   const calculateQuestionCounts = useMemo(() => {
@@ -228,8 +238,8 @@ export function FormContextProvider({
     };
   }, [userCountsForQuizCreation, totalQuestions]); // Only depends on data, not selections
 
-  const contextValue: FormContextValue = useMemo(
-    () => ({
+  const contextValue: FormContextValue = useMemo(() => {
+    const value = {
       tenantId,
       userCountsForQuizCreation,
       totalQuestions,
@@ -237,17 +247,21 @@ export function FormContextProvider({
       isAuthenticated,
       isLoading,
       calculateQuestionCounts,
-    }),
-    [
-      tenantId,
-      userCountsForQuizCreation,
-      totalQuestions,
-      hierarchicalData,
-      isAuthenticated,
-      isLoading,
-      calculateQuestionCounts,
-    ],
-  );
+    };
+
+    // DEBUG: Log context value when it changes
+    console.log(`[DEBUG:FormContext] Context value - { tenantId: "${tenantId || 'null'}", isAuthenticated: ${isAuthenticated}, isLoading: ${isLoading}, hasData: { totalQuestions: ${totalQuestions !== undefined}, hierarchicalData: ${hierarchicalData !== undefined}, userCounts: ${userCountsForQuizCreation !== undefined} } }`);
+
+    return value;
+  }, [
+    tenantId,
+    userCountsForQuizCreation,
+    totalQuestions,
+    hierarchicalData,
+    isAuthenticated,
+    isLoading,
+    calculateQuestionCounts,
+  ]);
 
   return (
     <FormContext.Provider value={contextValue}>{children}</FormContext.Provider>

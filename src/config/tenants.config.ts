@@ -89,6 +89,62 @@ export const tenantsConfig = {
     },
   },
 
+  // MaoQBank - Hand Surgery Question Bank
+  maoqbank: {
+    branding: {
+      name: 'MaoQBank',
+      shortName: 'MQB',
+      primaryColor: '#0891b2', // Cyan
+      secondaryColor: '#0e7490',
+      accentColor: '#22d3ee',
+      sidebarBackground: '192 91% 36%', // Cyan background
+      sidebarForeground: '0 0% 100%', // White text
+      logo: '/logos/maoqbank.svg',
+      logoDark: '/logos/maoqbank-dark.svg',
+      favicon: '/favicon.ico',
+    },
+    content: {
+      tagline: 'Banco de questões de Cirurgia da Mão',
+      metaDescription:
+        'Prepare-se para a prova de especialista em Cirurgia da Mão com questões comentadas.',
+      labels: {
+        themes: 'Temas',
+        subthemes: 'Subtemas',
+        groups: 'Grupos',
+        questions: 'Questões',
+        quiz: 'Simulado',
+      },
+    },
+  },
+
+  // SBCJQBank - Knee and Hip Surgery Question Bank
+  sbcjqbank: {
+    branding: {
+      name: 'SBCJQBank',
+      shortName: 'SBCJ',
+      primaryColor: '#16a34a', // Green
+      secondaryColor: '#15803d',
+      accentColor: '#4ade80',
+      sidebarBackground: '142 76% 36%', // Green background
+      sidebarForeground: '0 0% 100%', // White text
+      logo: '/logos/sbcjqbank.svg',
+      logoDark: '/logos/sbcjqbank-dark.svg',
+      favicon: '/favicon.ico',
+    },
+    content: {
+      tagline: 'Banco de questões de Cirurgia do Joelho',
+      metaDescription:
+        'Prepare-se para a prova de especialista em Cirurgia do Joelho com questões comentadas.',
+      labels: {
+        themes: 'Temas',
+        subthemes: 'Subtemas',
+        groups: 'Grupos',
+        questions: 'Questões',
+        quiz: 'Simulado',
+      },
+    },
+  },
+
   // Test tenant for local development
   app1: {
     branding: {

@@ -33,18 +33,37 @@ export default clerkMiddleware(async (auth, request) => {
   // ==========================================================================
   const hostname = request.headers.get('host') || 'localhost:3000';
   const subdomain = extractSubdomain(hostname);
+  const pathname = request.nextUrl.pathname;
+
+  // DEBUG: Log raw hostname and subdomain extraction
+  console.log(`[DEBUG:Proxy] Request received - { pathname: "${pathname}", hostname: "${hostname}" }`);
+  console.log(`[DEBUG:Proxy] Subdomain extraction - { subdomain: "${subdomain || 'null'}" }`);
 
   // Determine the tenant slug
+  const isSubdomainValid = subdomain ? isValidTenantSlug(subdomain) : false;
   const tenantSlug =
-    subdomain && isValidTenantSlug(subdomain) ? subdomain : 'ortoqbank';
+    subdomain && isSubdomainValid ? subdomain : 'ortoqbank';
+
+  // DEBUG: Log tenant slug determination
+  console.log(`[DEBUG:Proxy] Tenant slug determination - { subdomain: "${subdomain || 'null'}", isSubdomainValid: ${isSubdomainValid}, finalSlug: "${tenantSlug}" }`);
 
   // Get existing tenant cookie
   const existingTenantCookie = request.cookies.get(TENANT_COOKIE_NAME);
 
+  // DEBUG: Log cookie state
+  console.log(`[DEBUG:Proxy] Cookie state - { existingCookie: "${existingTenantCookie?.value || 'null'}", newSlug: "${tenantSlug}", willSetCookie: ${existingTenantCookie?.value !== tenantSlug} }`);
+
+  // DEBUG: Log route type detection
+  const routeIsProtected = isProtectedRoute(request);
+  const routeIsAdmin = isAdminRoute(request);
+  const routeIsWebhook = isWebhookRoute(request);
+  console.log(`[DEBUG:Proxy] Route type - { isProtected: ${routeIsProtected}, isAdmin: ${routeIsAdmin}, isWebhook: ${routeIsWebhook} }`);
+
   // ==========================================================================
   // WEBHOOK ROUTES - Skip authentication
   // ==========================================================================
-  if (isWebhookRoute(request)) {
+  if (routeIsWebhook) {
+    console.log(`[DEBUG:Proxy] Webhook route - skipping auth`);
     const response = NextResponse.next();
 
     // Set tenant cookie if changed or not present
@@ -62,9 +81,29 @@ export default clerkMiddleware(async (auth, request) => {
   }
 
   // ==========================================================================
+  // MAINTENANCE MODE - Redirect non-admins to maintenance page
+  // ==========================================================================
+  const isMaintenanceMode =
+    process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+  const isMaintenanceRoute = request.nextUrl.pathname === '/maintenance';
+
+  if (isMaintenanceMode && isProtectedRoute(request) && !isMaintenanceRoute) {
+    const { sessionClaims } = await auth();
+    const isAdmin = sessionClaims?.metadata?.role === 'admin';
+
+    if (!isAdmin) {
+      return NextResponse.redirect(new URL('/maintenance', request.url));
+    }
+  }
+
+  // ==========================================================================
   // PROTECTED ROUTES - Require authentication
   // ==========================================================================
-  if (isProtectedRoute(request)) await auth.protect();
+  if (routeIsProtected) {
+    console.log(`[DEBUG:Proxy] Protected route - requiring auth`);
+    await auth.protect();
+    console.log(`[DEBUG:Proxy] Protected route - auth passed`);
+  }
 
   // NOTE: User-App access control is enforced at:
   // 1. Convex backend (authoritative) - via requireAppAccess/requireAppModerator in mutations
@@ -76,13 +115,16 @@ export default clerkMiddleware(async (auth, request) => {
   // ==========================================================================
   // ADMIN ROUTES - Additional role verification
   // ==========================================================================
-  if (isAdminRoute(request)) {
+  if (routeIsAdmin) {
+    console.log(`[DEBUG:Proxy] Admin route - requiring auth`);
     await auth.protect();
 
     const { sessionClaims } = await auth();
     // Check both old Clerk metadata (for existing admins) and allow through
     // The backend will do the authoritative role check using database data
     const hasClerkAdminRole = sessionClaims?.metadata?.role === 'admin';
+
+    console.log(`[DEBUG:Proxy] Admin route - { hasClerkAdminRole: ${hasClerkAdminRole} }`);
 
     // For now, allow all authenticated users through
     // Backend requireAdmin() will be the final authority
@@ -109,14 +151,10 @@ export default clerkMiddleware(async (auth, request) => {
       secure: cookieOptions.secure,
     });
 
-    // Log tenant detection for debugging
-    if (process.env.NODE_ENV === 'development') {
-      console.log(
-        `[Tenant] Detected tenant: ${tenantSlug} (subdomain: ${subdomain || 'none'})`,
-      );
-    }
+    console.log(`[DEBUG:Proxy] Setting new tenant cookie - { cookieName: "${TENANT_COOKIE_NAME}", value: "${tenantSlug}", options: ${JSON.stringify(cookieOptions)} }`);
   }
 
+  console.log(`[DEBUG:Proxy] Request complete - { pathname: "${pathname}", tenantSlug: "${tenantSlug}" }`);
   return response;
 });
 
