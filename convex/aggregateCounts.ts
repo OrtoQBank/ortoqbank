@@ -266,36 +266,52 @@ export const getQuestionCountBySelection = query({
     for (const groupId of selectedGroups) {
       const questions = await ctx.db
         .query('questions')
-        .withIndex('by_group', q => q.eq('groupId', groupId))
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', groupId),
+        )
         .collect();
-      questions.forEach(q => questionIds.add(q._id));
+      for (const question of questions) {
+        questionIds.add(question._id);
+      }
     }
 
     for (const subthemeId of selectedSubthemes) {
       const subthemeGroups = await ctx.db
         .query('groups')
-        .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', subthemeId),
+        )
         .collect();
       if (!subthemeGroups.some(g => selectedGroups.includes(g._id))) {
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
+          .withIndex('by_tenant_and_subtheme', q =>
+            q.eq('tenantId', args.tenantId).eq('subthemeId', subthemeId),
+          )
           .collect();
-        questions.forEach(q => questionIds.add(q._id));
+        for (const question of questions) {
+          questionIds.add(question._id);
+        }
       }
     }
 
     for (const themeId of selectedThemes) {
       const themeSubthemes = await ctx.db
         .query('subthemes')
-        .withIndex('by_theme', q => q.eq('themeId', themeId))
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', themeId),
+        )
         .collect();
       if (!themeSubthemes.some(s => selectedSubthemes.includes(s._id))) {
         const questions = await ctx.db
           .query('questions')
-          .withIndex('by_theme', q => q.eq('themeId', themeId))
+          .withIndex('by_tenant_and_theme', q =>
+            q.eq('tenantId', args.tenantId).eq('themeId', themeId),
+          )
           .collect();
-        questions.forEach(q => questionIds.add(q._id));
+        for (const question of questions) {
+          questionIds.add(question._id);
+        }
       }
     }
 

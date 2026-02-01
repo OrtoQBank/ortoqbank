@@ -55,6 +55,15 @@ export const savePricingPlan = mutation({
     const { id, tenantId, ...planData } = args;
 
     if (id) {
+      // Verify the existing plan belongs to the same tenant
+      const existingPlan = await ctx.db.get(id);
+      if (!existingPlan) {
+        throw new Error('Pricing plan not found');
+      }
+      if (existingPlan.tenantId !== tenantId) {
+        throw new Error('Unauthorized: Cannot edit pricing plan from another tenant');
+      }
+
       // Editar plano existente
       await ctx.db.patch(id, planData);
       return id;
