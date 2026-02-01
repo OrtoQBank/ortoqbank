@@ -391,19 +391,15 @@ export const getUserStatsFast = query({
     // Get pre-computed counts (ultra-fast single lookup)
     // Filter by tenant if provided
     let userCounts;
-    if (tenantId) {
-      userCounts = await ctx.db
+    userCounts = await (tenantId ? ctx.db
         .query('userStatsCounts')
         .withIndex('by_tenant_and_user', q =>
           q.eq('tenantId', tenantId).eq('userId', userId),
         )
-        .first();
-    } else {
-      userCounts = await ctx.db
+        .first() : ctx.db
         .query('userStatsCounts')
         .withIndex('by_user', q => q.eq('userId', userId))
-        .first();
-    }
+        .first());
 
     // Get total questions count using existing aggregate
     // If no tenantId, return 0 (tenant context is required for accurate counts)
@@ -523,19 +519,15 @@ export const getUserCountsForQuizCreation = query({
     // Single lookup gets all counts
     // Filter by tenant if provided
     let userCounts;
-    if (tenantId) {
-      userCounts = await ctx.db
+    userCounts = await (tenantId ? ctx.db
         .query('userStatsCounts')
         .withIndex('by_tenant_and_user', q =>
           q.eq('tenantId', tenantId).eq('userId', userId._id),
         )
-        .first();
-    } else {
-      userCounts = await ctx.db
+        .first() : ctx.db
         .query('userStatsCounts')
         .withIndex('by_user', q => q.eq('userId', userId._id))
-        .first();
-    }
+        .first());
 
     // Handle new users with no counts
     if (!userCounts) {

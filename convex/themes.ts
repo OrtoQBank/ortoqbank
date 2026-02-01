@@ -11,14 +11,10 @@ export const list = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(context, tenantId);
 
-    if (tenantId) {
-      return await context.db
-        .query('themes')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-    }
-    // Fallback for backward compatibility (no tenant filter)
-    return await context.db.query('themes').collect();
+    return await context.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
   },
 });
 
@@ -29,15 +25,10 @@ export const listSorted = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(context, tenantId);
 
-    let themes;
-    if (tenantId) {
-      themes = await context.db
-        .query('themes')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-    } else {
-      themes = await context.db.query('themes').collect();
-    }
+    const themes = await context.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
 
     // Sort themes: displayOrder first (undefined goes last), then alphabetically by name
     return themes.toSorted((a, b) => {
@@ -68,28 +59,18 @@ export const getHierarchicalData = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(context, tenantId);
 
-    let themes;
-    let subthemes;
-    let groups;
-
-    if (tenantId) {
-      themes = await context.db
-        .query('themes')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-      subthemes = await context.db
-        .query('subthemes')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-      groups = await context.db
-        .query('groups')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-    } else {
-      themes = await context.db.query('themes').collect();
-      subthemes = await context.db.query('subthemes').collect();
-      groups = await context.db.query('groups').collect();
-    }
+    const themes = await context.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
+    const subthemes = await context.db
+      .query('subthemes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
+    const groups = await context.db
+      .query('groups')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
 
     return {
       themes,
@@ -110,21 +91,13 @@ export const create = mutation({
     // Verify moderator access for this app
     await requireAppModerator(context, tenantId);
 
-    // Check if theme with same name already exists (within tenant if provided)
-    let existing;
-    if (tenantId) {
-      existing = await context.db
-        .query('themes')
-        .withIndex('by_tenant_and_name', q =>
-          q.eq('tenantId', tenantId).eq('name', name),
-        )
-        .unique();
-    } else {
-      existing = await context.db
-        .query('themes')
-        .withIndex('by_name', q => q.eq('name', name))
-        .unique();
-    }
+    // Check if theme with same name already exists within tenant
+    const existing = await context.db
+      .query('themes')
+      .withIndex('by_tenant_and_name', q =>
+        q.eq('tenantId', tenantId).eq('name', name),
+      )
+      .unique();
 
     if (existing) {
       throw new Error(`Theme "${name}" already exists`);

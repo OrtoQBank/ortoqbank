@@ -72,7 +72,7 @@ export function useTenantQuery<Query extends FunctionReference<'query'>>(
     };
   }, [shouldSkip, args, tenantId]);
 
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   return useQuery(query, finalArgs as any);
 }
 
@@ -124,7 +124,7 @@ export function useTenantMutation<
         tenantId: tenantId ?? undefined,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       return baseMutation(argsWithTenant as any);
     },
     [baseMutation, tenantId, requireTenant],
@@ -182,7 +182,7 @@ export function useTenantAction<Action extends FunctionReference<'action'>>(
         tenantId: tenantId ?? undefined,
       };
 
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       return baseAction(argsWithTenant as any);
     },
     [baseAction, tenantId, requireTenant],
@@ -278,7 +278,7 @@ export function useTenantPaginatedQuery<
   }, [JSON.stringify(args), tenantId]);
 
   // usePaginatedQuery must be called unconditionally (React rules of hooks)
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   const result = usePaginatedQuery(query, finalArgs as any, {
     initialNumItems,
   });

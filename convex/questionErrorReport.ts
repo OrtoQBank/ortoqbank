@@ -100,34 +100,19 @@ export const getReportsForAdmin = query({
 
     const limit = args.limit ?? 50;
 
-    let reports;
-    if (args.tenantId) {
-      // Filter by tenant and optionally by status
-      if (args.status) {
-        reports = await ctx.db
+    // Filter by tenant and optionally by status
+    const reports = await (args.status
+      ? ctx.db
           .query('questionErrorReports')
           .withIndex('by_tenant_and_status', q =>
             q.eq('tenantId', args.tenantId).eq('status', args.status!),
           )
-          .order('desc')
-          .take(limit);
-      } else {
-        reports = await ctx.db
+      : ctx.db
           .query('questionErrorReports')
           .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-          .order('desc')
-          .take(limit);
-      }
-    } else {
-      // No tenant filter - return all (for backward compatibility)
-      reports = args.status
-        ? await ctx.db
-            .query('questionErrorReports')
-            .withIndex('by_status', q => q.eq('status', args.status!))
-            .order('desc')
-            .take(limit)
-        : await ctx.db.query('questionErrorReports').order('desc').take(limit);
-    }
+    )
+      .order('desc')
+      .take(limit);
 
     // Enrich with user and question data
     const enrichedReports = await Promise.all(
@@ -225,15 +210,10 @@ export const getReportCounts = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(ctx, args.tenantId);
 
-    let allReports;
-    if (args.tenantId) {
-      allReports = await ctx.db
-        .query('questionErrorReports')
-        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-        .collect();
-    } else {
-      allReports = await ctx.db.query('questionErrorReports').collect();
-    }
+    const allReports = await ctx.db
+      .query('questionErrorReports')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
 
     const counts = {
       pending: 0,

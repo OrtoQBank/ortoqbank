@@ -199,19 +199,11 @@ export const list = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(context, tenantId);
 
-    let questions;
-    if (tenantId) {
-      questions = await context.db
-        .query('questions')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .order('desc')
-        .paginate(paginationOpts);
-    } else {
-      questions = await context.db
-        .query('questions')
-        .order('desc')
-        .paginate(paginationOpts);
-    }
+    const questions = await context.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .order('desc')
+      .paginate(paginationOpts);
 
     // Only fetch themes for the current page of questions, not all themes
     const themes = await Promise.all(
@@ -398,13 +390,10 @@ export const listAll = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(context, tenantId);
 
-    if (tenantId) {
-      return await context.db
-        .query('questions')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-    }
-    return await context.db.query('questions').collect();
+    return await context.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
   },
 });
 
@@ -444,16 +433,11 @@ export const countQuestionsByMode = query({
       throw new Error('User not found');
     }
 
-    // Get total questions (filtered by tenant if provided)
-    let totalQuestions;
-    if (tenantId) {
-      totalQuestions = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
-        .collect();
-    } else {
-      totalQuestions = await ctx.db.query('questions').collect();
-    }
+    // Get total questions filtered by tenant
+    const totalQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
     const totalCount = totalQuestions.length;
 
     const result = {
@@ -463,64 +447,35 @@ export const countQuestionsByMode = query({
       bookmarked: 0,
     };
 
-    // Get user stats (filtered by tenant if provided)
-    let incorrectStats;
-    if (tenantId) {
-      incorrectStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_tenant_and_user_incorrect', q =>
-          q
-            .eq('tenantId', tenantId)
-            .eq('userId', user._id)
-            .eq('isIncorrect', true),
-        )
-        .collect();
-    } else {
-      incorrectStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user_incorrect', q =>
-          q.eq('userId', user._id).eq('isIncorrect', true),
-        )
-        .collect();
-    }
+    // Get user stats filtered by tenant
+    const incorrectStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_tenant_and_user_incorrect', q =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('userId', user._id)
+          .eq('isIncorrect', true),
+      )
+      .collect();
     result.incorrect = incorrectStats.length;
 
-    // Get bookmarks (filtered by tenant if provided)
-    let bookmarks;
-    if (tenantId) {
-      bookmarks = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', user._id),
-        )
-        .collect();
-    } else {
-      bookmarks = await ctx.db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', user._id))
-        .collect();
-    }
+    // Get bookmarks filtered by tenant
+    const bookmarks = await ctx.db
+      .query('userBookmarks')
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', user._id),
+      )
+      .collect();
     result.bookmarked = bookmarks.length;
 
-    // Get answered stats (filtered by tenant if provided)
-    let answeredStats;
-    if (tenantId) {
-      answeredStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', user._id),
-        )
-        .collect();
-      // Filter for hasAnswered after fetching since compound index doesn't include hasAnswered
-      answeredStats = answeredStats.filter(s => s.hasAnswered);
-    } else {
-      answeredStats = await ctx.db
-        .query('userQuestionStats')
-        .withIndex('by_user_answered', q =>
-          q.eq('userId', user._id).eq('hasAnswered', true),
-        )
-        .collect();
-    }
+    // Get answered stats filtered by tenant
+    const allUserStats = await ctx.db
+      .query('userQuestionStats')
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', user._id),
+      )
+      .collect();
+    const answeredStats = allUserStats.filter(s => s.hasAnswered);
     result.unanswered = totalCount - answeredStats.length;
 
     return result;

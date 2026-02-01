@@ -164,6 +164,34 @@ export async function getUserBookmarksCountByGroup(
 // =============================================================================
 
 /**
+ * Transform counts into structured format
+ */
+const transformCounts = <T extends string>(
+  answered: Record<T, number>,
+  incorrect: Record<T, number>,
+  bookmarked: Record<T, number>,
+): Record<T, { answered: number; incorrect: number; bookmarked: number }> => {
+  const result = {} as Record<
+    T,
+    { answered: number; incorrect: number; bookmarked: number }
+  >;
+  const allKeys = new Set([
+    ...Object.keys(answered),
+    ...Object.keys(incorrect),
+    ...Object.keys(bookmarked),
+  ]) as Set<T>;
+
+  for (const key of allKeys) {
+    result[key] = {
+      answered: answered[key] || 0,
+      incorrect: incorrect[key] || 0,
+      bookmarked: bookmarked[key] || 0,
+    };
+  }
+  return result;
+};
+
+/**
  * Get all user counts in a single query - most efficient for UI
  */
 export async function getAllUserCounts(
@@ -194,32 +222,6 @@ export async function getAllUserCounts(
       >,
     };
   }
-
-  // Transform counts into structured format
-  const transformCounts = <T extends string>(
-    answered: Record<T, number>,
-    incorrect: Record<T, number>,
-    bookmarked: Record<T, number>,
-  ): Record<T, { answered: number; incorrect: number; bookmarked: number }> => {
-    const result = {} as Record<
-      T,
-      { answered: number; incorrect: number; bookmarked: number }
-    >;
-    const allKeys = new Set([
-      ...Object.keys(answered),
-      ...Object.keys(incorrect),
-      ...Object.keys(bookmarked),
-    ]) as Set<T>;
-
-    for (const key of allKeys) {
-      result[key] = {
-        answered: answered[key] || 0,
-        incorrect: incorrect[key] || 0,
-        bookmarked: bookmarked[key] || 0,
-      };
-    }
-    return result;
-  };
 
   return {
     global: {

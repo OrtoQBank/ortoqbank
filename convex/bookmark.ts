@@ -130,20 +130,12 @@ export const getBookmarkedQuestionIds = query({
     const { db } = ctx;
 
     // Get all bookmarks for this user
-    let bookmarks;
-    if (tenantId) {
-      bookmarks = await db
-        .query('userBookmarks')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', userId._id),
-        )
-        .collect();
-    } else {
-      bookmarks = await db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', userId._id))
-        .collect();
-    }
+    const bookmarks = await db
+      .query('userBookmarks')
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
+      .collect();
 
     // Return just the question IDs
     return bookmarks.map(bookmark => bookmark.questionId);
@@ -161,20 +153,12 @@ export const getBookmarkedQuestions = query({
     const { db } = ctx;
 
     // Get all bookmarks for this user
-    let bookmarks;
-    if (tenantId) {
-      bookmarks = await db
-        .query('userBookmarks')
-        .withIndex('by_tenant_and_user', q =>
-          q.eq('tenantId', tenantId).eq('userId', userId._id),
-        )
-        .collect();
-    } else {
-      bookmarks = await db
-        .query('userBookmarks')
-        .withIndex('by_user', q => q.eq('userId', userId._id))
-        .collect();
-    }
+    const bookmarks = await db
+      .query('userBookmarks')
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
+      .collect();
 
     if (bookmarks.length === 0) {
       return [];

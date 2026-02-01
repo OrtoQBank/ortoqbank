@@ -94,22 +94,12 @@ export const listTrilhasSorted = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(ctx, tenantId);
 
-    let trilhas;
-    if (tenantId) {
-      // Use compound index for tenant + category
-      trilhas = await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_tenant_and_category', q =>
-          q.eq('tenantId', tenantId).eq('category', 'trilha'),
-        )
-        .collect();
-    } else {
-      // Fall back to category-only index
-      trilhas = await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_category', q => q.eq('category', 'trilha'))
-        .collect();
-    }
+    const trilhas = await ctx.db
+      .query('presetQuizzes')
+      .withIndex('by_tenant_and_category', q =>
+        q.eq('tenantId', tenantId).eq('category', 'trilha'),
+      )
+      .collect();
 
     // Sort by displayOrder, then name
     return trilhas.toSorted((a, b) => {
@@ -155,22 +145,12 @@ export const listSimuladosSorted = query({
     // Verify user has access to this tenant
     await verifyTenantAccess(ctx, tenantId);
 
-    let simulados;
-    if (tenantId) {
-      // Use compound index for tenant + category
-      simulados = await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_tenant_and_category', q =>
-          q.eq('tenantId', tenantId).eq('category', 'simulado'),
-        )
-        .collect();
-    } else {
-      // Fall back to category-only index
-      simulados = await ctx.db
-        .query('presetQuizzes')
-        .withIndex('by_category', q => q.eq('category', 'simulado'))
-        .collect();
-    }
+    const simulados = await ctx.db
+      .query('presetQuizzes')
+      .withIndex('by_tenant_and_category', q =>
+        q.eq('tenantId', tenantId).eq('category', 'simulado'),
+      )
+      .collect();
 
     // Sort by displayOrder, then name
     return simulados.toSorted((a, b) => {

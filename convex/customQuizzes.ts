@@ -51,22 +51,18 @@ export const getCustomQuizzes = query({
     const limit = args.limit || 50; // Default to 50 if not specified
 
     // Get custom quizzes created by this user with pagination
-    let quizzes;
-    if (args.tenantId) {
-      quizzes = await ctx.db
-        .query('customQuizzes')
-        .withIndex('by_tenant_and_author', (q: any) =>
-          q.eq('tenantId', args.tenantId).eq('authorId', userId._id),
-        )
-        .order('desc') // Most recent first
-        .take(limit);
-    } else {
-      quizzes = await ctx.db
-        .query('customQuizzes')
-        .filter((q: any) => q.eq(q.field('authorId'), userId._id))
-        .order('desc') // Most recent first
-        .take(limit);
-    }
+    const quizzes = await (args.tenantId
+      ? ctx.db
+          .query('customQuizzes')
+          .withIndex('by_tenant_and_author', (q: any) =>
+            q.eq('tenantId', args.tenantId).eq('authorId', userId._id),
+          )
+      : ctx.db
+          .query('customQuizzes')
+          .filter((q: any) => q.eq(q.field('authorId'), userId._id))
+    )
+      .order('desc') // Most recent first
+      .take(limit);
 
     return quizzes;
   },

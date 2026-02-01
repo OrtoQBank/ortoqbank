@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
+import { useTenant } from '@/components/providers/TenantProvider';
 import {
   Card,
   CardContent,
@@ -16,7 +17,6 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
-import { useTenant } from '@/components/providers/TenantProvider';
 
 const hubItems = [
   {

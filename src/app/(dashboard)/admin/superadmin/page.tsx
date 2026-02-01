@@ -1,13 +1,11 @@
 'use client';
 
-import { useQuery, useMutation } from 'convex/react';
+import { useMutation,useQuery } from 'convex/react';
 import { Edit, Loader2, Search, Shield } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { api } from '../../../../../convex/_generated/api';
-import { Id } from '../../../../../convex/_generated/dataModel';
 import { useSession } from '@/components/providers/SessionProvider';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -44,6 +42,9 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+
+import { api } from '../../../../../convex/_generated/api';
+import { Id } from '../../../../../convex/_generated/dataModel';
 
 type UserToEdit = {
   _id: Id<'users'>;
@@ -99,11 +100,7 @@ export default function SuperAdminPage() {
 
     setLoadingApps(prev => new Set(prev).add(appId));
     try {
-      if (hasAccess) {
-        await revokeAccess({ userId: editingUser._id, appId });
-      } else {
-        await grantAccess({ userId: editingUser._id, appId, role: 'user' });
-      }
+      await (hasAccess ? revokeAccess({ userId: editingUser._id, appId }) : grantAccess({ userId: editingUser._id, appId, role: 'user' }));
     } catch (error) {
       console.error('Error toggling access:', error);
     } finally {
@@ -198,7 +195,7 @@ export default function SuperAdminPage() {
           <CardDescription>
             {displayUsers === undefined
               ? 'Carregando...'
-              : `${displayUsers.length} usuário${displayUsers.length !== 1 ? 's' : ''}`}
+              : `${displayUsers.length} usuário${displayUsers.length === 1 ? '' : 's'}`}
           </CardDescription>
         </CardHeader>
         <CardContent>
