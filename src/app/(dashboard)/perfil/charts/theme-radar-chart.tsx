@@ -37,7 +37,7 @@ function breakThemeName(name: string): string {
 }
 
 export function ThemeRadarChart() {
-  const userStats = useTenantQuery(api.userStats.getUserStatsFast, {});
+  const userStats = useTenantQuery(api.userStats.getUserStats, {});
 
   if (userStats === undefined) {
     return (

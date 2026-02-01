@@ -343,10 +343,9 @@ async function updateUserStatsCounts(
 }
 
 /**
- * Ultra-fast user statistics using pre-computed counts table
- * This replaces getUserStatsFromTable for much better performance
+ * User statistics using pre-computed counts table
  */
-export const getUserStatsFast = query({
+export const getUserStats = query({
   args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({
     overall: v.object({
@@ -683,12 +682,18 @@ export const getUserWeeklyProgress = query({
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Get all answered questions with timestamps, scoped by tenant
-    const allStats = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_tenant_and_user', q =>
-        q.eq('tenantId', tenantId).eq('userId', userId._id),
-      )
-      .collect();
+    // Filter by tenant if provided
+    const allStats = await (tenantId
+      ? ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .collect()
+      : ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .collect());
 
     // Filter for answered questions only
     const answeredStats = allStats.filter(stat => stat.hasAnswered);

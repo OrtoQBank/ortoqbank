@@ -90,7 +90,7 @@ function getStatsValues(stats: any) {
 
 export default function ProfilePage() {
   // Use tenant-aware queries - Convex handles caching automatically
-  const userStats = useTenantQuery(api.userStats.getUserStatsFast, {});
+  const userStats = useTenantQuery(api.userStats.getUserStats, {});
   const [showThemeStats, setShowThemeStats] = useState(false);
 
   // Determine if we're loading the data
