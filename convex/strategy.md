@@ -243,7 +243,7 @@ or random selection logic efficiently.
 
 ### Phase 2: Switch Stats Queries
 
-1. Create new ultra-fast `getUserStatsFast` function
+1. Create new ultra-fast `getUserStats` function
 2. Test performance comparison
 3. Switch frontend to use new function
 

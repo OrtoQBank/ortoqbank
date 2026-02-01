@@ -141,13 +141,9 @@ across all counting operations:
 
 ### File Organization
 
-- `aggregateRepairs.ts` - Repair functions for inconsistent aggregates
-  (production-safe with pagination)
-- `aggregateWorkflows.ts` - Workflow orchestration for large-scale aggregate
-  repairs
-- `aggregateMonitoring.ts` - Debug queries and health checks for aggregate
-  validation
-- `aggregateQueries.ts` - CRUD operations and aggregate-based counting queries
+- `aggregates.ts` - Aggregate definitions (TableAggregate instances)
+- `aggregateRepairs.ts` - Paginated repair/backfill functions for aggregates
+- `triggers.ts` - Trigger registrations to keep aggregates in sync automatically
 
 ### Aggregate Types
 
@@ -161,17 +157,26 @@ across all counting operations:
 
 - **15-second safe operations** with proper pagination (100-item batches)
 - **Memory-efficient processing** using cursor-based pagination
-- **Comprehensive workflow system** for multi-step repairs surviving server
-  restarts
-- **Health monitoring** with aggregate vs database validation queries
+- **Automatic sync** via triggers when using wrapped mutations
 
 ### Repair System
 
-- Individual repairs: `repairUserAllAggregates(userId)`
-- Section-based repairs: `startSection1Repair()`, `startSection2Repair()`,
-  `startSection3Repair()`
-- Comprehensive repair: `startComprehensiveRepair()` - full system repair with
-  progress tracking
+All repair functions are paginated and return a cursor for continuation:
+
+```bash
+# Total question count for a tenant
+npx convex run aggregateRepairs:repairGlobalQuestionCount \
+  '{"tenantId":"...", "startCursor": null}'
+# Repeat with returned nextCursor until isComplete: true
+
+# Theme/subtheme/group counts - per entity
+npx convex run aggregateRepairs:repairThemeCountPage \
+  '{"tenantId":"...", "themeId":"...", "cursor": null}'
+
+# Random question aggregates
+npx convex run aggregateRepairs:repairRandomQuestions \
+  '{"tenantId":"...", "cursor": null}'
+```
 
 ### Question Selection Use Case
 

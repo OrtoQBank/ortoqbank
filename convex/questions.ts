@@ -4,10 +4,9 @@ import { v } from 'convex/values';
 import { query } from './_generated/server';
 import { questionCountByTheme } from './aggregates';
 import { requireAppModerator, verifyTenantAccess } from './auth';
-import { mutationWithTriggers } from './functions';
 import { updateTaxonomyDenormalization } from './questionsTaxonomySync';
+import { mutation } from './triggers';
 import { validateNoBlobs } from './utils';
-// Question aggregates are now handled automatically via triggers in functions.ts
 
 // =============================================================================
 // QUESTION CONTENT QUERIES
@@ -86,7 +85,7 @@ export const getQuestionContentBatch = query({
   },
 });
 
-export const create = mutationWithTriggers({
+export const create = mutation({
   args: {
     // Multi-tenancy
     tenantId: v.id('apps'),
@@ -269,7 +268,7 @@ export const getById = query({
   },
 });
 
-export const update = mutationWithTriggers({
+export const update = mutation({
   args: {
     id: v.id('questions'),
     // Accept stringified content from frontend
@@ -493,7 +492,7 @@ export const getQuestionCountForTheme = query({
   },
 });
 
-export const deleteQuestion = mutationWithTriggers({
+export const deleteQuestion = mutation({
   args: { id: v.id('questions') },
   handler: async (ctx, args) => {
     // Get the existing question to check tenant

@@ -1,6 +1,5 @@
 'use client';
 
-import { useMutation } from 'convex/react';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import {
@@ -24,6 +23,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTenantMutation } from '@/hooks/useTenantQuery';
 import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../convex/_generated/api';
@@ -90,7 +90,7 @@ function getStatsValues(stats: any) {
 
 export default function ProfilePage() {
   // Use tenant-aware queries - Convex handles caching automatically
-  const userStats = useTenantQuery(api.userStats.getUserStatsFast, {});
+  const userStats = useTenantQuery(api.userStats.getUserStats, {});
   const [showThemeStats, setShowThemeStats] = useState(false);
 
   // Determine if we're loading the data
@@ -367,7 +367,7 @@ export default function ProfilePage() {
 function ResetStatsButton() {
   const [isPending, setIsPending] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const reset = useMutation(api.userStats.resetMyStatsCounts);
+  const reset = useTenantMutation(api.userStats.resetMyStatsCounts);
 
   const handleReset = async () => {
     try {

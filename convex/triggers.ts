@@ -11,13 +11,9 @@ import {
 } from './_generated/server';
 import * as aggregates from './aggregates';
 
-// Create a triggers instance to handle updates to aggregates
 export const triggers = new Triggers<DataModel>();
 
-// Register only the global aggregates (user-specific aggregates removed)
-// User-specific counts are now handled by the userStatsCounts table for better performance
-
-// Questions aggregates
+// Question count aggregates
 triggers.register('questions', aggregates.totalQuestionCount.trigger());
 triggers.register('questions', aggregates.questionCountByTheme.trigger());
 triggers.register('questions', aggregates.questionCountBySubtheme.trigger());
@@ -35,9 +31,4 @@ export const internalMutation = customMutation(
   rawInternalMutation,
   customCtx(triggers.wrapDB),
 );
-// queries don't need trigger wrapping
-
-// Only global question aggregates remain - user-specific aggregates replaced by userStatsCounts table
-// For comprehensive aggregate repair and testing, use aggregateWorkflows.ts functions
-
 export { query } from './_generated/server';

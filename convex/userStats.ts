@@ -5,7 +5,6 @@ import { Id } from './_generated/dataModel';
 import { internalMutation, mutation, query } from './_generated/server';
 import { getTotalQuestionCount } from './aggregateCounts.js';
 import { verifyTenantAccess } from './auth';
-// Removed user-specific aggregate imports - replaced by userStatsCounts table
 import { getCurrentUser, getCurrentUserOrThrow } from './users';
 import { getWeekString } from './utils';
 
@@ -26,10 +25,6 @@ type UserStats = {
   }[];
   totalQuestions: number;
 };
-
-// OLD getUserStatsFromTable function removed - replaced by getUserStatsFast
-
-// OLD getUserStatsSummaryWithAggregates function removed - replaced by getUserStatsFast
 
 /**
  * Transform flat count records into structured format
@@ -343,10 +338,9 @@ async function updateUserStatsCounts(
 }
 
 /**
- * Ultra-fast user statistics using pre-computed counts table
- * This replaces getUserStatsFromTable for much better performance
+ * User statistics using pre-computed counts table
  */
-export const getUserStatsFast = query({
+export const getUserStats = query({
   args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({
     overall: v.object({
@@ -668,7 +662,7 @@ export const getQuestionStatus = query({
  * Get user progress over time grouped by weeks
  */
 export const getUserWeeklyProgress = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       week: v.string(),
@@ -676,16 +670,28 @@ export const getUserWeeklyProgress = query({
       weeklyAnswered: v.number(),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // Get all answered questions with timestamps
-    const answeredStats = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user_answered', q =>
-        q.eq('userId', userId._id).eq('hasAnswered', true),
-      )
-      .collect();
+    // Get all answered questions with timestamps, scoped by tenant
+    // Filter by tenant if provided
+    const allStats = await (tenantId
+      ? ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .collect()
+      : ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .collect());
+
+    // Filter for answered questions only
+    const answeredStats = allStats.filter(stat => stat.hasAnswered);
 
     if (answeredStats.length === 0) {
       return [];
@@ -726,26 +732,43 @@ export const getUserWeeklyProgress = query({
  * Does NOT modify bookmarks-related counts.
  */
 export const resetMyStatsCounts = mutation({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({ success: v.boolean() }),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // 1) Delete all per-question stats for this user
-    const statsForUser = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
+    // 1) Delete all per-question stats for this user in this tenant
+    const statsForUser = tenantId
+      ? await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .collect()
+      : await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .collect();
 
     for (const stat of statsForUser) {
       await ctx.db.delete(stat._id);
     }
 
     // 2) Reset aggregate counts (answered/incorrect) but keep bookmarks-related counts
-    const counts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .first();
+    const counts = tenantId
+      ? await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .first()
+      : await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .first();
 
     if (!counts) {
       // Nothing to reset, treat as success

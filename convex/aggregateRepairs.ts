@@ -2,17 +2,17 @@
 // AGGREGATE REPAIR FUNCTIONS
 // ============================================================================
 //
-// This module provides functions to repair/rebuild aggregate data.
+// This module provides paginated functions to repair/rebuild aggregate data.
+// All functions are designed to work within Convex's 15-second timeout limit.
 //
-// SIMPLE API (recommended):
-// - repairTenantAggregates: Repair all aggregates for a specific tenant
-// - repairAllAggregates: Repair all aggregates for all tenants
+// USAGE PATTERN:
+// Call the paginated repair function repeatedly until isDone: true
+// Each function clears the aggregate on first call (when cursor is null)
 //
-// GRANULAR API (for advanced use):
-// - repairGlobalQuestionCount: Repair question count for a tenant
-// - repairThemeAggregates: Repair theme-level aggregates
-// - repairSubthemeAggregates: Repair subtheme-level aggregates
-// - repairGroupAggregates: Repair group-level aggregates
+// Example:
+//   npx convex run aggregateRepairs:repairGlobalQuestionCount \
+//     '{"tenantId":"...", "cursor": null}'
+//   # Repeat with returned cursor until isDone: true
 //
 // USER STATS:
 // User statistics are handled by the userStatsCounts table, not aggregates.
@@ -21,7 +21,7 @@
 
 import { v } from 'convex/values';
 
-import { internalMutation, mutation } from './_generated/server';
+import { internalMutation, internalQuery } from './_generated/server';
 import {
   questionCountByGroup,
   questionCountBySubtheme,
@@ -33,45 +33,51 @@ import {
   totalQuestionCount,
 } from './aggregates';
 
+const DEFAULT_BATCH_SIZE = 100;
+const MAX_BATCHES_PER_CALL = 10;
+
+const paginatedResultValidator = v.object({
+  processed: v.number(),
+  nextCursor: v.union(v.string(), v.null()),
+  isDone: v.boolean(),
+});
+
+// ============================================================================
+// SECTION 1: TOTAL QUESTION COUNT AGGREGATE REPAIR
+// ============================================================================
+
 /**
- * Repair question count for a tenant with pagination (memory-safe)
+ * Repair total question count for a tenant with pagination
+ *
+ * Usage:
+ *   npx convex run aggregateRepairs:repairGlobalQuestionCount \
+ *     '{"tenantId":"...", "cursor": null}'
+ *   # Repeat with returned cursor until isDone: true
  */
 export const repairGlobalQuestionCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
+    cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
-    startCursor: v.optional(v.union(v.string(), v.null())),
   },
-  returns: v.object({
-    totalProcessed: v.number(),
-    batchCount: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isComplete: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
 
-    // Only clear existing aggregates if this is the first call (no startCursor)
-    if (!args.startCursor) {
+    if (!args.cursor) {
       await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
     }
 
-    // Process questions in paginated batches (filtered by tenant)
-    let cursor: string | null = args.startCursor || null;
+    let cursor: string | null = args.cursor;
     let totalProcessed = 0;
     let batchCount = 0;
-    let isComplete = false;
 
     do {
       const result = await ctx.db
         .query('questions')
         .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-        .paginate({
-          cursor,
-          numItems: batchSize,
-        });
+        .paginate({ cursor, numItems: batchSize });
 
-      // Process this batch
       for (const question of result.page) {
         await totalQuestionCount.insertIfDoesNotExist(ctx, question);
       }
@@ -80,899 +86,438 @@ export const repairGlobalQuestionCount = internalMutation({
       cursor = result.continueCursor;
       batchCount++;
 
-      console.log(
-        `Processed batch ${batchCount}: ${result.page.length} questions for tenant ${args.tenantId}`,
-      );
-
-      // Check if we're done with all data
       if (result.isDone) {
-        isComplete = true;
-        cursor = null;
-        break;
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
       }
 
-      // If we have more data but this is getting large, we should break
-      // and let the caller call us again with the cursor
-      if (batchCount >= 10) {
-        console.log(
-          `Processed ${batchCount} batches, stopping to prevent timeout. Resume with cursor: ${cursor}`,
-        );
-        break;
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
       }
     } while (cursor);
 
-    const message = isComplete
-      ? `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches for tenant ${args.tenantId}`
-      : `Partial repair: ${totalProcessed} questions processed in ${batchCount} batches. Resume with returned cursor.`;
-
-    console.log(message);
-
-    return {
-      totalProcessed,
-      batchCount,
-      nextCursor: cursor,
-      isComplete,
-    };
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 // ============================================================================
-// SECTION 1: GLOBAL QUESTION COUNT AGGREGATES REPAIR
-// ============================================================================
-
-// ============================================================================
-// SECTION 1: PAGINATED REPAIR FUNCTIONS (15-second safe)
+// SECTION 2: THEME/SUBTHEME/GROUP COUNT AGGREGATES REPAIR
 // ============================================================================
 
 /**
- * Clear Section 1 aggregates for a tenant (fast operation)
- * Note: tenantId is optional for backward compatibility with existing workflows.
- * When tenantId is not provided, this function does nothing (workflow refactoring deferred).
+ * Repair theme count aggregate with pagination
  */
-export const internalRepairClearSection1Aggregates = internalMutation({
+export const repairThemeCount = internalMutation({
   args: {
-    tenantId: v.optional(v.id('apps')),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    if (!args.tenantId) {
-      console.log(
-        'Section 1 clear skipped: tenantId not provided (workflow refactoring needed)',
-      );
-      return null;
-    }
-    await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
-    console.log(`Section 1 aggregates cleared for tenant ${args.tenantId}`);
-    return null;
-  },
-});
-
-/**
- * Process questions batch for global count (15-second safe)
- */
-export const internalRepairProcessQuestionsBatchGlobal = internalMutation({
-  args: {
+    tenantId: v.id('apps'),
+    themeId: v.id('themes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.themeId}`;
 
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor,
-      numItems: batchSize,
-    });
-
-    // Process this batch
-    for (const question of result.page) {
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+    if (!args.cursor) {
+      await questionCountByTheme.clear(ctx, { namespace });
     }
 
-    console.log(`Processed ${result.page.length} questions for global count`);
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * Process theme aggregates batch (15-second safe)
- * Uses composite namespace: "tenantId:themeId"
- */
-export const internalRepairProcessThemeAggregatesBatch = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    themeIds: v.array(v.id('themes')),
-  },
-  returns: v.object({
-    processed: v.number(),
-  }),
-  handler: async (ctx, args) => {
-    let processed = 0;
-
-    for (const themeId of args.themeIds) {
-      // Clear theme aggregate with composite namespace
-      const namespace = `${args.tenantId}:${themeId}`;
-      await questionCountByTheme.clear(ctx, { namespace });
-      // Get questions for this theme (tenant-scoped)
-      const questions = await ctx.db
+    do {
+      const result = await ctx.db
         .query('questions')
         .withIndex('by_tenant_and_theme', q =>
-          q.eq('tenantId', args.tenantId).eq('themeId', themeId),
+          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
         )
-        .collect();
+        .paginate({ cursor, numItems: batchSize });
 
-      // Insert all questions for this theme
-      for (const question of questions) {
+      for (const question of result.page) {
         await questionCountByTheme.insertIfDoesNotExist(ctx, question);
       }
 
-      processed++;
-      console.log(`Processed theme ${themeId}: ${questions.length} questions`);
-    }
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
 
-    return { processed };
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
- * Process subtheme aggregates batch (15-second safe)
- * Uses composite namespace: "tenantId:subthemeId"
+ * Repair subtheme count aggregate with pagination
  */
-export const internalRepairProcessSubthemeAggregatesBatch = internalMutation({
+export const repairSubthemeCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
-    subthemeIds: v.array(v.id('subthemes')),
+    subthemeId: v.id('subthemes'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    let processed = 0;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
 
-    for (const subthemeId of args.subthemeIds) {
-      // Clear subtheme aggregate with composite namespace
-      const namespace = `${args.tenantId}:${subthemeId}`;
+    if (!args.cursor) {
       await questionCountBySubtheme.clear(ctx, { namespace });
+    }
 
-      // Get questions for this subtheme (tenant-scoped)
-      const questions = await ctx.db
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
+
+    do {
+      const result = await ctx.db
         .query('questions')
         .withIndex('by_tenant_and_subtheme', q =>
-          q.eq('tenantId', args.tenantId).eq('subthemeId', subthemeId),
+          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
         )
-        .collect();
+        .paginate({ cursor, numItems: batchSize });
 
-      // Insert all questions for this subtheme
-      for (const question of questions) {
+      for (const question of result.page) {
         await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
       }
 
-      processed++;
-      console.log(
-        `Processed subtheme ${subthemeId}: ${questions.length} questions`,
-      );
-    }
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
 
-    return { processed };
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
- * Process group aggregates batch (15-second safe)
- * Uses composite namespace: "tenantId:groupId"
+ * Repair group count aggregate with pagination
  */
-export const internalRepairProcessGroupAggregatesBatch = internalMutation({
+export const repairGroupCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
-    groupIds: v.array(v.id('groups')),
+    groupId: v.id('groups'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    let processed = 0;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.groupId}`;
 
-    for (const groupId of args.groupIds) {
-      // Clear group aggregate with composite namespace
-      const namespace = `${args.tenantId}:${groupId}`;
+    if (!args.cursor) {
       await questionCountByGroup.clear(ctx, { namespace });
+    }
 
-      // Get questions for this group (tenant-scoped)
-      const questions = await ctx.db
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
+
+    do {
+      const result = await ctx.db
         .query('questions')
         .withIndex('by_tenant_and_group', q =>
-          q.eq('tenantId', args.tenantId).eq('groupId', groupId),
+          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
         )
-        .collect();
+        .paginate({ cursor, numItems: batchSize });
 
-      // Insert all questions for this group
-      for (const question of questions) {
+      for (const question of result.page) {
         await questionCountByGroup.insertIfDoesNotExist(ctx, question);
       }
 
-      processed++;
-      console.log(`Processed group ${groupId}: ${questions.length} questions`);
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
+  },
+});
+
+// ============================================================================
+// SECTION 3: RANDOM QUESTION SELECTION AGGREGATES REPAIR
+// ============================================================================
+
+/**
+ * Repair random questions aggregate for a tenant with pagination
+ */
+export const repairRandomQuestions = internalMutation({
+  args: {
+    tenantId: v.id('apps'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: paginatedResultValidator,
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+
+    if (!args.cursor) {
+      await randomQuestions.clear(ctx, { namespace: args.tenantId });
     }
 
-    return { processed };
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
+
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+        .paginate({ cursor, numItems: batchSize });
+
+      for (const question of result.page) {
+        await randomQuestions.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
- * Get all theme IDs for batch processing
+ * Repair theme random aggregate with pagination
  */
-export const internalRepairGetAllThemeIds = internalMutation({
-  args: {},
+export const repairRandomQuestionsByTheme = internalMutation({
+  args: {
+    tenantId: v.id('apps'),
+    themeId: v.id('themes'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: paginatedResultValidator,
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.themeId}`;
+
+    if (!args.cursor) {
+      await randomQuestionsByTheme.clear(ctx, { namespace });
+    }
+
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
+
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+        )
+        .paginate({ cursor, numItems: batchSize });
+
+      for (const question of result.page) {
+        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
+  },
+});
+
+/**
+ * Repair subtheme random aggregate with pagination
+ */
+export const repairRandomQuestionsBySubtheme = internalMutation({
+  args: {
+    tenantId: v.id('apps'),
+    subthemeId: v.id('subthemes'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: paginatedResultValidator,
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
+
+    if (!args.cursor) {
+      await randomQuestionsBySubtheme.clear(ctx, { namespace });
+    }
+
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
+
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+        )
+        .paginate({ cursor, numItems: batchSize });
+
+      for (const question of result.page) {
+        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
+  },
+});
+
+/**
+ * Repair group random aggregate with pagination
+ */
+export const repairRandomQuestionsByGroup = internalMutation({
+  args: {
+    tenantId: v.id('apps'),
+    groupId: v.id('groups'),
+    cursor: v.union(v.string(), v.null()),
+    batchSize: v.optional(v.number()),
+  },
+  returns: paginatedResultValidator,
+  handler: async (ctx, args) => {
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.groupId}`;
+
+    if (!args.cursor) {
+      await randomQuestionsByGroup.clear(ctx, { namespace });
+    }
+
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
+
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+        )
+        .paginate({ cursor, numItems: batchSize });
+
+      for (const question of result.page) {
+        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
+  },
+});
+
+// ============================================================================
+// HELPER QUERIES
+// ============================================================================
+
+/**
+ * Get all theme IDs for a tenant (for batch processing)
+ */
+export const getThemeIdsForTenant = internalQuery({
+  args: {
+    tenantId: v.id('apps'),
+  },
   returns: v.array(v.id('themes')),
-  handler: async ctx => {
-    const themes = await ctx.db.query('themes').collect();
+  handler: async (ctx, args) => {
+    const themes = await ctx.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
     return themes.map(t => t._id);
   },
 });
 
 /**
- * Get all subtheme IDs for batch processing
+ * Get all subtheme IDs for a tenant (for batch processing)
  */
-export const internalRepairGetAllSubthemeIds = internalMutation({
-  args: {},
+export const getSubthemeIdsForTenant = internalQuery({
+  args: {
+    tenantId: v.id('apps'),
+  },
   returns: v.array(v.id('subthemes')),
-  handler: async ctx => {
-    const subthemes = await ctx.db.query('subthemes').collect();
+  handler: async (ctx, args) => {
+    const subthemes = await ctx.db
+      .query('subthemes')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
     return subthemes.map(s => s._id);
   },
 });
 
 /**
- * Get all group IDs for batch processing
+ * Get all group IDs for a tenant (for batch processing)
  */
-export const internalRepairGetAllGroupIds = internalMutation({
-  args: {},
+export const getGroupIdsForTenant = internalQuery({
+  args: {
+    tenantId: v.id('apps'),
+  },
   returns: v.array(v.id('groups')),
-  handler: async ctx => {
-    const groups = await ctx.db.query('groups').collect();
-    return groups.map(g => g._id);
-  },
-});
-
-// ============================================================================
-// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES REPAIR (15-second safe)
-// ============================================================================
-
-/**
- * Clear Section 2 aggregates for a tenant (fast operation)
- * Note: tenantId is optional for backward compatibility with existing workflows.
- * When tenantId is not provided, this function does nothing (workflow refactoring needed).
- */
-export const internalRepairClearSection2Aggregates = internalMutation({
-  args: {
-    tenantId: v.optional(v.id('apps')),
-  },
-  returns: v.null(),
   handler: async (ctx, args) => {
-    if (!args.tenantId) {
-      console.log(
-        'Section 2 clear skipped: tenantId not provided (workflow refactoring needed)',
-      );
-      return null;
-    }
-    await randomQuestions.clear(ctx, { namespace: args.tenantId });
-    console.log(`Section 2 aggregates cleared for tenant ${args.tenantId}`);
-    return null;
-  },
-});
-
-/**
- * Process questions batch for random selection (15-second safe)
- */
-export const internalRepairProcessQuestionsBatchRandom = internalMutation({
-  args: {
-    cursor: v.union(v.string(), v.null()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
-
-    const result = await ctx.db.query('questions').paginate({
-      cursor: args.cursor,
-      numItems: batchSize,
-    });
-
-    // Process this batch
-    for (const question of result.page) {
-      await randomQuestions.insertIfDoesNotExist(ctx, question);
-    }
-
-    console.log(
-      `Processed ${result.page.length} questions for random selection`,
-    );
-
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * Process theme random aggregates batch (15-second safe)
- * Uses composite namespace: "tenantId:themeId"
- */
-export const internalRepairProcessThemeRandomAggregatesBatch = internalMutation(
-  {
-    args: {
-      tenantId: v.id('apps'),
-      themeIds: v.array(v.id('themes')),
-    },
-    returns: v.object({
-      processed: v.number(),
-    }),
-    handler: async (ctx, args) => {
-      let processed = 0;
-
-      for (const themeId of args.themeIds) {
-        // Clear theme random aggregate with composite namespace
-        const namespace = `${args.tenantId}:${themeId}`;
-        await randomQuestionsByTheme.clear(ctx, { namespace });
-        // Get questions for this theme (tenant-scoped)
-        const questions = await ctx.db
-          .query('questions')
-          .withIndex('by_tenant_and_theme', q =>
-            q.eq('tenantId', args.tenantId).eq('themeId', themeId),
-          )
-          .collect();
-
-        // Insert all questions for this theme
-        for (const question of questions) {
-          await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
-        }
-
-        processed++;
-        console.log(
-          `Processed theme random ${themeId}: ${questions.length} questions`,
-        );
-      }
-
-      return { processed };
-    },
-  },
-);
-
-// 15s-safe: process one theme's random aggregate in pages
-// Uses composite namespace: "tenantId:themeId"
-export const internalRepairClearThemeRandomAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    themeId: v.id('themes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.themeId}`;
-    await randomQuestionsByTheme.clear(ctx, { namespace });
-    return null;
-  },
-});
-
-export const internalRepairProcessThemeRandomPage = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    themeId: v.id('themes'),
-    cursor: v.union(v.string(), v.null()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 25;
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_theme', q =>
-        q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
-
-    for (const question of result.page) {
-      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
-    }
-
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * Process subtheme random aggregates batch (15-second safe)
- * Uses composite namespace: "tenantId:subthemeId"
- */
-export const internalRepairProcessSubthemeRandomAggregatesBatch =
-  internalMutation({
-    args: {
-      tenantId: v.id('apps'),
-      subthemeIds: v.array(v.id('subthemes')),
-    },
-    returns: v.object({
-      processed: v.number(),
-    }),
-    handler: async (ctx, args) => {
-      let processed = 0;
-
-      for (const subthemeId of args.subthemeIds) {
-        // Clear subtheme random aggregate with composite namespace
-        const namespace = `${args.tenantId}:${subthemeId}`;
-        await randomQuestionsBySubtheme.clear(ctx, { namespace });
-
-        // Get questions for this subtheme (tenant-scoped)
-        const questions = await ctx.db
-          .query('questions')
-          .withIndex('by_tenant_and_subtheme', q =>
-            q.eq('tenantId', args.tenantId).eq('subthemeId', subthemeId),
-          )
-          .collect();
-
-        // Insert all questions for this subtheme
-        for (const question of questions) {
-          await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
-        }
-
-        processed++;
-        console.log(
-          `Processed subtheme random ${subthemeId}: ${questions.length} questions`,
-        );
-      }
-
-      return { processed };
-    },
-  });
-
-// Uses composite namespace: "tenantId:subthemeId"
-export const internalRepairClearSubthemeRandomAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    subthemeId: v.id('subthemes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.subthemeId}`;
-    await randomQuestionsBySubtheme.clear(ctx, { namespace });
-    return null;
-  },
-});
-
-export const internalRepairProcessSubthemeRandomPage = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    subthemeId: v.id('subthemes'),
-    cursor: v.union(v.string(), v.null()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 25;
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_subtheme', q =>
-        q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
-
-    for (const question of result.page) {
-      await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
-    }
-
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-/**
- * Process group random aggregates batch (15-second safe)
- * Uses composite namespace: "tenantId:groupId"
- */
-export const internalRepairProcessGroupRandomAggregatesBatch = internalMutation(
-  {
-    args: {
-      tenantId: v.id('apps'),
-      groupIds: v.array(v.id('groups')),
-    },
-    returns: v.object({
-      processed: v.number(),
-    }),
-    handler: async (ctx, args) => {
-      let processed = 0;
-
-      for (const groupId of args.groupIds) {
-        // Clear group random aggregate with composite namespace
-        const namespace = `${args.tenantId}:${groupId}`;
-        await randomQuestionsByGroup.clear(ctx, { namespace });
-
-        // Get questions for this group (tenant-scoped)
-        const questions = await ctx.db
-          .query('questions')
-          .withIndex('by_tenant_and_group', q =>
-            q.eq('tenantId', args.tenantId).eq('groupId', groupId),
-          )
-          .collect();
-
-        // Insert all questions for this group
-        for (const question of questions) {
-          await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
-        }
-
-        processed++;
-        console.log(
-          `Processed group random ${groupId}: ${questions.length} questions`,
-        );
-      }
-
-      return { processed };
-    },
-  },
-);
-
-// Uses composite namespace: "tenantId:groupId"
-export const internalRepairClearGroupRandomAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    groupId: v.id('groups'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.groupId}`;
-    await randomQuestionsByGroup.clear(ctx, { namespace });
-    return null;
-  },
-});
-
-export const internalRepairProcessGroupRandomPage = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    groupId: v.id('groups'),
-    cursor: v.union(v.string(), v.null()),
-    batchSize: v.optional(v.number()),
-  },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
-  handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 25;
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_group', q =>
-        q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
-
-    for (const question of result.page) {
-      await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
-    }
-
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
-
-// ============================================================================
-// SECTION 3: USER-SPECIFIC AGGREGATES REPAIR - REMOVED
-// ============================================================================
-
-// All Section 3 user-specific aggregate repair functions have been removed.
-// User statistics are now efficiently handled by the userStatsCounts table,
-// which provides much better performance than the old aggregate system.
-
-// ============================================================================
-// SIMPLIFIED TENANT-AWARE REPAIR API
-// ============================================================================
-//
-// These functions provide a simpler, tenant-aware API for repairing aggregates.
-// Use these instead of the complex workflow system when you need quick repairs.
-// ============================================================================
-
-/**
- * Repair all aggregates for a specific tenant.
- *
- * This is the recommended way to repair aggregates after data changes.
- * It handles:
- * - Total question count (namespaced by tenantId)
- * - Random question selection (namespaced by tenantId)
- * - Theme/subtheme/group counts (namespaced by "tenantId:entityId" composite key)
- *
- * Usage:
- *   npx convex run aggregateRepairs:repairTenantAggregates '{"tenantId":"<tenant-id>"}'
- */
-export const repairTenantAggregates = mutation({
-  args: {
-    tenantId: v.id('apps'),
-  },
-  returns: v.object({
-    success: v.boolean(),
-    totalQuestions: v.number(),
-    themes: v.number(),
-    subthemes: v.number(),
-    groups: v.number(),
-    message: v.string(),
-  }),
-  handler: async (ctx, args) => {
-    const startTime = Date.now();
-    console.log(`Starting aggregate repair for tenant ${args.tenantId}...`);
-
-    // Step 1: Clear and rebuild totalQuestionCount aggregate
-    await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
-    await randomQuestions.clear(ctx, { namespace: args.tenantId });
-
-    // Step 2: Get all questions for this tenant and rebuild both aggregates
-    const questions = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-      .collect();
-
-    for (const question of questions) {
-      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-      await randomQuestions.insertIfDoesNotExist(ctx, question);
-    }
-
-    console.log(`Processed ${questions.length} questions for tenant`);
-
-    // Step 3: Get all themes for this tenant and rebuild their aggregates
-    // Use composite namespace: "tenantId:themeId"
-    const themes = await ctx.db
-      .query('themes')
-      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-      .collect();
-
-    for (const theme of themes) {
-      const themeNamespace = `${args.tenantId}:${theme._id}`;
-      await questionCountByTheme.clear(ctx, { namespace: themeNamespace });
-      await randomQuestionsByTheme.clear(ctx, { namespace: themeNamespace });
-
-      const themeQuestions = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_theme', q =>
-          q.eq('tenantId', args.tenantId).eq('themeId', theme._id),
-        )
-        .collect();
-
-      for (const q of themeQuestions) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, q);
-        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, q);
-      }
-    }
-
-    console.log(`Processed ${themes.length} themes`);
-
-    // Step 4: Get all subthemes for this tenant and rebuild their aggregates
-    // Use composite namespace: "tenantId:subthemeId"
-    const subthemes = await ctx.db
-      .query('subthemes')
-      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-      .collect();
-
-    for (const subtheme of subthemes) {
-      const subthemeNamespace = `${args.tenantId}:${subtheme._id}`;
-      await questionCountBySubtheme.clear(ctx, {
-        namespace: subthemeNamespace,
-      });
-      await randomQuestionsBySubtheme.clear(ctx, {
-        namespace: subthemeNamespace,
-      });
-
-      const subthemeQuestions = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_subtheme', q =>
-          q.eq('tenantId', args.tenantId).eq('subthemeId', subtheme._id),
-        )
-        .collect();
-
-      for (const q of subthemeQuestions) {
-        await questionCountBySubtheme.insertIfDoesNotExist(ctx, q);
-        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, q);
-      }
-    }
-
-    console.log(`Processed ${subthemes.length} subthemes`);
-
-    // Step 5: Get all groups for this tenant and rebuild their aggregates
-    // Use composite namespace: "tenantId:groupId"
     const groups = await ctx.db
       .query('groups')
       .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
       .collect();
-
-    for (const group of groups) {
-      const groupNamespace = `${args.tenantId}:${group._id}`;
-      await questionCountByGroup.clear(ctx, { namespace: groupNamespace });
-      await randomQuestionsByGroup.clear(ctx, { namespace: groupNamespace });
-
-      const groupQuestions = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_group', q =>
-          q.eq('tenantId', args.tenantId).eq('groupId', group._id),
-        )
-        .collect();
-
-      for (const q of groupQuestions) {
-        await questionCountByGroup.insertIfDoesNotExist(ctx, q);
-        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, q);
-      }
-    }
-
-    console.log(`Processed ${groups.length} groups`);
-
-    const duration = Date.now() - startTime;
-
-    return {
-      success: true,
-      totalQuestions: questions.length,
-      themes: themes.length,
-      subthemes: subthemes.length,
-      groups: groups.length,
-      message: `Repair completed in ${duration}ms for tenant ${args.tenantId}`,
-    };
-  },
-});
-
-/**
- * Repair aggregates for all tenants.
- *
- * Usage:
- *   npx convex run aggregateRepairs:repairAllAggregates '{}'
- */
-export const repairAllAggregates = mutation({
-  args: {},
-  returns: v.object({
-    success: v.boolean(),
-    tenantsProcessed: v.number(),
-    totalQuestions: v.number(),
-    message: v.string(),
-  }),
-  handler: async ctx => {
-    const startTime = Date.now();
-    console.log('Starting aggregate repair for all tenants...');
-
-    // Get all tenants
-    const tenants = await ctx.db.query('apps').collect();
-
-    let totalQuestions = 0;
-
-    for (const tenant of tenants) {
-      console.log(`Processing tenant: ${tenant.slug}`);
-
-      // Clear tenant-level aggregates
-      await totalQuestionCount.clear(ctx, { namespace: tenant._id });
-      await randomQuestions.clear(ctx, { namespace: tenant._id });
-
-      // Get questions for this tenant
-      const questions = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
-        .collect();
-
-      for (const question of questions) {
-        await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-        await randomQuestions.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalQuestions += questions.length;
-
-      // Process themes with composite namespace: "tenantId:themeId"
-      const themes = await ctx.db
-        .query('themes')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
-        .collect();
-
-      for (const theme of themes) {
-        const themeNamespace = `${tenant._id}:${theme._id}`;
-        await questionCountByTheme.clear(ctx, { namespace: themeNamespace });
-        await randomQuestionsByTheme.clear(ctx, { namespace: themeNamespace });
-
-        const themeQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_tenant_and_theme', q =>
-            q.eq('tenantId', tenant._id).eq('themeId', theme._id),
-          )
-          .collect();
-
-        for (const q of themeQuestions) {
-          await questionCountByTheme.insertIfDoesNotExist(ctx, q);
-          await randomQuestionsByTheme.insertIfDoesNotExist(ctx, q);
-        }
-      }
-
-      // Process subthemes with composite namespace: "tenantId:subthemeId"
-      const subthemes = await ctx.db
-        .query('subthemes')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
-        .collect();
-
-      for (const subtheme of subthemes) {
-        const subthemeNamespace = `${tenant._id}:${subtheme._id}`;
-        await questionCountBySubtheme.clear(ctx, {
-          namespace: subthemeNamespace,
-        });
-        await randomQuestionsBySubtheme.clear(ctx, {
-          namespace: subthemeNamespace,
-        });
-
-        const subthemeQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_tenant_and_subtheme', q =>
-            q.eq('tenantId', tenant._id).eq('subthemeId', subtheme._id),
-          )
-          .collect();
-
-        for (const q of subthemeQuestions) {
-          await questionCountBySubtheme.insertIfDoesNotExist(ctx, q);
-          await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, q);
-        }
-      }
-
-      // Process groups with composite namespace: "tenantId:groupId"
-      const groups = await ctx.db
-        .query('groups')
-        .withIndex('by_tenant', q => q.eq('tenantId', tenant._id))
-        .collect();
-
-      for (const group of groups) {
-        const groupNamespace = `${tenant._id}:${group._id}`;
-        await questionCountByGroup.clear(ctx, { namespace: groupNamespace });
-        await randomQuestionsByGroup.clear(ctx, { namespace: groupNamespace });
-
-        const groupQuestions = await ctx.db
-          .query('questions')
-          .withIndex('by_tenant_and_group', q =>
-            q.eq('tenantId', tenant._id).eq('groupId', group._id),
-          )
-          .collect();
-
-        for (const q of groupQuestions) {
-          await questionCountByGroup.insertIfDoesNotExist(ctx, q);
-          await randomQuestionsByGroup.insertIfDoesNotExist(ctx, q);
-        }
-      }
-
-      console.log(
-        `Tenant ${tenant.slug}: ${questions.length} questions, ${themes.length} themes`,
-      );
-    }
-
-    const duration = Date.now() - startTime;
-
-    return {
-      success: true,
-      tenantsProcessed: tenants.length,
-      totalQuestions,
-      message: `Repair completed in ${duration}ms for ${tenants.length} tenants`,
-    };
+    return groups.map(g => g._id);
   },
 });

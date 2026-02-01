@@ -130,21 +130,3 @@ export const randomQuestionsByGroup = new TableAggregate<{
   },
   sortKey: () => null, // No sorting = random order by _id
 });
-
-// =============================================================================
-// SECTION 3: USER-SPECIFIC COUNT AGGREGATES - REMOVED
-// Replaced by userStatsCounts table for better performance
-// =============================================================================
-
-// All user-specific aggregates have been removed and replaced by the userStatsCounts table
-// This eliminates 12 complex aggregate components and provides much better performance:
-// - answeredByUser, incorrectByUser, bookmarkedByUser
-// - answeredByThemeByUser, incorrectByThemeByUser, bookmarkedByThemeByUser
-// - answeredBySubthemeByUser, incorrectBySubthemeByUser, bookmarkedBySubthemeByUser
-// - answeredByGroupByUser, incorrectByGroupByUser, bookmarkedByGroupByUser
-//
-// Benefits:
-// - 1-2 database calls instead of 1000+ aggregate calls
-// - Simpler codebase with no complex namespace/sortKey logic
-// - Easier to maintain and debug
-// - Better scalability for large user bases
