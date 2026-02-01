@@ -83,6 +83,8 @@ export default defineSchema({
     name: v.string(),
     prefix: v.optional(v.string()),
     displayOrder: v.optional(v.number()),
+    // Legacy ID for cross-deployment import (stores old _id as string)
+    legacyId: v.optional(v.string()),
   })
     .index('by_name', ['name'])
     .index('by_tenant', ['tenantId'])
@@ -92,8 +94,11 @@ export default defineSchema({
     // Multi-tenancy
     tenantId: v.optional(v.id('apps')),
     name: v.string(),
-    themeId: v.id('themes'),
+    themeId: v.optional(v.id('themes')),
     prefix: v.optional(v.string()),
+    // Legacy IDs for cross-deployment import
+    legacyId: v.optional(v.string()),
+    legacyThemeId: v.optional(v.string()),
   })
     .index('by_theme', ['themeId'])
     .index('by_tenant', ['tenantId'])
@@ -103,8 +108,11 @@ export default defineSchema({
     // Multi-tenancy
     tenantId: v.optional(v.id('apps')),
     name: v.string(),
-    subthemeId: v.id('subthemes'),
+    subthemeId: v.optional(v.id('subthemes')),
     prefix: v.optional(v.string()),
+    // Legacy IDs for cross-deployment import
+    legacyId: v.optional(v.string()),
+    legacySubthemeId: v.optional(v.string()),
   })
     .index('by_subtheme', ['subthemeId'])
     .index('by_tenant', ['tenantId'])
@@ -116,13 +124,16 @@ export default defineSchema({
   // Question Content - Heavy content stored separately for performance
   // Load this only when viewing/editing a question, not for lists
   questionContent: defineTable({
-    questionId: v.id('questions'),
+    questionId: v.optional(v.id('questions')),
     questionTextString: v.string(), // Rich text JSON (heavy)
     explanationTextString: v.string(), // Rich text JSON (heavy)
     alternatives: v.array(v.string()), // Answer options
     // Legacy fields (for migration - will be removed after migration complete)
     questionText: v.optional(v.any()),
     explanationText: v.optional(v.any()),
+    // Legacy IDs for cross-deployment import
+    legacyId: v.optional(v.string()),
+    legacyQuestionId: v.optional(v.string()),
   }).index('by_question', ['questionId']),
 
   // Questions - Light metadata for lists, filtering, aggregates
@@ -135,6 +146,12 @@ export default defineSchema({
     normalizedTitle: v.string(),
     questionCode: v.optional(v.string()),
     orderedNumberId: v.optional(v.number()),
+
+    // Legacy IDs for cross-deployment import
+    legacyId: v.optional(v.string()),
+    legacyThemeId: v.optional(v.string()),
+    legacySubthemeId: v.optional(v.string()),
+    legacyGroupId: v.optional(v.string()),
 
     // Taxonomy IDs (for filtering/aggregates)
     themeId: v.id('themes'),
