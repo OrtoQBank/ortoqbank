@@ -21,7 +21,9 @@
 
 import { v } from 'convex/values';
 
-import { internalMutation, internalQuery } from './_generated/server';
+import { internal } from './_generated/api';
+import { Id } from './_generated/dataModel';
+import { internalAction, internalMutation, internalQuery } from './_generated/server';
 import {
   questionCountByGroup,
   questionCountBySubtheme,
@@ -519,5 +521,222 @@ export const getGroupIdsForTenant = internalQuery({
       .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
       .collect();
     return groups.map(g => g._id);
+  },
+});
+
+/**
+ * Get all app/tenant IDs
+ */
+export const getAllTenantIds = internalQuery({
+  args: {},
+  returns: v.array(v.id('apps')),
+  handler: async ctx => {
+    const apps = await ctx.db.query('apps').collect();
+    return apps.map(a => a._id);
+  },
+});
+
+// ============================================================================
+// SECTION 4: UNIFIED AGGREGATE REPAIR FUNCTIONS
+// ============================================================================
+
+type PaginatedResult = { processed: number; nextCursor: string | null; isDone: boolean };
+
+/**
+ * Helper to run a paginated repair mutation until complete
+ */
+async function runPaginated(
+  mutationFn: (args: { cursor: string | null }) => Promise<PaginatedResult>,
+): Promise<number> {
+  let cursor: string | null = null;
+  let totalProcessed = 0;
+  do {
+    const result: PaginatedResult = await mutationFn({ cursor });
+    totalProcessed += result.processed;
+    cursor = result.nextCursor;
+    if (result.isDone) break;
+  } while (cursor);
+  return totalProcessed;
+}
+
+/**
+ * Repair all aggregates for a single tenant
+ *
+ * This action orchestrates all aggregate repairs:
+ * - Global question count
+ * - Random questions aggregate
+ * - Theme counts and random selection
+ * - Subtheme counts and random selection
+ * - Group counts and random selection
+ *
+ * Usage:
+ * npx convex run aggregateRepairs:repairAllAggregates '{"tenantId":"<app-id>"}' --prod
+ */
+export const repairAllAggregates = internalAction({
+  args: {
+    tenantId: v.id('apps'),
+  },
+  returns: v.object({
+    globalCount: v.number(),
+    randomQuestions: v.number(),
+    themes: v.number(),
+    subthemes: v.number(),
+    groups: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { tenantId } = args;
+    console.log(`=== Repairing all aggregates for tenant: ${tenantId} ===`);
+
+    // 1. Repair global question count
+    console.log('1. Repairing global question count...');
+    const globalCount = await runPaginated(({ cursor }) =>
+      ctx.runMutation(internal.aggregateRepairs.repairGlobalQuestionCount, { tenantId, cursor }),
+    );
+    console.log(`   Processed ${globalCount} questions for global count`);
+
+    // 2. Repair random questions aggregate
+    console.log('2. Repairing random questions aggregate...');
+    const randomQuestionsCount = await runPaginated(({ cursor }) =>
+      ctx.runMutation(internal.aggregateRepairs.repairRandomQuestions, { tenantId, cursor }),
+    );
+    console.log(`   Processed ${randomQuestionsCount} questions for random selection`);
+
+    // 3. Get all theme IDs and repair each
+    console.log('3. Repairing theme aggregates...');
+    const themeIds = await ctx.runQuery(internal.aggregateRepairs.getThemeIdsForTenant, {
+      tenantId,
+    });
+    let themesProcessed = 0;
+    for (const themeId of themeIds) {
+      await runPaginated(({ cursor }) =>
+        ctx.runMutation(internal.aggregateRepairs.repairThemeCount, { tenantId, themeId, cursor }),
+      );
+      await runPaginated(({ cursor }) =>
+        ctx.runMutation(internal.aggregateRepairs.repairRandomQuestionsByTheme, {
+          tenantId,
+          themeId,
+          cursor,
+        }),
+      );
+      themesProcessed++;
+    }
+    console.log(`   Processed ${themesProcessed} themes`);
+
+    // 4. Get all subtheme IDs and repair each
+    console.log('4. Repairing subtheme aggregates...');
+    const subthemeIds = await ctx.runQuery(internal.aggregateRepairs.getSubthemeIdsForTenant, {
+      tenantId,
+    });
+    let subthemesProcessed = 0;
+    for (const subthemeId of subthemeIds) {
+      await runPaginated(({ cursor }) =>
+        ctx.runMutation(internal.aggregateRepairs.repairSubthemeCount, {
+          tenantId,
+          subthemeId,
+          cursor,
+        }),
+      );
+      await runPaginated(({ cursor }) =>
+        ctx.runMutation(internal.aggregateRepairs.repairRandomQuestionsBySubtheme, {
+          tenantId,
+          subthemeId,
+          cursor,
+        }),
+      );
+      subthemesProcessed++;
+    }
+    console.log(`   Processed ${subthemesProcessed} subthemes`);
+
+    // 5. Get all group IDs and repair each
+    console.log('5. Repairing group aggregates...');
+    const groupIds = await ctx.runQuery(internal.aggregateRepairs.getGroupIdsForTenant, {
+      tenantId,
+    });
+    let groupsProcessed = 0;
+    for (const groupId of groupIds) {
+      await runPaginated(({ cursor }) =>
+        ctx.runMutation(internal.aggregateRepairs.repairGroupCount, { tenantId, groupId, cursor }),
+      );
+      await runPaginated(({ cursor }) =>
+        ctx.runMutation(internal.aggregateRepairs.repairRandomQuestionsByGroup, {
+          tenantId,
+          groupId,
+          cursor,
+        }),
+      );
+      groupsProcessed++;
+    }
+    console.log(`   Processed ${groupsProcessed} groups`);
+
+    console.log(`=== Completed aggregate repairs for tenant: ${tenantId} ===`);
+
+    return {
+      globalCount,
+      randomQuestions: randomQuestionsCount,
+      themes: themesProcessed,
+      subthemes: subthemesProcessed,
+      groups: groupsProcessed,
+    };
+  },
+});
+
+// Result type for single tenant repair
+type TenantRepairResult = {
+  globalCount: number;
+  randomQuestions: number;
+  themes: number;
+  subthemes: number;
+  groups: number;
+};
+
+/**
+ * Repair all aggregates for ALL tenants
+ *
+ * This action fetches all apps and repairs aggregates for each one.
+ *
+ * Usage:
+ * npx convex run aggregateRepairs:repairAllTenantsAggregates --prod
+ */
+export const repairAllTenantsAggregates = internalAction({
+  args: {},
+  returns: v.object({
+    tenantsProcessed: v.number(),
+    results: v.array(
+      v.object({
+        tenantId: v.id('apps'),
+        globalCount: v.number(),
+        randomQuestions: v.number(),
+        themes: v.number(),
+        subthemes: v.number(),
+        groups: v.number(),
+      }),
+    ),
+  }),
+  handler: async ctx => {
+    console.log('=== Repairing aggregates for ALL tenants ===');
+
+    // Get all tenant IDs - fetch from apps table directly to avoid circular reference
+    const apps = await ctx.runQuery(internal.aggregateRepairs.getAllTenantIds, {});
+    const tenantIds: Array<Id<'apps'>> = apps;
+    console.log(`Found ${tenantIds.length} tenants to process`);
+
+    const results: Array<{ tenantId: Id<'apps'> } & TenantRepairResult> = [];
+
+    for (const tenantId of tenantIds) {
+      console.log(`\nProcessing tenant: ${tenantId}`);
+      const result: TenantRepairResult = await ctx.runAction(
+        internal.aggregateRepairs.repairAllAggregates,
+        { tenantId },
+      );
+      results.push({ tenantId, ...result });
+    }
+
+    console.log('\n=== All tenant aggregates repaired ===');
+    console.log(`Total tenants processed: ${tenantIds.length}`);
+
+    return {
+      tenantsProcessed: tenantIds.length,
+      results,
+    };
   },
 });

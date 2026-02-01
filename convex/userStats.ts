@@ -136,7 +136,7 @@ export const _updateQuestionStats = internalMutation({
       isCorrect: args.isCorrect,
       wasIncorrectBefore,
       isNewAnswer: !existingStat,
-      themeId: question.themeId,
+      themeId: question.themeId || null,
       subthemeId: question.subthemeId || null,
       groupId: question.groupId || null,
       // Multi-tenancy: pass tenantId to scheduled function
@@ -161,12 +161,13 @@ export const _updateUserStatsCounts = internalMutation({
     isCorrect: v.boolean(),
     wasIncorrectBefore: v.boolean(),
     isNewAnswer: v.boolean(),
-    themeId: v.id('themes'),
+    themeId: v.union(v.id('themes'), v.null()),
     subthemeId: v.union(v.id('subthemes'), v.null()),
     groupId: v.union(v.id('groups'), v.null()),
     // Multi-tenancy
     tenantId: v.union(v.id('apps'), v.null()),
   },
+  returns: v.null(),
   handler: async (ctx, params) => {
     await updateUserStatsCounts(ctx, {
       userId: params.userId,
@@ -182,6 +183,7 @@ export const _updateUserStatsCounts = internalMutation({
         tenantId: params.tenantId,
       },
     });
+    return null;
   },
 });
 

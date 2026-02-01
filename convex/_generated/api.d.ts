@@ -8,9 +8,9 @@
  * @module
  */
 
-import type * as aggregateQueries from "../aggregateQueries.js";
+import type * as aggregateCounts from "../aggregateCounts.js";
+import type * as aggregateRandom from "../aggregateRandom.js";
 import type * as aggregateRepairs from "../aggregateRepairs.js";
-import type * as aggregateWorkflows from "../aggregateWorkflows.js";
 import type * as aggregates from "../aggregates.js";
 import type * as apps from "../apps.js";
 import type * as asaas from "../asaas.js";
@@ -19,11 +19,11 @@ import type * as bookmark from "../bookmark.js";
 import type * as clerkActions from "../clerkActions.js";
 import type * as crons from "../crons.js";
 import type * as customQuizCreation from "../customQuizCreation.js";
-import type * as customQuizWorkflow from "../customQuizWorkflow.js";
 import type * as customQuizzes from "../customQuizzes.js";
 import type * as groups from "../groups.js";
 import type * as http from "../http.js";
 import type * as invoices from "../invoices.js";
+import type * as lib_accessControl from "../lib/accessControl.js";
 import type * as lib_shuffle from "../lib/shuffle.js";
 import type * as migrations from "../migrations.js";
 import type * as payments from "../payments.js";
@@ -32,7 +32,7 @@ import type * as pricingPlans from "../pricingPlans.js";
 import type * as promoCoupons from "../promoCoupons.js";
 import type * as questionErrorReport from "../questionErrorReport.js";
 import type * as questions from "../questions.js";
-import type * as questionsAggregateSync from "../questionsAggregateSync.js";
+import type * as questionsTaxonomySync from "../questionsTaxonomySync.js";
 import type * as quiz from "../quiz.js";
 import type * as quizSessions from "../quizSessions.js";
 import type * as retrier from "../retrier.js";
@@ -56,9 +56,9 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  aggregateQueries: typeof aggregateQueries;
+  aggregateCounts: typeof aggregateCounts;
+  aggregateRandom: typeof aggregateRandom;
   aggregateRepairs: typeof aggregateRepairs;
-  aggregateWorkflows: typeof aggregateWorkflows;
   aggregates: typeof aggregates;
   apps: typeof apps;
   asaas: typeof asaas;
@@ -67,11 +67,11 @@ declare const fullApi: ApiFromModules<{
   clerkActions: typeof clerkActions;
   crons: typeof crons;
   customQuizCreation: typeof customQuizCreation;
-  customQuizWorkflow: typeof customQuizWorkflow;
   customQuizzes: typeof customQuizzes;
   groups: typeof groups;
   http: typeof http;
   invoices: typeof invoices;
+  "lib/accessControl": typeof lib_accessControl;
   "lib/shuffle": typeof lib_shuffle;
   migrations: typeof migrations;
   payments: typeof payments;
@@ -80,7 +80,7 @@ declare const fullApi: ApiFromModules<{
   promoCoupons: typeof promoCoupons;
   questionErrorReport: typeof questionErrorReport;
   questions: typeof questions;
-  questionsAggregateSync: typeof questionsAggregateSync;
+  questionsTaxonomySync: typeof questionsTaxonomySync;
   quiz: typeof quiz;
   quizSessions: typeof quizSessions;
   retrier: typeof retrier;

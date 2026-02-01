@@ -206,7 +206,9 @@ export const list = query({
 
     // Only fetch themes for the current page of questions, not all themes
     const themes = await Promise.all(
-      questions.page.map(question => context.db.get(question.themeId)),
+      questions.page.map(question =>
+        question.themeId ? context.db.get(question.themeId) : null,
+      ),
     );
 
     return {
@@ -242,7 +244,9 @@ export const getById = query({
       throw new Error('Question not found'); // Don't reveal it exists in another tenant
     }
 
-    const theme = await context.db.get(question.themeId);
+    const theme = question.themeId
+      ? await context.db.get(question.themeId)
+      : undefined;
 
     const subtheme = question.subthemeId
       ? await context.db.get(question.subthemeId)
@@ -567,7 +571,9 @@ export const searchByCode = query({
     // If we have enough code results, just return those
     if (codeResults.length >= limit) {
       const themes = await Promise.all(
-        codeResults.map(question => ctx.db.get(question.themeId)),
+        codeResults.map(question =>
+          question.themeId ? ctx.db.get(question.themeId) : null,
+        ),
       );
       return codeResults.map((question, index) => ({
         _id: question._id,
@@ -594,7 +600,9 @@ export const searchByCode = query({
     // If we have questions, fetch their themes
     if (combinedResults.length > 0) {
       const themes = await Promise.all(
-        combinedResults.map(question => ctx.db.get(question.themeId)),
+        combinedResults.map(question =>
+          question.themeId ? ctx.db.get(question.themeId) : null,
+        ),
       );
 
       // Return minimal data to reduce bandwidth
@@ -637,7 +645,9 @@ export const searchByTitle = query({
     // If we have questions, fetch their themes
     if (matchingQuestions.length > 0) {
       const themes = await Promise.all(
-        matchingQuestions.map(question => ctx.db.get(question.themeId)),
+        matchingQuestions.map(question =>
+          question.themeId ? ctx.db.get(question.themeId) : null,
+        ),
       );
 
       // Return minimal data to reduce bandwidth
