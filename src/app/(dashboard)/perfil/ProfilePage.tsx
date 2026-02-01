@@ -1,6 +1,5 @@
 'use client';
 
-import { useTenantMutation } from '@/hooks/useTenantQuery';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import {
@@ -24,6 +23,7 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTenantMutation } from '@/hooks/useTenantQuery';
 import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../convex/_generated/api';
