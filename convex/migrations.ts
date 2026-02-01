@@ -1100,3 +1100,92 @@ export const backfillImportedTenantId = internalMutation({
   },
 });
 
+/**
+ * Resolve questions taxonomy for a specific tenant
+ * Use this when the standard migration says "already done" but new data was imported
+ *
+ * Usage:
+ * npx convex run migrations:resolveQuestionsTaxonomyForTenant \
+ *   '{"tenantId":"j97bcadmhnrg3nedjr0byh2dzd800hav"}' --prod
+ */
+export const resolveQuestionsTaxonomyForTenant = internalMutation({
+  args: {
+    tenantId: v.id('apps'),
+  },
+  returns: v.object({
+    processed: v.number(),
+    updated: v.number(),
+    themeUpdates: v.number(),
+    subthemeUpdates: v.number(),
+    groupUpdates: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { tenantId } = args;
+
+    // Get all questions for this tenant that need taxonomy resolution
+    const questions = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
+
+    let processed = 0;
+    let updated = 0;
+    let themeUpdates = 0;
+    let subthemeUpdates = 0;
+    let groupUpdates = 0;
+
+    for (const doc of questions) {
+      processed++;
+      const updates: {
+        themeId?: Id<'themes'>;
+        subthemeId?: Id<'subthemes'>;
+        groupId?: Id<'groups'>;
+      } = {};
+
+      // Resolve themeId from legacyThemeId
+      if (!doc.themeId && doc.legacyThemeId) {
+        const theme = await ctx.db
+          .query('themes')
+          .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacyThemeId))
+          .first();
+        if (theme) {
+          updates.themeId = theme._id;
+          themeUpdates++;
+        }
+      }
+
+      // Resolve subthemeId from legacySubthemeId
+      if (!doc.subthemeId && doc.legacySubthemeId) {
+        const subtheme = await ctx.db
+          .query('subthemes')
+          .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacySubthemeId))
+          .first();
+        if (subtheme) {
+          updates.subthemeId = subtheme._id;
+          subthemeUpdates++;
+        }
+      }
+
+      // Resolve groupId from legacyGroupId
+      if (!doc.groupId && doc.legacyGroupId) {
+        const group = await ctx.db
+          .query('groups')
+          .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacyGroupId))
+          .first();
+        if (group) {
+          updates.groupId = group._id;
+          groupUpdates++;
+        }
+      }
+
+      if (Object.keys(updates).length > 0) {
+        await ctx.db.patch(doc._id, updates);
+        updated++;
+      }
+    }
+
+    console.log(`Resolved taxonomy for ${updated}/${processed} questions`);
+    return { processed, updated, themeUpdates, subthemeUpdates, groupUpdates };
+  },
+});
+

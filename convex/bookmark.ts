@@ -207,10 +207,17 @@ async function updateBookmarkCounts(
   question: any,
   isBookmarked: boolean,
 ) {
-  // Get or create user counts record
+  const tenantId = question?.tenantId;
+  if (!tenantId) {
+    throw new Error('Cannot update bookmark counts: question is missing tenantId');
+  }
+
+  // Get or create user counts record - must be tenant-specific
   let userCounts = await ctx.db
     .query('userStatsCounts')
-    .withIndex('by_user', (q: any) => q.eq('userId', userId))
+    .withIndex('by_tenant_and_user', (q: any) =>
+      q.eq('tenantId', tenantId).eq('userId', userId),
+    )
     .first();
 
   if (!userCounts) {

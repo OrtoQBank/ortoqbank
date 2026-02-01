@@ -107,10 +107,18 @@ export async function updateTaxonomyDenormalization(
     `Updating userStatsCounts for ${affectedUserIds.size} affected users`,
   );
 
+  const tenantId = newDoc.tenantId;
+  if (!tenantId) {
+    throw new Error('Cannot sync taxonomy: question is missing tenantId');
+  }
+
   for (const userId of affectedUserIds) {
+    // Query tenant-specific userStatsCounts record
     const userCounts = await ctx.db
       .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId),
+      )
       .first();
 
     if (!userCounts) {

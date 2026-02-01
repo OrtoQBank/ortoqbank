@@ -70,34 +70,21 @@ export const repairGlobalQuestionCount = internalMutation({
       await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    // Single paginate call per mutation invocation
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await totalQuestionCount.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await totalQuestionCount.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -124,36 +111,22 @@ export const repairThemeCount = internalMutation({
       await questionCountByTheme.clear(ctx, { namespace });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant_and_theme', q =>
+        q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+      )
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_theme', q =>
-          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
-        )
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await questionCountByTheme.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -176,36 +149,22 @@ export const repairSubthemeCount = internalMutation({
       await questionCountBySubtheme.clear(ctx, { namespace });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant_and_subtheme', q =>
+        q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+      )
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_subtheme', q =>
-          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
-        )
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -228,36 +187,22 @@ export const repairGroupCount = internalMutation({
       await questionCountByGroup.clear(ctx, { namespace });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant_and_group', q =>
+        q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+      )
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_group', q =>
-          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
-        )
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -282,34 +227,20 @@ export const repairRandomQuestions = internalMutation({
       await randomQuestions.clear(ctx, { namespace: args.tenantId });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await randomQuestions.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await randomQuestions.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -332,36 +263,22 @@ export const repairRandomQuestionsByTheme = internalMutation({
       await randomQuestionsByTheme.clear(ctx, { namespace });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant_and_theme', q =>
+        q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+      )
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_theme', q =>
-          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
-        )
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -384,36 +301,22 @@ export const repairRandomQuestionsBySubtheme = internalMutation({
       await randomQuestionsBySubtheme.clear(ctx, { namespace });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant_and_subtheme', q =>
+        q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+      )
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_subtheme', q =>
-          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
-        )
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
@@ -436,36 +339,22 @@ export const repairRandomQuestionsByGroup = internalMutation({
       await randomQuestionsByGroup.clear(ctx, { namespace });
     }
 
-    let cursor: string | null = args.cursor;
-    let totalProcessed = 0;
-    let batchCount = 0;
+    const result = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant_and_group', q =>
+        q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+      )
+      .paginate({ cursor: args.cursor, numItems: batchSize });
 
-    do {
-      const result = await ctx.db
-        .query('questions')
-        .withIndex('by_tenant_and_group', q =>
-          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
-        )
-        .paginate({ cursor, numItems: batchSize });
+    for (const question of result.page) {
+      await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+    }
 
-      for (const question of result.page) {
-        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
-      }
-
-      totalProcessed += result.page.length;
-      cursor = result.continueCursor;
-      batchCount++;
-
-      if (result.isDone) {
-        return { processed: totalProcessed, nextCursor: null, isDone: true };
-      }
-
-      if (batchCount >= MAX_BATCHES_PER_CALL) {
-        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
-      }
-    } while (cursor);
-
-    return { processed: totalProcessed, nextCursor: null, isDone: true };
+    return {
+      processed: result.page.length,
+      nextCursor: result.isDone ? null : result.continueCursor,
+      isDone: result.isDone,
+    };
   },
 });
 
