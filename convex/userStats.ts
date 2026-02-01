@@ -205,19 +205,17 @@ async function updateUserStatsCounts(
     params;
 
   const tenantId = question?.tenantId;
+  if (!tenantId) {
+    throw new Error('Cannot update user stats: question is missing tenantId');
+  }
 
   // Get or create user counts record - must be tenant-specific
-  let userCounts = tenantId
-    ? await ctx.db
-        .query('userStatsCounts')
-        .withIndex('by_tenant_and_user', (q: any) =>
-          q.eq('tenantId', tenantId).eq('userId', userId),
-        )
-        .first()
-    : await ctx.db
-        .query('userStatsCounts')
-        .withIndex('by_user', (q: any) => q.eq('userId', userId))
-        .first();
+  let userCounts = await ctx.db
+    .query('userStatsCounts')
+    .withIndex('by_tenant_and_user', (q: any) =>
+      q.eq('tenantId', tenantId).eq('userId', userId),
+    )
+    .first();
 
   if (!userCounts) {
     // Initialize counts for new user

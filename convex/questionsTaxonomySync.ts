@@ -108,20 +108,18 @@ export async function updateTaxonomyDenormalization(
   );
 
   const tenantId = newDoc.tenantId;
+  if (!tenantId) {
+    throw new Error('Cannot sync taxonomy: question is missing tenantId');
+  }
 
   for (const userId of affectedUserIds) {
     // Query tenant-specific userStatsCounts record
-    const userCounts = tenantId
-      ? await ctx.db
-          .query('userStatsCounts')
-          .withIndex('by_tenant_and_user', q =>
-            q.eq('tenantId', tenantId).eq('userId', userId),
-          )
-          .first()
-      : await ctx.db
-          .query('userStatsCounts')
-          .withIndex('by_user', q => q.eq('userId', userId))
-          .first();
+    const userCounts = await ctx.db
+      .query('userStatsCounts')
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId),
+      )
+      .first();
 
     if (!userCounts) {
       // No counts record for this user, nothing to update
