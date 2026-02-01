@@ -38,6 +38,6 @@ export const internalMutation = customMutation(
 // queries don't need trigger wrapping
 
 // Only global question aggregates remain - user-specific aggregates replaced by userStatsCounts table
-// For comprehensive aggregate repair and testing, use aggregateWorkflows.ts functions
+// For aggregate repair/backfill, use the paginated functions in aggregateRepairs.ts
 
 export { query } from './_generated/server';
