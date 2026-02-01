@@ -1,19 +1,46 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
-  args: { subthemeId: v.optional(v.id('subthemes')) },
-  handler: async (context, { subthemeId }) => {
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    subthemeId: v.optional(v.id('subthemes')),
+  },
+  handler: async (context, { tenantId, subthemeId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
+    // If both tenantId and subthemeId are provided, use the compound index
+    if (tenantId && subthemeId) {
+      return await context.db
+        .query('groups')
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', tenantId).eq('subthemeId', subthemeId),
+        )
+        .collect();
+    }
+
+    // If only tenantId is provided
+    if (tenantId) {
+      return await context.db
+        .query('groups')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
+
+    // If only subthemeId is provided (backward compatibility)
     if (subthemeId) {
       return await context.db
         .query('groups')
         .withIndex('by_subtheme', q => q.eq('subthemeId', subthemeId))
         .collect();
     }
+
+    // No filters - return all (backward compatibility)
     return await context.db.query('groups').collect();
   },
 });
@@ -28,13 +55,15 @@ export const getById = query({
 // Mutations
 export const create = mutation({
   args: {
+    tenantId: v.id('apps'),
     name: v.string(),
     subthemeId: v.id('subthemes'),
     prefix: v.optional(v.string()),
   },
-  handler: async (context, { name, subthemeId, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
+  handler: async (context, { tenantId, name, subthemeId, prefix }) => {
+    // Verify moderator access for this app
+    await requireAppModerator(context, tenantId);
+
     // Check if subtheme exists
     const subtheme = await context.db.get(subthemeId);
     if (!subtheme) {
@@ -48,6 +77,7 @@ export const create = mutation({
     actualPrefix = normalizeText(actualPrefix).toUpperCase();
 
     return await context.db.insert('groups', {
+      tenantId,
       name,
       subthemeId,
       prefix: actualPrefix,
@@ -63,12 +93,15 @@ export const update = mutation({
     prefix: v.optional(v.string()),
   },
   handler: async (context, { id, name, subthemeId, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
     // Check if group exists
     const existing = await context.db.get(id);
     if (!existing) {
       throw new Error('Group not found');
+    }
+
+    // Verify moderator access for the group's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
     }
 
     // Check if subtheme exists
@@ -78,7 +111,7 @@ export const update = mutation({
     }
 
     // Normalize the prefix if one is provided
-    const updates: any = { name, subthemeId };
+    const updates: Record<string, unknown> = { name, subthemeId };
     if (prefix !== undefined) {
       updates.prefix = normalizeText(prefix).toUpperCase();
     }
@@ -90,8 +123,17 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id('groups') },
   handler: async (context, { id }) => {
-    // Verify admin access
-    await requireAdmin(context);
+    // Check if group exists first
+    const existing = await context.db.get(id);
+    if (!existing) {
+      throw new Error('Group not found');
+    }
+
+    // Verify moderator access for the group's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
+    }
+
     // Define dependencies to check
     const dependencies = [
       {

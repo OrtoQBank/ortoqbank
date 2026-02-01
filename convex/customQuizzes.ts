@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Doc, Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 // Helper to fetch question content from questionContent table
@@ -36,9 +37,13 @@ export type QuestionMode = 'all' | 'unanswered' | 'incorrect' | 'bookmarked';
 
 export const getCustomQuizzes = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Use an index on authorId if available or limit the number of results
@@ -46,9 +51,16 @@ export const getCustomQuizzes = query({
     const limit = args.limit || 50; // Default to 50 if not specified
 
     // Get custom quizzes created by this user with pagination
-    const quizzes = await ctx.db
-      .query('customQuizzes')
-      .filter((q: any) => q.eq(q.field('authorId'), userId._id))
+    const quizzes = await (args.tenantId
+      ? ctx.db
+          .query('customQuizzes')
+          .withIndex('by_tenant_and_author', (q: any) =>
+            q.eq('tenantId', args.tenantId).eq('authorId', userId._id),
+          )
+      : ctx.db
+          .query('customQuizzes')
+          .filter((q: any) => q.eq(q.field('authorId'), userId._id))
+    )
       .order('desc') // Most recent first
       .take(limit);
 

@@ -1,8 +1,11 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
-import { useMemo, useState } from 'react';
+import { useMutation } from 'convex/react';
+import { Loader2 } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useMemo, useState } from 'react';
 
+import { useSession } from '@/components/providers/SessionProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -15,6 +18,7 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { Switch } from '@/components/ui/switch';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 
@@ -26,7 +30,17 @@ const fromEpoch = (n: number | undefined) =>
 type CouponType = 'percentage' | 'fixed' | 'fixed_price';
 
 export default function CouponsAdminPage() {
-  const coupons = useQuery(api.promoCoupons.list) || [];
+  const router = useRouter();
+  const { isAdmin, isLoading: sessionLoading } = useSession();
+
+  // Redirect non-super-admins
+  useEffect(() => {
+    if (!sessionLoading && !isAdmin) {
+      router.push('/admin');
+    }
+  }, [sessionLoading, isAdmin, router]);
+
+  const coupons = useTenantQuery(api.promoCoupons.list, {}) || [];
   const createCoupon = useMutation(api.promoCoupons.create);
   const updateCoupon = useMutation(api.promoCoupons.update);
   const removeCoupon = useMutation(api.promoCoupons.remove);
@@ -74,6 +88,20 @@ export default function CouponsAdminPage() {
   async function handleDelete(id: string) {
     if (!confirm('Excluir cupom?')) return;
     await removeCoupon({ id: id as any });
+  }
+
+  // Show loading while checking permissions
+  if (sessionLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Don't render if not admin (will redirect)
+  if (!isAdmin) {
+    return null;
   }
 
   return (

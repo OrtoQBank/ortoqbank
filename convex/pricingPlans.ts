@@ -1,18 +1,26 @@
 import { v } from 'convex/values';
 
 import { internalMutation, mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator } from './auth';
 
 export const getPricingPlans = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(v.any()),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    if (tenantId) {
+      return await ctx.db
+        .query('pricingPlans')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .order('asc')
+        .collect();
+    }
     return await ctx.db.query('pricingPlans').order('asc').collect();
   },
 });
 
 export const savePricingPlan = mutation({
   args: {
+    tenantId: v.id('apps'), // Required for moderator access check
     id: v.optional(v.id('pricingPlans')), // Se não fornecido, cria novo
     name: v.string(),
     badge: v.string(),
@@ -41,26 +49,29 @@ export const savePricingPlan = mutation({
   },
   returns: v.id('pricingPlans'),
   handler: async (ctx, args) => {
-    // Verificação de admin usando a função existente do users.ts
-    await requireAdmin(ctx);
+    // Verify moderator access for this app
+    await requireAppModerator(ctx, args.tenantId);
 
-    const { id, ...planData } = args;
+    const { id, tenantId, ...planData } = args;
 
     if (id) {
+      // Verify the existing plan belongs to the same tenant
+      const existingPlan = await ctx.db.get(id);
+      if (!existingPlan) {
+        throw new Error('Pricing plan not found');
+      }
+      if (existingPlan.tenantId !== tenantId) {
+        throw new Error('Unauthorized: Cannot edit pricing plan from another tenant');
+      }
+
       // Editar plano existente
       await ctx.db.patch(id, planData);
       return id;
     } else {
-      // Get default tenant for multi-tenancy
-      const defaultApp = await ctx.db
-        .query('apps')
-        .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-        .first();
-
-      // Criar novo plano
+      // Criar novo plano with the provided tenantId
       return await ctx.db.insert('pricingPlans', {
         ...planData,
-        tenantId: defaultApp?._id,
+        tenantId,
       });
     }
   },
@@ -70,8 +81,16 @@ export const removePricingPlan = mutation({
   args: { id: v.id('pricingPlans') },
   returns: v.null(),
   handler: async (ctx, args) => {
-    // Verificação de admin usando a função existente do users.ts
-    await requireAdmin(ctx);
+    // Get the existing plan to check tenant
+    const existingPlan = await ctx.db.get(args.id);
+    if (!existingPlan) {
+      throw new Error('Pricing plan not found');
+    }
+
+    // Verify moderator access for the plan's app
+    if (existingPlan.tenantId) {
+      await requireAppModerator(ctx, existingPlan.tenantId);
+    }
 
     await ctx.db.delete(args.id);
     return null;
@@ -82,13 +101,19 @@ export const removePricingPlan = mutation({
  * Get active pricing plans (products available for purchase)
  */
 export const getActiveProducts = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(v.any()),
-  handler: async ctx => {
-    return await ctx.db
+  handler: async (ctx, { tenantId }) => {
+    const plans = await ctx.db
       .query('pricingPlans')
       .withIndex('by_active', q => q.eq('isActive', true))
       .collect();
+
+    // Filter by tenant if provided
+    if (tenantId) {
+      return plans.filter(p => p.tenantId === tenantId);
+    }
+    return plans;
   },
 });
 

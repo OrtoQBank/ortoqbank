@@ -3,6 +3,7 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
 
@@ -295,16 +296,28 @@ export const completeQuizSession = mutation({
 
 // Add this new query function to list incomplete sessions for current user
 export const listIncompleteSessions = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Query for all incomplete sessions for this user
-    const sessions = await ctx.db
-      .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-      .filter(q => q.eq(q.field('isComplete'), false))
-      .collect();
+    let sessions;
+    sessions = await (tenantId
+      ? ctx.db
+          .query('quizSessions')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .filter(q => q.eq(q.field('isComplete'), false))
+          .collect()
+      : ctx.db
+          .query('quizSessions')
+          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+          .filter(q => q.eq(q.field('isComplete'), false))
+          .collect());
 
     return sessions;
   },
@@ -332,17 +345,30 @@ export const getCompletedSessions = query({
 
 // Get all completed sessions for the current user
 export const getAllCompletedSessions = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Get all completed sessions for this user, ordered by newest first
-    const sessions = await ctx.db
-      .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
-      .filter(q => q.eq(q.field('isComplete'), true))
-      .order('desc')
-      .collect();
+    let sessions;
+    sessions = await (tenantId
+      ? ctx.db
+          .query('quizSessions')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .filter(q => q.eq(q.field('isComplete'), true))
+          .order('desc')
+          .collect()
+      : ctx.db
+          .query('quizSessions')
+          .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+          .filter(q => q.eq(q.field('isComplete'), true))
+          .order('desc')
+          .collect());
 
     return sessions;
   },
@@ -351,19 +377,30 @@ export const getAllCompletedSessions = query({
 // Lightweight query for getting completed quiz IDs only (optimized for performance)
 // Uses denormalized completedQuizSummaries table to avoid reading heavy session data
 export const getCompletedQuizIds = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
-    const summaries = await ctx.db
-      .query('completedQuizSummaries')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
+    let summaries;
+    summaries = await (tenantId
+      ? ctx.db
+          .query('completedQuizSummaries')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .collect()
+      : ctx.db
+          .query('completedQuizSummaries')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .collect());
 
     return summaries.map(s => ({ quizId: s.quizId }));
   },
@@ -373,20 +410,22 @@ export const getCompletedQuizIds = query({
 // Uses denormalized activeQuizSessions table to avoid reading heavy answerFeedback data
 // Includes fallback to old query during migration period for safety
 export const getIncompleteQuizIds = query({
-  args: {},
+  args: { tenantId: v.id('apps') },
   returns: v.array(
     v.object({
       quizId: v.union(v.id('presetQuizzes'), v.id('customQuizzes')),
       sessionId: v.id('quizSessions'),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Try new lightweight table first
     const activeSessions = await ctx.db
       .query('activeQuizSessions')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
       .collect();
 
     if (activeSessions.length > 0) {
@@ -408,7 +447,9 @@ export const getIncompleteQuizIds = query({
 
     for await (const s of ctx.db
       .query('quizSessions')
-      .withIndex('by_user_quiz', q => q.eq('userId', userId._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
       .filter(q => q.eq(q.field('isComplete'), false))) {
       sessions.push({ quizId: s.quizId, sessionId: s._id });
 

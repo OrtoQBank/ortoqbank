@@ -1,22 +1,59 @@
 /**
  * Shuffle utilities for random selection in quiz generation.
- * Separated from main quiz creation logic for clarity and reusability.
+ * Supports both non-deterministic (Math.random) and deterministic (seeded) modes.
  */
+
+// =============================================================================
+// SEEDED PRNG
+// =============================================================================
+
+/**
+ * Mulberry32 - fast, simple seeded PRNG.
+ * Produces deterministic sequence of pseudo-random numbers from a seed.
+ */
+function mulberry32(seed: number): () => number {
+  let state = seed;
+  return () => {
+    let t = (state += 0x6D_2B_79_F5);
+    t = Math.imul(t ^ (t >>> 15), t | 1);
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+    return ((t ^ (t >>> 14)) >>> 0) / 4_294_967_296;
+  };
+}
+
+/**
+ * Create a seeded random generator from a string seed.
+ * If no seed provided, returns Math.random for non-deterministic behavior.
+ */
+export function createSeededRandom(seed?: string): () => number {
+  if (!seed) return Math.random;
+  // Convert string to number using djb2 hash
+  let hash = 5381;
+  for (let i = 0; i < seed.length; i++) {
+    hash = Math.trunc((hash << 5) + hash + seed.codePointAt(i)!);
+  }
+  return mulberry32(hash >>> 0);
+}
+
+// =============================================================================
+// SHUFFLE FUNCTIONS
+// =============================================================================
 
 /**
  * Fisher-Yates (Knuth) shuffle algorithm.
  * Produces an unbiased random permutation of the array.
  *
- * Time complexity: O(n)
- * Space complexity: O(n) - creates a copy
- *
  * @param array - The array to shuffle
+ * @param random - Optional random function (defaults to Math.random)
  * @returns A new array with elements in random order
  */
-export function shuffleArray<T>(array: readonly T[]): T[] {
+export function shuffleArray<T>(
+  array: readonly T[],
+  random: () => number = Math.random,
+): T[] {
   const shuffled = [...array];
   for (let i = shuffled.length - 1; i > 0; i--) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
   }
   return shuffled;
@@ -26,16 +63,18 @@ export function shuffleArray<T>(array: readonly T[]): T[] {
  * Select n random elements from an array using Fisher-Yates partial shuffle.
  * More efficient than shuffling the entire array when n << array.length.
  *
- * Time complexity: O(min(n, array.length))
- * Space complexity: O(array.length)
- *
  * @param array - The array to select from
  * @param count - Number of elements to select
+ * @param random - Optional random function (defaults to Math.random)
  * @returns A new array with count random elements
  */
-export function selectRandom<T>(array: readonly T[], count: number): T[] {
+export function selectRandom<T>(
+  array: readonly T[],
+  count: number,
+  random: () => number = Math.random,
+): T[] {
   if (count >= array.length) {
-    return shuffleArray(array);
+    return shuffleArray(array, random);
   }
 
   if (count <= 0) {
@@ -44,7 +83,7 @@ export function selectRandom<T>(array: readonly T[], count: number): T[] {
 
   // For very small selections relative to array size, use reservoir sampling
   if (count * 10 < array.length) {
-    return reservoirSample(array, count);
+    return reservoirSample(array, count, random);
   }
 
   // For moderate selections, use partial Fisher-Yates
@@ -52,7 +91,7 @@ export function selectRandom<T>(array: readonly T[], count: number): T[] {
   const result: T[] = [];
 
   for (let i = 0; i < count; i++) {
-    const j = i + Math.floor(Math.random() * (shuffled.length - i));
+    const j = i + Math.floor(random() * (shuffled.length - i));
     [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
     result.push(shuffled[i]);
   }
@@ -63,17 +102,14 @@ export function selectRandom<T>(array: readonly T[], count: number): T[] {
 /**
  * Reservoir sampling algorithm (Algorithm R).
  * Efficient for selecting k items from a stream or when k << n.
- *
- * Time complexity: O(n)
- * Space complexity: O(k)
- *
- * @param array - The array to sample from
- * @param k - Number of elements to select
- * @returns A new array with k random elements
  */
-function reservoirSample<T>(array: readonly T[], k: number): T[] {
+function reservoirSample<T>(
+  array: readonly T[],
+  k: number,
+  random: () => number = Math.random,
+): T[] {
   if (k <= 0) return [];
-  if (k >= array.length) return shuffleArray(array);
+  if (k >= array.length) return shuffleArray(array, random);
 
   const reservoir: T[] = [];
 
@@ -84,7 +120,7 @@ function reservoirSample<T>(array: readonly T[], k: number): T[] {
 
   // Process remaining elements
   for (let i = k; i < array.length; i++) {
-    const j = Math.floor(Math.random() * (i + 1));
+    const j = Math.floor(random() * (i + 1));
     if (j < k) {
       reservoir[j] = array[i];
     }
@@ -96,11 +132,24 @@ function reservoirSample<T>(array: readonly T[], k: number): T[] {
 /**
  * Select random elements from a Set.
  * Converts to array internally for random access.
- *
- * @param set - The set to select from
- * @param count - Number of elements to select
- * @returns A new array with count random elements
  */
-export function selectRandomFromSet<T>(set: Set<T>, count: number): T[] {
-  return selectRandom([...set], count);
+export function selectRandomFromSet<T>(
+  set: Set<T>,
+  count: number,
+  random: () => number = Math.random,
+): T[] {
+  return selectRandom([...set], count, random);
+}
+
+/**
+ * Shuffle and limit to max count. Convenience helper.
+ */
+export function shuffleAndLimit<T>(
+  array: readonly T[],
+  maxCount: number,
+  random: () => number = Math.random,
+): T[] {
+  return array.length <= maxCount
+    ? shuffleArray(array, random)
+    : selectRandom(array, maxCount, random);
 }

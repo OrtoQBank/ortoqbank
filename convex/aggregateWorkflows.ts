@@ -83,19 +83,22 @@ export const cleanupWorkflow = internalMutation({
 
 /**
  * Initiate Section 1 repair workflow (Global Question Count Aggregates)
+ * Now requires tenantId for multi-tenant aggregate namespace support.
  */
 export const initiateSection1Repair = internalMutation({
-  args: {},
+  args: {
+    tenantId: v.id('apps'),
+  },
   returns: v.string(),
-  handler: async (ctx): Promise<string> => {
+  handler: async (ctx, args): Promise<string> => {
     console.log(
-      'Starting Section 1: Global Question Count Aggregates Repair Workflow...',
+      `Starting Section 1: Global Question Count Aggregates Repair Workflow for tenant ${args.tenantId}...`,
     );
 
     const workflowId: any = await workflow.start(
       ctx,
       internal.aggregateWorkflows.section1RepairInternalWorkflow,
-      {},
+      { tenantId: args.tenantId },
     );
 
     console.log(`Section 1 repair workflow started with ID: ${workflowId}`);
@@ -105,11 +108,15 @@ export const initiateSection1Repair = internalMutation({
 
 /**
  * Section 1 repair internal workflow (Global Question Count Aggregates) - 15-second safe
+ * Uses composite namespace: "tenantId:entityId" for theme/subtheme/group aggregates.
  */
 export const section1RepairInternalWorkflow = workflow.define({
-  args: {},
+  args: {
+    tenantId: v.id('apps'),
+  },
   handler: async (
     step,
+    args,
   ): Promise<{
     success: boolean;
     totalQuestions: number;
@@ -118,13 +125,13 @@ export const section1RepairInternalWorkflow = workflow.define({
     groups: number;
   }> => {
     console.log(
-      'Workflow: Starting Section 1 - Global Question Count Aggregates Repair...',
+      `Workflow: Starting Section 1 - Global Question Count Aggregates Repair for tenant ${args.tenantId}...`,
     );
 
-    // Step 1: Clear aggregates
+    // Step 1: Clear aggregates for this tenant
     await step.runMutation(
       internal.aggregateRepairs.internalRepairClearSection1Aggregates,
-      {},
+      { tenantId: args.tenantId },
     );
 
     // Step 2: Process questions in paginated batches
@@ -171,39 +178,42 @@ export const section1RepairInternalWorkflow = workflow.define({
     ]);
 
     // Step 4: Process themes in batches (1 theme per batch to stay <15s)
+    // Pass tenantId for composite namespace
     const themeBatchSize = 1;
     let themeCount = 0;
     for (let i = 0; i < themeIds.length; i += themeBatchSize) {
       const batch = themeIds.slice(i, i + themeBatchSize);
       const result = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessThemeAggregatesBatch,
-        { themeIds: batch },
+        { tenantId: args.tenantId, themeIds: batch },
         { name: `processThemes_batch_${Math.floor(i / themeBatchSize)}` },
       );
       themeCount += result.processed;
     }
 
     // Step 5: Process subthemes in batches (1 subtheme per batch)
+    // Pass tenantId for composite namespace
     const subthemeBatchSize = 1;
     let subthemeCount = 0;
     for (let i = 0; i < subthemeIds.length; i += subthemeBatchSize) {
       const batch = subthemeIds.slice(i, i + subthemeBatchSize);
       const result = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessSubthemeAggregatesBatch,
-        { subthemeIds: batch },
+        { tenantId: args.tenantId, subthemeIds: batch },
         { name: `processSubthemes_batch_${Math.floor(i / subthemeBatchSize)}` },
       );
       subthemeCount += result.processed;
     }
 
     // Step 6: Process groups in batches (1 group per batch)
+    // Pass tenantId for composite namespace
     const groupBatchSize = 1;
     let groupCount = 0;
     for (let i = 0; i < groupIds.length; i += groupBatchSize) {
       const batch = groupIds.slice(i, i + groupBatchSize);
       const result = await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessGroupAggregatesBatch,
-        { groupIds: batch },
+        { tenantId: args.tenantId, groupIds: batch },
         { name: `processGroups_batch_${Math.floor(i / groupBatchSize)}` },
       );
       groupCount += result.processed;
@@ -232,19 +242,22 @@ export const section1RepairInternalWorkflow = workflow.define({
 
 /**
  * Initiate Section 2 repair workflow (Random Question Selection Aggregates)
+ * Now requires tenantId for multi-tenant aggregate namespace support.
  */
 export const initiateSection2Repair = internalMutation({
-  args: {},
+  args: {
+    tenantId: v.id('apps'),
+  },
   returns: v.string(),
-  handler: async (ctx): Promise<string> => {
+  handler: async (ctx, args): Promise<string> => {
     console.log(
-      'Starting Section 2: Random Question Selection Aggregates Repair Workflow...',
+      `Starting Section 2: Random Question Selection Aggregates Repair Workflow for tenant ${args.tenantId}...`,
     );
 
     const workflowId: any = await workflow.start(
       ctx,
       internal.aggregateWorkflows.section2RepairInternalWorkflow,
-      {},
+      { tenantId: args.tenantId },
     );
 
     console.log(`Section 2 repair workflow started with ID: ${workflowId}`);
@@ -254,11 +267,15 @@ export const initiateSection2Repair = internalMutation({
 
 /**
  * Section 2 repair internal workflow (Random Question Selection Aggregates) - 15-second safe
+ * Uses composite namespace: "tenantId:entityId" for theme/subtheme/group aggregates.
  */
 export const section2RepairInternalWorkflow = workflow.define({
-  args: {},
+  args: {
+    tenantId: v.id('apps'),
+  },
   handler: async (
     step,
+    args,
   ): Promise<{
     success: boolean;
     totalQuestions: number;
@@ -267,13 +284,13 @@ export const section2RepairInternalWorkflow = workflow.define({
     groups: number;
   }> => {
     console.log(
-      'Workflow: Starting Section 2 - Random Question Selection Aggregates Repair...',
+      `Workflow: Starting Section 2 - Random Question Selection Aggregates Repair for tenant ${args.tenantId}...`,
     );
 
-    // Step 1: Clear aggregates
+    // Step 1: Clear aggregates for this tenant
     await step.runMutation(
       internal.aggregateRepairs.internalRepairClearSection2Aggregates,
-      {},
+      { tenantId: args.tenantId },
     );
 
     // Step 2: Process questions in paginated batches for random selection
@@ -320,11 +337,12 @@ export const section2RepairInternalWorkflow = workflow.define({
     ]);
 
     // Step 4: Process themes (paginated per theme)
+    // Pass tenantId for composite namespace
     let themeCount = 0;
     for (const [i, themeId] of themeIds.entries()) {
       await step.runMutation(
         internal.aggregateRepairs.internalRepairClearThemeRandomAggregate,
-        { themeId },
+        { tenantId: args.tenantId, themeId },
         { name: `randomTheme_clear_${i}` },
       );
       let pageCursor: string | null = null;
@@ -336,7 +354,12 @@ export const section2RepairInternalWorkflow = workflow.define({
           isDone: boolean;
         } = await step.runMutation(
           internal.aggregateRepairs.internalRepairProcessThemeRandomPage,
-          { themeId, cursor: pageCursor, batchSize: 25 },
+          {
+            tenantId: args.tenantId,
+            themeId,
+            cursor: pageCursor,
+            batchSize: 25,
+          },
           { name: `randomTheme_page_${i}_${pageIndex}` },
         );
         pageCursor = page.nextCursor;
@@ -347,11 +370,12 @@ export const section2RepairInternalWorkflow = workflow.define({
     }
 
     // Step 5: Process subthemes (paginated per subtheme)
+    // Pass tenantId for composite namespace
     let subthemeCount = 0;
     for (const [i, subthemeId] of subthemeIds.entries()) {
       await step.runMutation(
         internal.aggregateRepairs.internalRepairClearSubthemeRandomAggregate,
-        { subthemeId },
+        { tenantId: args.tenantId, subthemeId },
         { name: `randomSubtheme_clear_${i}` },
       );
       let pageCursor: string | null = null;
@@ -363,7 +387,12 @@ export const section2RepairInternalWorkflow = workflow.define({
           isDone: boolean;
         } = await step.runMutation(
           internal.aggregateRepairs.internalRepairProcessSubthemeRandomPage,
-          { subthemeId, cursor: pageCursor, batchSize: 25 },
+          {
+            tenantId: args.tenantId,
+            subthemeId,
+            cursor: pageCursor,
+            batchSize: 25,
+          },
           { name: `randomSubtheme_page_${i}_${pageIndex}` },
         );
         pageCursor = page.nextCursor;
@@ -374,11 +403,12 @@ export const section2RepairInternalWorkflow = workflow.define({
     }
 
     // Step 6: Process groups (paginated per group)
+    // Pass tenantId for composite namespace
     let groupCount = 0;
     for (const [i, groupId] of groupIds.entries()) {
       await step.runMutation(
         internal.aggregateRepairs.internalRepairClearGroupRandomAggregate,
-        { groupId },
+        { tenantId: args.tenantId, groupId },
         { name: `randomGroup_clear_${i}` },
       );
       let pageCursor: string | null = null;
@@ -390,7 +420,12 @@ export const section2RepairInternalWorkflow = workflow.define({
           isDone: boolean;
         } = await step.runMutation(
           internal.aggregateRepairs.internalRepairProcessGroupRandomPage,
-          { groupId, cursor: pageCursor, batchSize: 25 },
+          {
+            tenantId: args.tenantId,
+            groupId,
+            cursor: pageCursor,
+            batchSize: 25,
+          },
           { name: `randomGroup_page_${i}_${pageIndex}` },
         );
         pageCursor = page.nextCursor;
@@ -432,19 +467,22 @@ export const section2RepairInternalWorkflow = workflow.define({
 
 /**
  * Initiate comprehensive repair workflow (Sections 1 & 2 only)
+ * Now requires tenantId for multi-tenant aggregate namespace support.
  */
 export const initiateComprehensiveRepair = internalMutation({
-  args: {},
+  args: {
+    tenantId: v.id('apps'),
+  },
   returns: v.string(),
-  handler: async (ctx): Promise<string> => {
+  handler: async (ctx, args): Promise<string> => {
     console.log(
-      'Starting Comprehensive Aggregate Repair Workflow (Global Aggregates Only)...',
+      `Starting Comprehensive Aggregate Repair Workflow (Global Aggregates Only) for tenant ${args.tenantId}...`,
     );
 
     const workflowId: any = await workflow.start(
       ctx,
       internal.aggregateWorkflows.comprehensiveRepairInternalWorkflow,
-      {},
+      { tenantId: args.tenantId },
     );
 
     console.log(`Comprehensive repair workflow started with ID: ${workflowId}`);
@@ -454,11 +492,15 @@ export const initiateComprehensiveRepair = internalMutation({
 
 /**
  * Comprehensive repair internal workflow (Sections 1 & 2 only)
+ * Uses composite namespace: "tenantId:entityId" for theme/subtheme/group aggregates.
  */
 export const comprehensiveRepairInternalWorkflow = workflow.define({
-  args: {},
+  args: {
+    tenantId: v.id('apps'),
+  },
   handler: async (
     step,
+    args,
   ): Promise<{
     success: boolean;
     section1: any;
@@ -468,14 +510,14 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     const startTime = Date.now();
 
     console.log(
-      'Workflow: Starting Comprehensive Aggregate Repair (Global Aggregates Only)...',
+      `Workflow: Starting Comprehensive Aggregate Repair (Global Aggregates Only) for tenant ${args.tenantId}...`,
     );
 
     // Step 1: Section 1 - Global Question Count Aggregates (direct execution)
     console.log('Workflow: Phase 1/2 - Global Question Count Aggregates...');
     await step.runMutation(
       internal.aggregateRepairs.internalRepairClearSection1Aggregates,
-      {},
+      { tenantId: args.tenantId },
     );
 
     // Process questions in paginated batches
@@ -517,13 +559,13 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
       ),
     ]);
 
-    // Process taxonomies in batches
+    // Process taxonomies in batches - pass tenantId for composite namespace
     let section1Count = 0;
     for (let i = 0; i < themeIds1.length; i += 5) {
       const batch = themeIds1.slice(i, i + 5);
       await step.runMutation(
         internal.aggregateRepairs.internalRepairProcessThemeAggregatesBatch,
-        { themeIds: batch },
+        { tenantId: args.tenantId, themeIds: batch },
         { name: `comprehensive_section1_themes_${Math.floor(i / 5)}` },
       );
       section1Count += batch.length;
@@ -543,7 +585,7 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
     );
     await step.runMutation(
       internal.aggregateRepairs.internalRepairClearSection2Aggregates,
-      {},
+      { tenantId: args.tenantId },
     );
 
     // Process questions for random selection
@@ -569,14 +611,14 @@ export const comprehensiveRepairInternalWorkflow = workflow.define({
       if (batchResult.isDone) break;
     } while (cursor2);
 
-    // Process random taxonomies
+    // Process random taxonomies - pass tenantId for composite namespace
     let section2Count = 0;
     for (let i = 0; i < themeIds1.length; i += 5) {
       const batch = themeIds1.slice(i, i + 5);
       await step.runMutation(
         internal.aggregateRepairs
           .internalRepairProcessThemeRandomAggregatesBatch,
-        { themeIds: batch },
+        { tenantId: args.tenantId, themeIds: batch },
         { name: `comprehensive_section2_themes_${Math.floor(i / 5)}` },
       );
       section2Count += batch.length;

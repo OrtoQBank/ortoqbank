@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 /**
@@ -59,6 +60,7 @@ export const generateUploadUrl = mutation({
  */
 export const getReportsForAdmin = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     status: v.optional(
       v.union(
         v.literal('pending'),
@@ -93,15 +95,24 @@ export const getReportsForAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     const limit = args.limit ?? 50;
 
-    const reports = args.status
-      ? await ctx.db
+    // Filter by tenant and optionally by status
+    const reports = await (args.status
+      ? ctx.db
           .query('questionErrorReports')
-          .withIndex('by_status', q => q.eq('status', args.status!))
-          .order('desc')
-          .take(limit)
-      : await ctx.db.query('questionErrorReports').order('desc').take(limit);
+          .withIndex('by_tenant_and_status', q =>
+            q.eq('tenantId', args.tenantId).eq('status', args.status!),
+          )
+      : ctx.db
+          .query('questionErrorReports')
+          .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+    )
+      .order('desc')
+      .take(limit);
 
     // Enrich with user and question data
     const enrichedReports = await Promise.all(
@@ -185,7 +196,9 @@ export const updateReportStatus = mutation({
  * Get report count by status (for admin dashboard)
  */
 export const getReportCounts = query({
-  args: {},
+  args: {
+    tenantId: v.optional(v.id('apps')),
+  },
   returns: v.object({
     pending: v.number(),
     reviewed: v.number(),
@@ -193,8 +206,14 @@ export const getReportCounts = query({
     dismissed: v.number(),
     total: v.number(),
   }),
-  handler: async ctx => {
-    const allReports = await ctx.db.query('questionErrorReports').collect();
+  handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
+    const allReports = await ctx.db
+      .query('questionErrorReports')
+      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+      .collect();
 
     const counts = {
       pending: 0,

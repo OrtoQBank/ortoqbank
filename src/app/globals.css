@@ -145,6 +145,11 @@
     --sidebar-border: 220 13% 91%;
     --sidebar-ring: 217.2 91.2% 59.8%;
     --brand-blue: 208 77% 51%;
+
+    /* Tenant-specific colors (overridden by TenantProvider) */
+    --tenant-primary: #2563eb;
+    --tenant-secondary: #1e40af;
+    --tenant-accent: #3b82f6;
   }
   .dark {
     --background: 0 0% 3.9%;
@@ -180,6 +185,11 @@
     --sidebar-border: 240 3.7% 15.9%;
     --sidebar-ring: 217.2 91.2% 59.8%;
     --brand-blue: 208 77% 51%;
+
+    /* Tenant-specific colors (overridden by TenantProvider) */
+    --tenant-primary: #2563eb;
+    --tenant-secondary: #1e40af;
+    --tenant-accent: #3b82f6;
   }
 }
 
@@ -190,6 +200,13 @@
   body {
     @apply bg-background text-foreground;
   }
+}
+
+/* Performance: content-visibility for long lists */
+/* Defers rendering of off-screen accordion items for faster initial paint */
+[data-radix-accordion-content] > div > div {
+  content-visibility: auto;
+  contain-intrinsic-size: 0 100px;
 }
 
 /* TipTap Menu Editor */

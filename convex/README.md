@@ -574,3 +574,126 @@ ctx.runMutation(internal.messages.sendMessage, { body, author }); } catch (e) {
 // Record the failure, but rollback any writes from `sendMessage` await
 ctx.db.insert("failures", { kind: "MessageFailed", body, author, error:
 `Error: ${e}`, }); } }, });
+
+---
+
+# Multi-Tenancy Architecture
+
+This project implements multi-tenancy where multiple tenants (apps) share the same codebase and deployment.
+
+## Core Concepts
+
+### One Codebase, Many Tenants
+
+- **Single deployment per environment** (dev, preview, production)
+- **Tenants are data, not Git branches** - stored in the `apps` table
+- **Same code serves all tenants** - tenant-specific behavior is driven by configuration
+
+### Tenant Resolution
+
+Tenants are resolved from the hostname using `resolveTenant()` in `src/lib/tenant.ts`:
+
+| Environment | Hostname Format | Example |
+|-------------|-----------------|---------|
+| Local Development | `{tenant}.localhost:3000` | `app1.localhost:3000` |
+| Vercel Preview | `{tenant}--{project}.vercel.app` | `app1--ortoqbank.vercel.app` |
+| Production | `{tenant}.{domain}.com` | `teot.ortoqbank.com` |
+
+### Architecture Flow
+
+```
+Hostname → resolveTenant() → slug → apps.getAppBySlug → tenantId → queries with tenantId
+```
+
+1. Middleware extracts tenant slug from hostname
+2. Slug is stored in a cookie for client-side access
+3. `TenantProvider` queries `apps` table to get `tenantId`
+4. All data queries include `tenantId` for isolation
+
+## Tenant Seeding
+
+Tenants are seeded as data in the `apps` table, not created through Git branches.
+
+### Adding a New Tenant
+
+1. **Add to `apps` table** (via Convex dashboard or seed script):
+   ```typescript
+   await ctx.db.insert('apps', {
+     slug: 'newtenant',
+     name: 'New Tenant Display Name',
+     domain: 'newtenant.ortoqbank.com',
+     isActive: true,
+     createdAt: Date.now(),
+   });
+   ```
+
+2. **Add static configuration** in `src/config/tenants.config.ts`:
+   ```typescript
+   newtenant: {
+     branding: { name: 'New Tenant', primaryColor: '#...' },
+     content: { tagline: '...' },
+   }
+   ```
+
+3. **For production**: Configure DNS to point `newtenant.domain.com` to Vercel
+
+### Existing Tenants
+
+Current tenants defined in the system:
+- `ortoqbank` - Default tenant (OrtoQBank)
+- `app1` - Test tenant for local development
+- `teot` - OrtoQBank TEOT
+- `derma` - DermaQBank
+- `cardio` - CardioQBank
+
+## Tenant Isolation
+
+All content tables include `tenantId` for data isolation:
+
+```typescript
+// Schema example
+themes: defineTable({
+  tenantId: v.optional(v.id('apps')), // Required after migration
+  name: v.string(),
+}).index('by_tenant', ['tenantId'])
+```
+
+### Backend Enforcement
+
+Every query/mutation that accesses tenant-specific data must:
+
+1. Accept `tenantId` as an argument
+2. Call `verifyTenantAccess(ctx, tenantId)` to verify access
+3. Use tenant-scoped indexes (e.g., `by_tenant`, `by_tenant_and_theme`)
+
+```typescript
+export const list = query({
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
+    await verifyTenantAccess(ctx, tenantId);
+    
+    return ctx.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
+  },
+});
+```
+
+### Frontend Helpers
+
+Use the tenant hooks from `src/hooks/useTenantQuery.ts`:
+
+```typescript
+// Automatically injects tenantId
+const themes = useTenantQuery(api.themes.list, {});
+const createTheme = useTenantMutation(api.themes.create);
+```
+
+## Production Deployment
+
+Moving to production requires only DNS changes:
+
+1. **Configure wildcard DNS**: `*.domain.com → Vercel`
+2. **No code changes required** - the `resolveTenant()` function handles both formats
+3. Preview uses `--` separator, production uses `.` separator

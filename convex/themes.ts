@@ -1,22 +1,34 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { requireAdmin } from './users';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 import { canSafelyDelete, generateDefaultPrefix, normalizeText } from './utils';
 
 // Queries
 export const list = query({
-  args: {},
-  handler: async context => {
-    return await context.db.query('themes').collect();
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
+    return await context.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
   },
 });
 
-// Optimized query that returns themes sorted by displayOrder, then name
+// Returns themes sorted by displayOrder, then name
 export const listSorted = query({
-  args: {},
-  handler: async context => {
-    const themes = await context.db.query('themes').collect();
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
+    const themes = await context.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
 
     // Sort themes: displayOrder first (undefined goes last), then alphabetically by name
     return themes.toSorted((a, b) => {
@@ -42,11 +54,23 @@ export const getById = query({
 });
 
 export const getHierarchicalData = query({
-  args: {},
-  handler: async context => {
-    const themes = await context.db.query('themes').collect();
-    const subthemes = await context.db.query('subthemes').collect();
-    const groups = await context.db.query('groups').collect();
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
+    const themes = await context.db
+      .query('themes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
+    const subthemes = await context.db
+      .query('subthemes')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
+    const groups = await context.db
+      .query('groups')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
 
     return {
       themes,
@@ -59,16 +83,20 @@ export const getHierarchicalData = query({
 // Mutations
 export const create = mutation({
   args: {
+    tenantId: v.id('apps'),
     name: v.string(),
     prefix: v.optional(v.string()),
   },
-  handler: async (context, { name, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
-    // Check if theme with same name already exists
+  handler: async (context, { tenantId, name, prefix }) => {
+    // Verify moderator access for this app
+    await requireAppModerator(context, tenantId);
+
+    // Check if theme with same name already exists within tenant
     const existing = await context.db
       .query('themes')
-      .withIndex('by_name', q => q.eq('name', name))
+      .withIndex('by_tenant_and_name', q =>
+        q.eq('tenantId', tenantId).eq('name', name),
+      )
       .unique();
 
     if (existing) {
@@ -82,6 +110,7 @@ export const create = mutation({
     actualPrefix = normalizeText(actualPrefix).toUpperCase();
 
     return await context.db.insert('themes', {
+      tenantId,
       name,
       prefix: actualPrefix,
     });
@@ -95,12 +124,15 @@ export const update = mutation({
     prefix: v.optional(v.string()),
   },
   handler: async (context, { id, name, prefix }) => {
-    // Verify admin access
-    await requireAdmin(context);
     // Check if theme exists
     const existing = await context.db.get(id);
     if (!existing) {
       throw new Error('Theme not found');
+    }
+
+    // Verify moderator access for the theme's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
     }
 
     // Check if new name conflicts with another theme
@@ -114,7 +146,7 @@ export const update = mutation({
     }
 
     // Normalize the prefix if one is provided
-    const updates: any = { name };
+    const updates: Record<string, unknown> = { name };
     if (prefix !== undefined) {
       updates.prefix = normalizeText(prefix).toUpperCase();
     }
@@ -127,8 +159,17 @@ export const update = mutation({
 export const remove = mutation({
   args: { id: v.id('themes') },
   handler: async (context, { id }) => {
-    // Verify admin access
-    await requireAdmin(context);
+    // Check if theme exists first
+    const existing = await context.db.get(id);
+    if (!existing) {
+      throw new Error('Theme not found');
+    }
+
+    // Verify moderator access for the theme's app
+    if (existing.tenantId) {
+      await requireAppModerator(context, existing.tenantId);
+    }
+
     // Define dependencies to check
     const dependencies = [
       {

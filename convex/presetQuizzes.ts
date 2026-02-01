@@ -1,9 +1,11 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 
 export const create = mutation({
   args: {
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     description: v.string(),
     category: v.union(v.literal('trilha'), v.literal('simulado')),
@@ -21,11 +23,15 @@ export const create = mutation({
       throw new Error('themeId is required for trilhas');
     }
 
-    // Get default tenant for multi-tenancy
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
+    // Use provided tenantId or fall back to default tenant
+    let tenantId = args.tenantId;
+    if (!tenantId) {
+      const defaultApp = await ctx.db
+        .query('apps')
+        .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
+        .first();
+      tenantId = defaultApp?._id;
+    }
 
     return await ctx.db.insert('presetQuizzes', {
       name: args.name,
@@ -39,20 +45,30 @@ export const create = mutation({
       subcategory: args.subcategory,
       displayOrder: args.displayOrder,
       // Multi-tenancy
-      tenantId: defaultApp?._id,
+      tenantId,
     });
   },
 });
 
 export const list = query({
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
+    if (tenantId) {
+      return await ctx.db
+        .query('presetQuizzes')
+        .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+        .collect();
+    }
     return await ctx.db.query('presetQuizzes').collect();
   },
 });
 
-// Optimized query that returns trilhas filtered and sorted
+// Returns trilhas filtered and sorted by displayOrder
 export const listTrilhasSorted = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       _id: v.id('presetQuizzes'),
@@ -74,11 +90,15 @@ export const listTrilhasSorted = query({
       taxonomyPathIds: v.optional(v.array(v.string())),
     }),
   ),
-  handler: async ctx => {
-    // Use index to filter for trilhas server-side
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const trilhas = await ctx.db
       .query('presetQuizzes')
-      .withIndex('by_category', q => q.eq('category', 'trilha'))
+      .withIndex('by_tenant_and_category', q =>
+        q.eq('tenantId', tenantId).eq('category', 'trilha'),
+      )
       .collect();
 
     // Sort by displayOrder, then name
@@ -97,9 +117,9 @@ export const listTrilhasSorted = query({
   },
 });
 
-// Optimized query that returns simulados filtered and sorted
+// Returns simulados filtered and sorted by displayOrder
 export const listSimuladosSorted = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       _id: v.id('presetQuizzes'),
@@ -121,11 +141,15 @@ export const listSimuladosSorted = query({
       taxonomyPathIds: v.optional(v.array(v.string())),
     }),
   ),
-  handler: async ctx => {
-    // Use index to filter for simulados server-side
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const simulados = await ctx.db
       .query('presetQuizzes')
-      .withIndex('by_category', q => q.eq('category', 'simulado'))
+      .withIndex('by_tenant_and_category', q =>
+        q.eq('tenantId', tenantId).eq('category', 'simulado'),
+      )
       .collect();
 
     // Sort by displayOrder, then name
@@ -239,10 +263,14 @@ export const getWithQuestions = query({
 
 export const searchByName = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     name: v.string(),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.name || args.name.trim() === '') {
       return [];
     }
@@ -254,10 +282,17 @@ export const searchByName = query({
     const limit = args.limit || 50;
 
     // Use the search index for efficient text search
-    const matchingQuizzes = await ctx.db
+    let matchingQuizzes = await ctx.db
       .query('presetQuizzes')
       .withSearchIndex('search_by_name', q => q.search('name', searchTerm))
-      .take(limit); // Use the limit parameter
+      .take(limit);
+
+    // Filter by tenant if provided
+    if (args.tenantId) {
+      matchingQuizzes = matchingQuizzes.filter(
+        q => q.tenantId === args.tenantId,
+      );
+    }
 
     return matchingQuizzes;
   },

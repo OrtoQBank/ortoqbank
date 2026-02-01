@@ -3,6 +3,13 @@
 import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
+import {
+  getTenantCookieOptions,
+  isValidTenantSlug,
+  resolveTenant,
+  TENANT_COOKIE_NAME,
+} from '@/lib/tenant';
+
 const isProtectedRoute = createRouteMatcher([
   '/dashboard(.*)',
   '/criar-teste(.*)',
@@ -20,20 +27,104 @@ const isAdminRoute = createRouteMatcher(['/admin(.*)']);
 const isWebhookRoute = createRouteMatcher(['/api/webhooks/clerk(.*)']);
 
 export default clerkMiddleware(async (auth, request) => {
-  // Skip authentication for webhook routes
-  if (isWebhookRoute(request)) return NextResponse.next();
+  // ==========================================================================
+  // TENANT DETECTION
+  // Extract subdomain from hostname and set tenant cookie
+  // ==========================================================================
+  const hostname = request.headers.get('host') || 'localhost:3000';
+  const subdomain = resolveTenant(hostname);
+  const pathname = request.nextUrl.pathname;
 
-  if (isProtectedRoute(request)) await auth.protect();
+  // DEBUG: Log raw hostname and subdomain extraction
+  console.log(`[DEBUG:Proxy] Request received - { pathname: "${pathname}", hostname: "${hostname}" }`);
+  console.log(`[DEBUG:Proxy] Subdomain extraction - { subdomain: "${subdomain || 'null'}" }`);
 
-  // For admin routes, provide redundant protection by checking Clerk metadata
-  // Primary role checking still happens at the backend level for security
-  if (isAdminRoute(request)) {
+  // Determine the tenant slug
+  const isSubdomainValid = subdomain ? isValidTenantSlug(subdomain) : false;
+  const tenantSlug =
+    subdomain && isSubdomainValid ? subdomain : 'ortoqbank';
+
+  // DEBUG: Log tenant slug determination
+  console.log(`[DEBUG:Proxy] Tenant slug determination - { subdomain: "${subdomain || 'null'}", isSubdomainValid: ${isSubdomainValid}, finalSlug: "${tenantSlug}" }`);
+
+  // Get existing tenant cookie
+  const existingTenantCookie = request.cookies.get(TENANT_COOKIE_NAME);
+
+  // DEBUG: Log cookie state
+  console.log(`[DEBUG:Proxy] Cookie state - { existingCookie: "${existingTenantCookie?.value || 'null'}", newSlug: "${tenantSlug}", willSetCookie: ${existingTenantCookie?.value !== tenantSlug} }`);
+
+  // DEBUG: Log route type detection
+  const routeIsProtected = isProtectedRoute(request);
+  const routeIsAdmin = isAdminRoute(request);
+  const routeIsWebhook = isWebhookRoute(request);
+  console.log(`[DEBUG:Proxy] Route type - { isProtected: ${routeIsProtected}, isAdmin: ${routeIsAdmin}, isWebhook: ${routeIsWebhook} }`);
+
+  // ==========================================================================
+  // WEBHOOK ROUTES - Skip authentication
+  // ==========================================================================
+  if (routeIsWebhook) {
+    console.log(`[DEBUG:Proxy] Webhook route - skipping auth`);
+    const response = NextResponse.next();
+
+    // Set tenant cookie if changed or not present
+    if (existingTenantCookie?.value !== tenantSlug) {
+      const cookieOptions = getTenantCookieOptions();
+      response.cookies.set(TENANT_COOKIE_NAME, tenantSlug, {
+        maxAge: cookieOptions.maxAge,
+        path: cookieOptions.path,
+        sameSite: cookieOptions.sameSite,
+        secure: cookieOptions.secure,
+      });
+    }
+
+    return response;
+  }
+
+  // ==========================================================================
+  // MAINTENANCE MODE - Redirect non-admins to maintenance page
+  // ==========================================================================
+  const isMaintenanceMode =
+    process.env.NEXT_PUBLIC_MAINTENANCE_MODE === 'true';
+  const isMaintenanceRoute = request.nextUrl.pathname === '/maintenance';
+
+  if (isMaintenanceMode && isProtectedRoute(request) && !isMaintenanceRoute) {
+    const { sessionClaims } = await auth();
+    const isAdmin = sessionClaims?.metadata?.role === 'admin';
+
+    if (!isAdmin) {
+      return NextResponse.redirect(new URL('/maintenance', request.url));
+    }
+  }
+
+  // ==========================================================================
+  // PROTECTED ROUTES - Require authentication
+  // ==========================================================================
+  if (routeIsProtected) {
+    console.log(`[DEBUG:Proxy] Protected route - requiring auth`);
+    await auth.protect();
+    console.log(`[DEBUG:Proxy] Protected route - auth passed`);
+  }
+
+  // NOTE: User-App access control is enforced at:
+  // 1. Convex backend (authoritative) - via requireAppAccess/requireAppModerator in mutations
+  // 2. Frontend (defense in depth) - via SessionProvider checking userAppAccess.checkMyAccess
+  // Middleware cannot directly query Convex (edge runtime limitation), so we rely on
+  // the above two layers. If a user accesses an app without permission, they will see
+  // an access denied UI and mutations will be blocked.
+
+  // ==========================================================================
+  // ADMIN ROUTES - Additional role verification
+  // ==========================================================================
+  if (routeIsAdmin) {
+    console.log(`[DEBUG:Proxy] Admin route - requiring auth`);
     await auth.protect();
 
     const { sessionClaims } = await auth();
     // Check both old Clerk metadata (for existing admins) and allow through
     // The backend will do the authoritative role check using database data
     const hasClerkAdminRole = sessionClaims?.metadata?.role === 'admin';
+
+    console.log(`[DEBUG:Proxy] Admin route - { hasClerkAdminRole: ${hasClerkAdminRole} }`);
 
     // For now, allow all authenticated users through
     // Backend requireAdmin() will be the final authority
@@ -44,6 +135,27 @@ export default clerkMiddleware(async (auth, request) => {
       );
     }
   }
+
+  // ==========================================================================
+  // SET TENANT COOKIE ON RESPONSE
+  // ==========================================================================
+  const response = NextResponse.next();
+
+  // Set tenant cookie if changed or not present
+  if (existingTenantCookie?.value !== tenantSlug) {
+    const cookieOptions = getTenantCookieOptions();
+    response.cookies.set(TENANT_COOKIE_NAME, tenantSlug, {
+      maxAge: cookieOptions.maxAge,
+      path: cookieOptions.path,
+      sameSite: cookieOptions.sameSite,
+      secure: cookieOptions.secure,
+    });
+
+    console.log(`[DEBUG:Proxy] Setting new tenant cookie - { cookieName: "${TENANT_COOKIE_NAME}", value: "${tenantSlug}", options: ${JSON.stringify(cookieOptions)} }`);
+  }
+
+  console.log(`[DEBUG:Proxy] Request complete - { pathname: "${pathname}", tenantSlug: "${tenantSlug}" }`);
+  return response;
 });
 
 export const config = {

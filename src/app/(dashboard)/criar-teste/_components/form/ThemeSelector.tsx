@@ -1,6 +1,6 @@
 'use client';
 
-import { useQuery } from 'convex-helpers/react/cache/hooks';
+import { useQuery } from 'convex/react';
 import { InfoIcon as InfoCircle } from 'lucide-react';
 import { memo } from 'react';
 import { type Control, useWatch } from 'react-hook-form';
@@ -79,9 +79,16 @@ const BookmarkedThemeCount = memo(({ themeId }: { themeId: string }) => {
 BookmarkedThemeCount.displayName = 'BookmarkedThemeCount';
 
 const StandardThemeCount = memo(({ themeId }: { themeId: string }) => {
-  const count = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
-    themeId: themeId as Id<'themes'>,
-  });
+  const { tenantId } = useFormContext();
+  const count = useQuery(
+    api.aggregateCounts.getThemeQuestionCountQuery,
+    tenantId
+      ? {
+          tenantId,
+          themeId: themeId as Id<'themes'>,
+        }
+      : 'skip',
+  );
 
   if (count === undefined) {
     return <span className="text-xs text-gray-400">...</span>;
@@ -96,10 +103,16 @@ const StandardThemeCount = memo(({ themeId }: { themeId: string }) => {
 StandardThemeCount.displayName = 'StandardThemeCount';
 
 const UnansweredThemeCount = memo(({ themeId }: { themeId: string }) => {
-  const total = useQuery(api.aggregateQueries.getThemeQuestionCountQuery, {
-    themeId: themeId as Id<'themes'>,
-  });
-  const { userCountsForQuizCreation, isLoading } = useFormContext();
+  const { tenantId, userCountsForQuizCreation, isLoading } = useFormContext();
+  const total = useQuery(
+    api.aggregateCounts.getThemeQuestionCountQuery,
+    tenantId
+      ? {
+          tenantId,
+          themeId: themeId as Id<'themes'>,
+        }
+      : 'skip',
+  );
 
   if (total === undefined || isLoading || !userCountsForQuizCreation) {
     return <span className="text-xs text-gray-400">...</span>;

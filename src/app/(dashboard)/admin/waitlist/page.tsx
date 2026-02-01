@@ -1,10 +1,11 @@
 'use client';
 
-import { useQuery } from 'convex/react';
-import { Download, Search } from 'lucide-react';
-import { useState } from 'react';
+import { Download, Loader2, Search } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
+import { useSession } from '@/components/providers/SessionProvider';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -15,13 +16,24 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 
 export default function WaitlistPage() {
+  const router = useRouter();
+  const { isAdmin, isLoading: sessionLoading } = useSession();
+
+  // Redirect non-super-admins
+  useEffect(() => {
+    if (!sessionLoading && !isAdmin) {
+      router.push('/admin');
+    }
+  }, [sessionLoading, isAdmin, router]);
+
   const [searchInput, setSearchInput] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const entries = useQuery(api.waitlist.list);
+  const entries = useTenantQuery(api.waitlist.list, {});
   const isLoading = entries === undefined;
 
   // Filter entries based on search query
@@ -67,6 +79,20 @@ export default function WaitlistPage() {
     // Download file
     XLSX.writeFile(wb, fileName);
   };
+
+  // Show loading while checking permissions
+  if (sessionLoading) {
+    return (
+      <div className="flex min-h-[400px] items-center justify-center">
+        <Loader2 className="h-8 w-8 animate-spin" />
+      </div>
+    );
+  }
+
+  // Don't render if not admin (will redirect)
+  if (!isAdmin) {
+    return null;
+  }
 
   return (
     <div className="space-y-6 p-0 md:p-6">

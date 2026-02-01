@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, usePaginatedQuery, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { useRouter } from 'next/navigation';
 import { useState } from 'react';
 
@@ -23,6 +23,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { useToast } from '@/hooks/use-toast';
+import { useTenantPaginatedQuery, useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
@@ -39,7 +40,7 @@ export default function GerenciarQuestoes() {
   } | null>(null);
 
   const deleteQuestion = useMutation(api.questions.deleteQuestion);
-  const { results, status, loadMore } = usePaginatedQuery(
+  const { results, status, loadMore } = useTenantPaginatedQuery(
     api.questions.list,
     {},
     { initialNumItems: 10 },
@@ -47,7 +48,7 @@ export default function GerenciarQuestoes() {
 
   // Use the searchByCode query when search is provided, otherwise show nothing
   const searchResults =
-    useQuery(
+    useTenantQuery(
       api.questions.searchByCode,
       searchQuery.trim() ? { code: searchQuery, limit: 10 } : 'skip',
     ) || [];

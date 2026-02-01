@@ -1,32 +1,13 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
-import { api, internal } from './_generated/api';
-import { Doc } from './_generated/dataModel';
-import {
-  // Keep these for defining the actual mutations/queries
-  internalAction,
-  internalMutation,
-  mutation,
-  query,
-} from './_generated/server';
-import { questionCountByTheme, totalQuestionCount } from './aggregates';
-import {
-  _internalDeleteQuestion,
-  _internalInsertQuestion,
-  _internalUpdateQuestion,
-} from './questionsAggregateSync';
-import { requireAdmin } from './users';
+import { query } from './_generated/server';
+import { questionCountByTheme } from './aggregates';
+import { requireAppModerator, verifyTenantAccess } from './auth';
+import { mutationWithTriggers } from './functions';
+import { updateTaxonomyDenormalization } from './questionsTaxonomySync';
 import { validateNoBlobs } from './utils';
-// Question stats are now handled by aggregates and triggers
-
-// Helper function to stringify content if it's an object
-function stringifyContent(content: any): string {
-  if (typeof content === 'string') {
-    return content; // Already a string
-  }
-  return JSON.stringify(content);
-}
+// Question aggregates are now handled automatically via triggers in functions.ts
 
 // =============================================================================
 // QUESTION CONTENT QUERIES
@@ -105,8 +86,10 @@ export const getQuestionContentBatch = query({
   },
 });
 
-export const create = mutation({
+export const create = mutationWithTriggers({
   args: {
+    // Multi-tenancy
+    tenantId: v.id('apps'),
     // Accept stringified content from frontend
     questionTextString: v.string(),
     explanationTextString: v.string(),
@@ -119,8 +102,8 @@ export const create = mutation({
     groupId: v.optional(v.id('groups')),
   },
   handler: async (ctx, args) => {
-    // Verify admin access
-    await requireAdmin(ctx);
+    // Verify moderator access for this app
+    await requireAppModerator(ctx, args.tenantId);
 
     // Validate JSON structure of string content
     try {
@@ -148,11 +131,8 @@ export const create = mutation({
       .unique();
     if (!user) throw new Error('User not found');
 
-    // Get the default tenant (ortoqbank app)
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
+    // tenantId is now required (validated by requireAppModerator)
+    const tenantId = args.tenantId;
 
     // Lookup taxonomy names for denormalization
     const theme = await ctx.db.get(args.themeId);
@@ -166,7 +146,7 @@ export const create = mutation({
     // is stored ONLY in questionContent table for optimal performance
     const questionData = {
       // Multi-tenancy
-      tenantId: defaultApp?._id,
+      tenantId,
 
       // Metadata
       title: args.title,
@@ -195,30 +175,35 @@ export const create = mutation({
       contentMigrated: true,
     };
 
-    // Store heavy content ONLY in questionContent table
-    const contentData = {
+    // Insert question - triggers automatically update all 8 aggregates
+    const questionId = await ctx.db.insert('questions', questionData);
+
+    // Store heavy content in questionContent table (separate from aggregates)
+    await ctx.db.insert('questionContent', {
+      questionId,
       questionTextString: args.questionTextString,
       explanationTextString: args.explanationTextString,
       alternatives: args.alternatives,
-    };
+    });
 
-    // Use the helper function (stores in both tables)
-    const questionId = await _internalInsertQuestion(
-      ctx,
-      questionData,
-      contentData,
-    );
     return questionId;
   },
 });
 
 export const list = query({
-  args: { paginationOpts: paginationOptsValidator },
-  handler: async (context, arguments_) => {
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    paginationOpts: paginationOptsValidator,
+  },
+  handler: async (context, { tenantId, paginationOpts }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
     const questions = await context.db
       .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
       .order('desc')
-      .paginate(arguments_.paginationOpts);
+      .paginate(paginationOpts);
 
     // Only fetch themes for the current page of questions, not all themes
     const themes = await Promise.all(
@@ -236,11 +221,26 @@ export const list = query({
 });
 
 export const getById = query({
-  args: { id: v.id('questions') },
+  args: {
+    id: v.id('questions'),
+    tenantId: v.optional(v.id('apps')),
+  },
   handler: async (context, arguments_) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, arguments_.tenantId);
+
     const question = await context.db.get(arguments_.id);
     if (!question) {
       throw new Error('Question not found');
+    }
+
+    // Validate tenant access if tenantId is provided
+    if (
+      arguments_.tenantId &&
+      question.tenantId &&
+      question.tenantId !== arguments_.tenantId
+    ) {
+      throw new Error('Question not found'); // Don't reveal it exists in another tenant
     }
 
     const theme = await context.db.get(question.themeId);
@@ -269,7 +269,7 @@ export const getById = query({
   },
 });
 
-export const update = mutation({
+export const update = mutationWithTriggers({
   args: {
     id: v.id('questions'),
     // Accept stringified content from frontend
@@ -285,8 +285,16 @@ export const update = mutation({
     isPublic: v.optional(v.boolean()),
   },
   handler: async (ctx, args) => {
-    // Verify admin access
-    await requireAdmin(ctx);
+    // Get the existing question to check tenant
+    const existingQuestion = await ctx.db.get(args.id);
+    if (!existingQuestion) {
+      throw new Error('Question not found');
+    }
+
+    // Verify moderator access for the question's app
+    if (existingQuestion.tenantId) {
+      await requireAppModerator(ctx, existingQuestion.tenantId);
+    }
 
     // Validate JSON structure of string content
     try {
@@ -334,8 +342,20 @@ export const update = mutation({
       alternativeCount: alternatives.length,
     };
 
-    // Use the helper function for question table (no heavy content)
-    await _internalUpdateQuestion(ctx, id, updates);
+    // Update question - triggers automatically handle aggregate sync
+    await ctx.db.patch(id, updates);
+
+    // Get the updated question for denormalization
+    const updatedQuestion = await ctx.db.get(id);
+    if (updatedQuestion) {
+      // Update denormalized taxonomy fields in related tables (userQuestionStats, userBookmarks, userStatsCounts)
+      await updateTaxonomyDenormalization(
+        ctx,
+        id,
+        existingQuestion,
+        updatedQuestion,
+      );
+    }
 
     // Update heavy content in questionContent table ONLY
     const existingContent = await ctx.db
@@ -365,8 +385,15 @@ export const listAll = query({
   // WARNING: This query downloads the entire questions table and should be avoided in production
   // or with large datasets as it will consume significant bandwidth.
   // Consider using paginated queries (like 'list') or filtering server-side instead.
-  handler: async context => {
-    return await context.db.query('questions').collect();
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (context, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(context, tenantId);
+
+    return await context.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
   },
 });
 
@@ -380,6 +407,7 @@ export const getMany = query({
 
 export const countQuestionsByMode = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     questionMode: v.union(
       v.literal('all'),
       v.literal('unanswered'),
@@ -387,7 +415,10 @@ export const countQuestionsByMode = query({
       v.literal('bookmarked'),
     ),
   },
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const identity = await ctx.auth.getUserIdentity();
     if (!identity) {
       throw new Error('Not authenticated');
@@ -402,7 +433,11 @@ export const countQuestionsByMode = query({
       throw new Error('User not found');
     }
 
-    const totalQuestions = await ctx.db.query('questions').collect();
+    // Get total questions filtered by tenant
+    const totalQuestions = await ctx.db
+      .query('questions')
+      .withIndex('by_tenant', q => q.eq('tenantId', tenantId))
+      .collect();
     const totalCount = totalQuestions.length;
 
     const result = {
@@ -412,26 +447,35 @@ export const countQuestionsByMode = query({
       bookmarked: 0,
     };
 
+    // Get user stats filtered by tenant
     const incorrectStats = await ctx.db
       .query('userQuestionStats')
-      .withIndex('by_user_incorrect', q =>
-        q.eq('userId', user._id).eq('isIncorrect', true),
+      .withIndex('by_tenant_and_user_incorrect', q =>
+        q
+          .eq('tenantId', tenantId)
+          .eq('userId', user._id)
+          .eq('isIncorrect', true),
       )
       .collect();
     result.incorrect = incorrectStats.length;
 
+    // Get bookmarks filtered by tenant
     const bookmarks = await ctx.db
       .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', user._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', user._id),
+      )
       .collect();
     result.bookmarked = bookmarks.length;
 
-    const answeredStats = await ctx.db
+    // Get answered stats filtered by tenant
+    const allUserStats = await ctx.db
       .query('userQuestionStats')
-      .withIndex('by_user_answered', q =>
-        q.eq('userId', user._id).eq('hasAnswered', true),
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', user._id),
       )
       .collect();
+    const answeredStats = allUserStats.filter(s => s.hasAnswered);
     result.unanswered = totalCount - answeredStats.length;
 
     return result;
@@ -449,11 +493,19 @@ export const getQuestionCountForTheme = query({
   },
 });
 
-export const deleteQuestion = mutation({
+export const deleteQuestion = mutationWithTriggers({
   args: { id: v.id('questions') },
   handler: async (ctx, args) => {
-    // Verify admin access
-    await requireAdmin(ctx);
+    // Get the existing question to check tenant
+    const existingQuestion = await ctx.db.get(args.id);
+    if (!existingQuestion) {
+      throw new Error('Question not found');
+    }
+
+    // Verify moderator access for the question's app
+    if (existingQuestion.tenantId) {
+      await requireAppModerator(ctx, existingQuestion.tenantId);
+    }
 
     // First, remove the question from all preset quizzes that contain it
     const allPresetQuizzes = await ctx.db.query('presetQuizzes').collect();
@@ -473,54 +525,19 @@ export const deleteQuestion = mutation({
       }
     }
 
-    // Then delete the question itself using the helper function
-    const success = await _internalDeleteQuestion(ctx, args.id);
-    return success;
-  },
-});
+    // Delete associated questionContent record first
+    const questionContent = await ctx.db
+      .query('questionContent')
+      .withIndex('by_question', q => q.eq('questionId', args.id))
+      .first();
 
-// --- Backfill Action ---
-// This action should be run manually ONCE after deployment
-// to populate the aggregate with existing question data.
-export const backfillThemeCounts = internalAction({
-  handler: async ctx => {
-    console.log('Starting backfill for question theme counts...');
-    let count = 0;
-    // Fetch all existing questions using api
-    const questions = await ctx.runQuery(api.questions.listAll);
-
-    // Iterate and insert each question into the aggregate using internal
-    for (const questionDoc of questions) {
-      try {
-        await ctx.runMutation(internal.questions.insertIntoThemeAggregate, {
-          questionDoc,
-        });
-        count++;
-      } catch (error) {
-        console.error(
-          `Failed to insert question ${questionDoc._id} into theme aggregate:`,
-          error,
-        );
-      }
+    if (questionContent) {
+      await ctx.db.delete(questionContent._id);
     }
 
-    console.log(
-      `Successfully backfilled ${count} questions into theme aggregate.`,
-    );
-    return { count };
-  },
-});
-
-// Helper internal mutation for the backfill action to call
-// Using a mutation ensures atomicity for each aggregate insert
-export const insertIntoThemeAggregate = internalMutation({
-  args: { questionDoc: v.any() }, // Pass the whole doc
-  handler: async (ctx, args) => {
-    // We need to cast the doc because internal mutations don't
-    // have full type inference across action/mutation boundary easily.
-    const questionDoc = args.questionDoc as Doc<'questions'>;
-    await questionCountByTheme.insert(ctx, questionDoc);
-    await totalQuestionCount.insert(ctx, questionDoc);
+    // Delete the question - triggers automatically handle aggregate sync
+    await ctx.db.delete(args.id);
+    return true;
   },
 });
 

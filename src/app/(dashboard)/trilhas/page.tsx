@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { BookOpen, Clock, FileText } from 'lucide-react';
 import Image from 'next/image';
 import { useRouter } from 'next/navigation';
@@ -16,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
@@ -63,12 +64,16 @@ export default function TrilhasPage() {
   const router = useRouter();
   const startSession = useMutation(api.quizSessions.startQuizSession);
 
-  const themesQuery = useQuery(api.themes.listSorted);
-  const trilhasQuery = useQuery(api.presetQuizzes.listTrilhasSorted);
-  const incompleteSessionsQuery = useQuery(
+  const themesQuery = useTenantQuery(api.themes.listSorted, {});
+  const trilhasQuery = useTenantQuery(api.presetQuizzes.listTrilhasSorted, {});
+  const incompleteSessionsQuery = useTenantQuery(
     api.quizSessions.getIncompleteQuizIds,
+    {},
   );
-  const completedSessionsQuery = useQuery(api.quizSessions.getCompletedQuizIds);
+  const completedSessionsQuery = useTenantQuery(
+    api.quizSessions.getCompletedQuizIds,
+    {},
+  );
 
   const isLoading =
     userLoading ||

@@ -1,6 +1,7 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
+import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import {
   Cell,
@@ -23,12 +24,38 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../convex/_generated/api';
-import { ProgressOverTimeChart } from './charts/progress-over-time-chart';
-import { ThemeBarChart } from './charts/theme-bar-chart';
-import { ThemeRadarChart } from './charts/theme-radar-chart';
 import { StatCard } from './components/stat-card';
+
+// Dynamically import charts that aren't visible on initial load
+const ProgressOverTimeChart = dynamic(
+  () =>
+    import('./charts/progress-over-time-chart').then(
+      m => m.ProgressOverTimeChart,
+    ),
+  {
+    loading: () => <Skeleton className="h-60 w-full rounded-lg" />,
+    ssr: false,
+  },
+);
+
+const ThemeBarChart = dynamic(
+  () => import('./charts/theme-bar-chart').then(m => m.ThemeBarChart),
+  {
+    loading: () => <Skeleton className="h-[300px] w-full rounded-lg" />,
+    ssr: false,
+  },
+);
+
+const ThemeRadarChart = dynamic(
+  () => import('./charts/theme-radar-chart').then(m => m.ThemeRadarChart),
+  {
+    loading: () => <Skeleton className="h-[300px] w-full rounded-lg" />,
+    ssr: false,
+  },
+);
 
 // Helper function to safely extract values regardless of stats type
 function getStatsValues(stats: any) {
@@ -62,8 +89,8 @@ function getStatsValues(stats: any) {
 }
 
 export default function ProfilePage() {
-  // Use direct queries - Convex handles caching automatically
-  const userStats = useQuery(api.userStats.getUserStatsFast);
+  // Use tenant-aware queries - Convex handles caching automatically
+  const userStats = useTenantQuery(api.userStats.getUserStatsFast, {});
   const [showThemeStats, setShowThemeStats] = useState(false);
 
   // Determine if we're loading the data

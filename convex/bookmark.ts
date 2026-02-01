@@ -2,6 +2,7 @@ import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
+import { verifyTenantAccess } from './auth';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
 
@@ -120,15 +121,20 @@ export const getBookmarkStatusForQuestions = query({
 
 // Get all bookmarked question IDs for a user
 export const getBookmarkedQuestionIds = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
     const { db } = ctx;
 
     // Get all bookmarks for this user
     const bookmarks = await db
       .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
       .collect();
 
     // Return just the question IDs
@@ -138,15 +144,20 @@ export const getBookmarkedQuestionIds = query({
 
 // Get all bookmarked questions with full data
 export const getBookmarkedQuestions = query({
-  args: {},
-  handler: async ctx => {
+  args: { tenantId: v.optional(v.id('apps')) },
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
     const { db } = ctx;
 
     // Get all bookmarks for this user
     const bookmarks = await db
       .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
+      )
       .collect();
 
     if (bookmarks.length === 0) {

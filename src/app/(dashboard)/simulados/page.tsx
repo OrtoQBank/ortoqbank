@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import {
   Baby,
   Bone,
@@ -27,6 +27,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { useCurrentUser } from '@/hooks/useCurrentUser';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../convex/_generated/api';
 import { Id } from '../../../../convex/_generated/dataModel';
@@ -94,18 +95,26 @@ export default function SimuladoPage() {
   const { user, isLoading: userLoading } = useCurrentUser();
   const router = useRouter();
 
-  // Fetch simulados using optimized query
-  const simuladosQuery = useQuery(api.presetQuizzes.listSimuladosSorted);
+  // Fetch simulados using tenant-aware optimized query
+  const simuladosQuery = useTenantQuery(
+    api.presetQuizzes.listSimuladosSorted,
+    {},
+  );
   const simulados = simuladosQuery || [];
 
   // Query to get incomplete sessions for the current user (lightweight query for performance)
-  const incompleteSessionsQuery = useQuery(
+  const incompleteSessionsQuery = useTenantQuery(
     api.quizSessions.getIncompleteQuizIds,
+    {},
   );
+
   const incompleteSessions = incompleteSessionsQuery || [];
 
   // Query to get completed quiz IDs (lightweight query for performance)
-  const completedSessionsQuery = useQuery(api.quizSessions.getCompletedQuizIds);
+  const completedSessionsQuery = useTenantQuery(
+    api.quizSessions.getCompletedQuizIds,
+    {},
+  );
   const completedSessions = completedSessionsQuery || [];
 
   // Start session mutation

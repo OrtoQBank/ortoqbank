@@ -1,7 +1,7 @@
 'use client';
 
 import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { useEffect, useState } from 'react';
 import { useForm, useWatch } from 'react-hook-form';
 import * as z from 'zod';
@@ -52,6 +52,7 @@ import {
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { useToast } from '@/hooks/use-toast';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
@@ -113,19 +114,19 @@ export default function ManagePresetExams() {
     new Set(),
   );
 
-  // Fetch data - only fetch themes for the creation form
-  const themes = useQuery(api.themes.list) || [];
+  // Fetch data - only fetch themes for the creation form (tenant-aware)
+  const themes = useTenantQuery(api.themes.list, {}) || [];
 
   // Use searchByName instead of list for quizzes - only when search is provided
   const presetQuizzes =
-    useQuery(
+    useTenantQuery(
       api.presetQuizzes.searchByName,
       quizSearchQuery.trim() ? { name: quizSearchQuery, limit: 10 } : 'skip',
     ) || [];
 
   // Use the searchByCode function for code-based question search
   const questionSearchResults =
-    useQuery(
+    useTenantQuery(
       api.questions.searchByCode,
       searchQuery.trim() ? { code: searchQuery, limit: 10 } : 'skip',
     ) || [];
@@ -142,7 +143,7 @@ export default function ManagePresetExams() {
   const deleteQuiz = useMutation(api.presetQuizzes.deleteQuiz);
 
   // Load the editing quiz details when needed
-  const editingQuizDetails = useQuery(
+  const editingQuizDetails = useTenantQuery(
     api.presetQuizzes.get,
     editingExam ? { id: editingExam.id as Id<'presetQuizzes'> } : 'skip',
   );

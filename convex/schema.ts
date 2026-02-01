@@ -25,8 +25,8 @@ export default defineSchema({
     userId: v.id('users'),
     appId: v.id('apps'),
     hasAccess: v.boolean(),
-    // Per-app role: 'user' for regular users, 'admin' for app-specific admins
-    role: v.optional(v.union(v.literal('user'), v.literal('admin'))),
+    // Per-app role: 'user' for regular users, 'moderator' for app-specific admins
+    role: v.optional(v.union(v.literal('user'), v.literal('moderator'))),
     grantedAt: v.number(),
     expiresAt: v.optional(v.number()),
     grantedBy: v.optional(v.id('users')), // Admin who granted access
@@ -357,7 +357,9 @@ export default defineSchema({
       'subthemeId',
       'isIncorrect',
     ])
-    .index('by_user_group_incorrect', ['userId', 'groupId', 'isIncorrect']),
+    .index('by_user_group_incorrect', ['userId', 'groupId', 'isIncorrect'])
+    // Index for finding all stats for a specific question (used when updating question taxonomy)
+    .index('by_question', ['questionId']),
 
   // Table for pre-computed user statistics counts (Performance optimization)
   userStatsCounts: defineTable({

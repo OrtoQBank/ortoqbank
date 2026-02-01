@@ -4,34 +4,39 @@ import { components } from './_generated/api';
 import { DataModel, Id } from './_generated/dataModel';
 
 // =============================================================================
-// SECTION 1: GLOBAL QUESTION COUNT AGGREGATES
+// SECTION 1: QUESTION COUNT AGGREGATES (NAMESPACED BY TENANT)
 // Used for question mode 'all' (non-user-specific)
-// These count total available questions by category
+// These count total available questions by category, scoped per tenant
 // =============================================================================
 
-// Track total question count globally
+// Track total question count per tenant
 export const totalQuestionCount = new TableAggregate<{
-  Namespace: string;
+  Namespace: Id<'apps'>;
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.questionCountTotal, {
-  namespace: () => 'global',
+  namespace: (d: unknown) => (d as { tenantId: Id<'apps'> }).tenantId,
   sortKey: () => 'question',
 });
 
-// Track total question count by theme
+// Track total question count by theme (tenant-scoped)
+// Namespace format: "tenantId:themeId"
 export const questionCountByTheme = new TableAggregate<{
-  Namespace: Id<'themes'>;
+  Namespace: string;
   Key: string;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.questionCountByTheme, {
-  namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
-  sortKey: (d: unknown) => 'question',
+  namespace: (d: unknown) => {
+    const q = d as { tenantId: Id<'apps'>; themeId: Id<'themes'> };
+    return `${q.tenantId}:${q.themeId}`;
+  },
+  sortKey: () => 'question',
 });
 
-//track total question count by subtheme (only for questions that have subthemeId)
+// Track total question count by subtheme (tenant-scoped)
+// Namespace format: "tenantId:subthemeId" or "tenantId:no-subtheme"
 export const questionCountBySubtheme = new TableAggregate<{
   Namespace: string;
   Key: string;
@@ -39,15 +44,15 @@ export const questionCountBySubtheme = new TableAggregate<{
   TableName: 'questions';
 }>(components.questionCountBySubtheme, {
   namespace: (d: unknown) => {
-    const question = d as { subthemeId?: Id<'subthemes'> };
-    // Use "no-subtheme" for questions without subthemeId
-    const subthemeId = question.subthemeId || 'no-subtheme';
-    return subthemeId;
+    const q = d as { tenantId: Id<'apps'>; subthemeId?: Id<'subthemes'> };
+    const subthemeId = q.subthemeId || 'no-subtheme';
+    return `${q.tenantId}:${subthemeId}`;
   },
-  sortKey: (d: unknown) => 'question',
+  sortKey: () => 'question',
 });
 
-//track total question count by group (only for questions that have groupId)
+// Track total question count by group (tenant-scoped)
+// Namespace format: "tenantId:groupId" or "tenantId:no-group"
 export const questionCountByGroup = new TableAggregate<{
   Namespace: string;
   Key: string;
@@ -55,41 +60,47 @@ export const questionCountByGroup = new TableAggregate<{
   TableName: 'questions';
 }>(components.questionCountByGroup, {
   namespace: (d: unknown) => {
-    const question = d as { groupId?: Id<'groups'> };
-    // Use "no-group" for questions without groupId
-    const groupId = question.groupId || 'no-group';
-    return groupId;
+    const q = d as { tenantId: Id<'apps'>; groupId?: Id<'groups'> };
+    const groupId = q.groupId || 'no-group';
+    return `${q.tenantId}:${groupId}`;
   },
-  sortKey: (d: unknown) => 'question',
+  sortKey: () => 'question',
 });
 
 // =============================================================================
-// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES
+// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES (NAMESPACED BY TENANT)
 // Used for question mode 'all' (non-user-specific)
-// These return actual question documents for quiz generation
+// These return actual question documents for quiz generation, scoped per tenant
 // =============================================================================
 
 // Random question selection aggregates for efficient randomization
 export const randomQuestions = new TableAggregate<{
-  Namespace: string;
+  Namespace: Id<'apps'>;
   Key: null;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.randomQuestions, {
-  namespace: () => 'global',
+  namespace: (d: unknown) => (d as { tenantId: Id<'apps'> }).tenantId,
   sortKey: () => null, // No sorting = random order by _id
 });
 
+// Random questions by theme (tenant-scoped)
+// Namespace format: "tenantId:themeId"
 export const randomQuestionsByTheme = new TableAggregate<{
-  Namespace: Id<'themes'>;
+  Namespace: string;
   Key: null;
   DataModel: DataModel;
   TableName: 'questions';
 }>(components.randomQuestionsByTheme, {
-  namespace: (d: unknown) => (d as { themeId: Id<'themes'> }).themeId,
+  namespace: (d: unknown) => {
+    const q = d as { tenantId: Id<'apps'>; themeId: Id<'themes'> };
+    return `${q.tenantId}:${q.themeId}`;
+  },
   sortKey: () => null, // No sorting = random order by _id
 });
 
+// Random questions by subtheme (tenant-scoped)
+// Namespace format: "tenantId:subthemeId" or "tenantId:no-subtheme"
 export const randomQuestionsBySubtheme = new TableAggregate<{
   Namespace: string;
   Key: null;
@@ -97,14 +108,15 @@ export const randomQuestionsBySubtheme = new TableAggregate<{
   TableName: 'questions';
 }>(components.randomQuestionsBySubtheme, {
   namespace: (d: unknown) => {
-    const question = d as { subthemeId?: Id<'subthemes'> };
-    // Use "no-subtheme" for questions without subthemeId
-    const subthemeId = question.subthemeId || 'no-subtheme';
-    return subthemeId;
+    const q = d as { tenantId: Id<'apps'>; subthemeId?: Id<'subthemes'> };
+    const subthemeId = q.subthemeId || 'no-subtheme';
+    return `${q.tenantId}:${subthemeId}`;
   },
   sortKey: () => null, // No sorting = random order by _id
 });
 
+// Random questions by group (tenant-scoped)
+// Namespace format: "tenantId:groupId" or "tenantId:no-group"
 export const randomQuestionsByGroup = new TableAggregate<{
   Namespace: string;
   Key: null;
@@ -112,10 +124,9 @@ export const randomQuestionsByGroup = new TableAggregate<{
   TableName: 'questions';
 }>(components.randomQuestionsByGroup, {
   namespace: (d: unknown) => {
-    const question = d as { groupId?: Id<'groups'> };
-    // Use "no-group" for questions without groupId
-    const groupId = question.groupId || 'no-group';
-    return groupId;
+    const q = d as { tenantId: Id<'apps'>; groupId?: Id<'groups'> };
+    const groupId = q.groupId || 'no-group';
+    return `${q.tenantId}:${groupId}`;
   },
   sortKey: () => null, // No sorting = random order by _id
 });

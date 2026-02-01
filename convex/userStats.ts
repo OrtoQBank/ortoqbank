@@ -3,7 +3,8 @@ import { v } from 'convex/values';
 import { internal } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { internalMutation, mutation, query } from './_generated/server';
-import { getTotalQuestionCount } from './aggregateQueries.js';
+import { getTotalQuestionCount } from './aggregateCounts.js';
+import { verifyTenantAccess } from './auth';
 // Removed user-specific aggregate imports - replaced by userStatsCounts table
 import { getCurrentUser, getCurrentUserOrThrow } from './users';
 import { getWeekString } from './utils';
@@ -346,7 +347,7 @@ async function updateUserStatsCounts(
  * This replaces getUserStatsFromTable for much better performance
  */
 export const getUserStatsFast = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({
     overall: v.object({
       totalAnswered: v.number(),
@@ -366,7 +367,10 @@ export const getUserStatsFast = query({
     ),
     totalQuestions: v.number(),
   }),
-  handler: async (ctx): Promise<UserStats> => {
+  handler: async (ctx, { tenantId }): Promise<UserStats> => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const user = await getCurrentUser(ctx);
     if (!user) {
       // Return empty stats for unauthenticated users
@@ -385,13 +389,23 @@ export const getUserStatsFast = query({
     const userId = user._id;
 
     // Get pre-computed counts (ultra-fast single lookup)
-    const userCounts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .first();
+    // Filter by tenant if provided
+    let userCounts;
+    userCounts = await (tenantId ? ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId),
+        )
+        .first() : ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_user', q => q.eq('userId', userId))
+        .first());
 
     // Get total questions count using existing aggregate
-    const totalQuestions = await getTotalQuestionCount(ctx);
+    // If no tenantId, return 0 (tenant context is required for accurate counts)
+    const totalQuestions = tenantId
+      ? await getTotalQuestionCount(ctx, tenantId)
+      : 0;
 
     // Handle new users with no counts yet
     if (!userCounts) {
@@ -464,7 +478,7 @@ export const getUserStatsFast = query({
  * Single fetch with all counts for efficient filtering UI
  */
 export const getUserCountsForQuizCreation = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({
     global: v.object({
       totalAnswered: v.number(),
@@ -496,14 +510,24 @@ export const getUserCountsForQuizCreation = query({
       }),
     ),
   }),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
     // Single lookup gets all counts
-    const userCounts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .first();
+    // Filter by tenant if provided
+    let userCounts;
+    userCounts = await (tenantId ? ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_tenant_and_user', q =>
+          q.eq('tenantId', tenantId).eq('userId', userId._id),
+        )
+        .first() : ctx.db
+        .query('userStatsCounts')
+        .withIndex('by_user', q => q.eq('userId', userId._id))
+        .first());
 
     // Handle new users with no counts
     if (!userCounts) {
@@ -747,9 +771,13 @@ export const resetMyStatsCounts = mutation({
 /**
  * Initialize userStatsCounts for a specific user by computing counts from existing data
  * This function should be called once per user during migration
+ * Multi-tenant: requires tenantId to properly scope the counts
  */
 export const initializeUserStatsCounts = mutation({
-  args: { userId: v.id('users') },
+  args: {
+    userId: v.id('users'),
+    tenantId: v.id('apps'),
+  },
   returns: v.object({
     success: v.boolean(),
     message: v.string(),
@@ -762,29 +790,35 @@ export const initializeUserStatsCounts = mutation({
     ),
   }),
   handler: async (ctx, args) => {
-    // Check if counts already exist for this user
+    // Check if counts already exist for this user in this tenant
     const existingCounts = await ctx.db
       .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', args.tenantId).eq('userId', args.userId),
+      )
       .first();
 
     if (existingCounts) {
       return {
         success: false,
-        message: 'User stats counts already exist',
+        message: 'User stats counts already exist for this tenant',
       };
     }
 
-    // Get all user question stats
+    // Get all user question stats for this tenant
     const userStats = await ctx.db
       .query('userQuestionStats')
-      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', args.tenantId).eq('userId', args.userId),
+      )
       .collect();
 
-    // Get all user bookmarks
+    // Get all user bookmarks for this tenant
     const userBookmarks = await ctx.db
       .query('userBookmarks')
-      .withIndex('by_user', q => q.eq('userId', args.userId))
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', args.tenantId).eq('userId', args.userId),
+      )
       .collect();
 
     // Initialize count objects
@@ -873,15 +907,10 @@ export const initializeUserStatsCounts = mutation({
       }
     }
 
-    // Get default tenant for multi-tenancy
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
-
-    // Insert the computed counts
+    // Insert the computed counts (tenant-scoped)
     await ctx.db.insert('userStatsCounts', {
       userId: args.userId,
+      tenantId: args.tenantId,
       totalAnswered,
       totalIncorrect,
       totalBookmarked,
@@ -895,8 +924,6 @@ export const initializeUserStatsCounts = mutation({
       incorrectByGroup,
       bookmarkedByGroup,
       lastUpdated: Date.now(),
-      // Multi-tenancy
-      tenantId: defaultApp?._id,
     });
 
     return {
@@ -912,11 +939,13 @@ export const initializeUserStatsCounts = mutation({
 });
 
 /**
- * Initialize userStatsCounts for all users in the system
- * This is a migration function that should be run once
+ * Initialize userStatsCounts for all users in the system for a specific tenant
+ * This is a migration function that should be run once per tenant
+ * Multi-tenant: requires tenantId to properly scope the counts
  */
 export const initializeAllUserStatsCounts = mutation({
   args: {
+    tenantId: v.id('apps'),
     batchSize: v.optional(v.number()), // Process users in batches to avoid timeouts
   },
   returns: v.object({
@@ -928,12 +957,7 @@ export const initializeAllUserStatsCounts = mutation({
   }),
   handler: async (ctx, args) => {
     const batchSize = args.batchSize || 10; // Default to 10 users at a time
-
-    // Get default tenant for multi-tenancy
-    const defaultApp = await ctx.db
-      .query('apps')
-      .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
-      .first();
+    const tenantId = args.tenantId;
 
     let processedUsers = 0;
     let skippedUsers = 0;
@@ -951,10 +975,12 @@ export const initializeAllUserStatsCounts = mutation({
 
       for (const user of page.page) {
         try {
-          // Check if counts already exist for this user
+          // Check if counts already exist for this user in this tenant
           const existingCounts = await ctx.db
             .query('userStatsCounts')
-            .withIndex('by_user', q => q.eq('userId', user._id))
+            .withIndex('by_tenant_and_user', q =>
+              q.eq('tenantId', tenantId).eq('userId', user._id),
+            )
             .first();
 
           if (existingCounts) {
@@ -963,14 +989,19 @@ export const initializeAllUserStatsCounts = mutation({
           }
 
           // Inline the initialization logic to avoid nested mutation calls
+          // Query user stats for this tenant only
           const userStats = await ctx.db
             .query('userQuestionStats')
-            .withIndex('by_user', q => q.eq('userId', user._id))
+            .withIndex('by_tenant_and_user', q =>
+              q.eq('tenantId', tenantId).eq('userId', user._id),
+            )
             .collect();
 
           const userBookmarks = await ctx.db
             .query('userBookmarks')
-            .withIndex('by_user', q => q.eq('userId', user._id))
+            .withIndex('by_tenant_and_user', q =>
+              q.eq('tenantId', tenantId).eq('userId', user._id),
+            )
             .collect();
 
           // Initialize count objects
@@ -1042,9 +1073,10 @@ export const initializeAllUserStatsCounts = mutation({
             }
           }
 
-          // Insert the computed counts
+          // Insert the computed counts (tenant-scoped)
           await ctx.db.insert('userStatsCounts', {
             userId: user._id,
+            tenantId,
             totalAnswered,
             totalIncorrect,
             totalBookmarked,
@@ -1058,8 +1090,6 @@ export const initializeAllUserStatsCounts = mutation({
             incorrectByGroup,
             bookmarkedByGroup,
             lastUpdated: Date.now(),
-            // Multi-tenancy
-            tenantId: defaultApp?._id,
           });
 
           processedUsers++;
@@ -1077,7 +1107,7 @@ export const initializeAllUserStatsCounts = mutation({
 
     return {
       success: true,
-      message: `Migration completed: ${processedUsers} users processed, ${skippedUsers} skipped`,
+      message: `Migration completed for tenant: ${processedUsers} users processed, ${skippedUsers} skipped`,
       processedUsers,
       skippedUsers,
       errors,

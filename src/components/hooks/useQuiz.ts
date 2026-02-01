@@ -42,6 +42,8 @@ export function useQuiz(
 }
 
 export function useQuizzes() {
-  const quizzes = useQuery(api.presetQuizzes.list);
+  // Note: This returns all preset quizzes; tenant filtering is not applied here
+  // as quizzes are fetched by ID in most cases
+  const quizzes = useQuery(api.presetQuizzes.list, {});
   return quizzes;
 }

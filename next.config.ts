@@ -3,6 +3,7 @@ import type { NextConfig } from 'next';
 
 const nextConfig: NextConfig = {
   trailingSlash: false,
+  reactCompiler: true,
   // This is required to support PostHog trailing slash API requests
   skipTrailingSlashRedirect: true,
   // Increase server action body size limit for image uploads (default is 1MB)
@@ -10,6 +11,8 @@ const nextConfig: NextConfig = {
     serverActions: {
       bodySizeLimit: '10mb',
     },
+    // Optimize barrel imports for faster dev boot and smaller bundles
+    optimizePackageImports: ['lucide-react', 'recharts', 'date-fns'],
   },
   images: {
     remotePatterns: [

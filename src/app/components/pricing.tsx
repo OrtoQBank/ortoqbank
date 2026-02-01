@@ -1,16 +1,20 @@
 import { fetchQuery } from 'convex/nextjs';
 
 import { api } from '../../../convex/_generated/api';
+import type { Id } from '../../../convex/_generated/dataModel';
 import { PricingClient } from './pricing-client';
 
-// Force static rendering and revalidate every 1 hour
-export const dynamic = 'force-static';
-export const revalidate = 3600;
+interface PricingProps {
+  tenantId: Id<'apps'> | null;
+}
 
 // Helper function to fetch plans with error handling
-async function getPlans() {
+async function getPlans(tenantId: Id<'apps'> | null) {
   try {
-    return await fetchQuery(api.pricingPlans.getPricingPlans);
+    // Pass tenantId to filter plans for the current tenant
+    return await fetchQuery(api.pricingPlans.getPricingPlans, {
+      tenantId: tenantId ?? undefined,
+    });
   } catch (error) {
     console.error('Failed to fetch pricing plans:', error);
     return [];
@@ -18,7 +22,7 @@ async function getPlans() {
 }
 
 // Server component that fetches the data
-export default async function Pricing() {
-  const plans = await getPlans();
+export default async function Pricing({ tenantId }: PricingProps) {
+  const plans = await getPlans(tenantId);
   return <PricingClient plans={plans} />;
 }

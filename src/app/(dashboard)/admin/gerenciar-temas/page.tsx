@@ -1,9 +1,10 @@
 'use client';
 
-import { useMutation, useQuery } from 'convex/react';
+import { useMutation } from 'convex/react';
 import { Check, ChevronRight, Edit, Plus, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 
+import { useTenant } from '@/components/providers/TenantProvider';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
 import {
@@ -18,6 +19,7 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Separator } from '@/components/ui/separator';
 import { useToast } from '@/hooks/use-toast';
+import { useTenantQuery } from '@/hooks/useTenantQuery';
 
 import { api } from '../../../../../convex/_generated/api';
 import { Id } from '../../../../../convex/_generated/dataModel';
@@ -90,8 +92,10 @@ export default function GerenciarTemas() {
   const [showDeleteConfirmation, setShowDeleteConfirmation] = useState(false);
 
   const { toast } = useToast();
+  const { tenantId } = useTenant();
 
-  const hierarchicalData = useQuery(api.themes.getHierarchicalData);
+  // Use tenant-aware query for hierarchical data
+  const hierarchicalData = useTenantQuery(api.themes.getHierarchicalData, {});
   const createTheme = useMutation(api.themes.create);
   const createSubtheme = useMutation(api.subthemes.create);
   const createGroup = useMutation(api.groups.create);
@@ -115,7 +119,7 @@ export default function GerenciarTemas() {
     : [];
 
   const handleCreateTheme = async () => {
-    if (!newTheme.trim()) return;
+    if (!newTheme.trim() || !tenantId) return;
     try {
       // Ensure prefix is properly sanitized before saving
       const sanitizedPrefix = newThemePrefix
@@ -123,6 +127,7 @@ export default function GerenciarTemas() {
         : '';
 
       await createTheme({
+        tenantId,
         name: newTheme,
         prefix: sanitizedPrefix || generateDefaultPrefix(newTheme, 3),
       });
@@ -142,7 +147,7 @@ export default function GerenciarTemas() {
   };
 
   const handleCreateSubtheme = async () => {
-    if (!newSubtheme.trim() || !selectedTheme) return;
+    if (!newSubtheme.trim() || !selectedTheme || !tenantId) return;
     try {
       // Ensure prefix is properly sanitized before saving
       const sanitizedPrefix = newSubthemePrefix
@@ -150,6 +155,7 @@ export default function GerenciarTemas() {
         : '';
 
       await createSubtheme({
+        tenantId,
         name: newSubtheme,
         themeId: selectedTheme as Id<'themes'>,
         prefix: sanitizedPrefix || generateDefaultPrefix(newSubtheme, 2),
@@ -170,7 +176,7 @@ export default function GerenciarTemas() {
   };
 
   const handleCreateGroup = async () => {
-    if (!newGroup.trim() || !selectedSubtheme) return;
+    if (!newGroup.trim() || !selectedSubtheme || !tenantId) return;
     try {
       // Ensure prefix is properly sanitized before saving
       const sanitizedPrefix = newGroupPrefix
@@ -178,6 +184,7 @@ export default function GerenciarTemas() {
         : '';
 
       await createGroup({
+        tenantId,
         name: newGroup,
         subthemeId: selectedSubtheme as Id<'subthemes'>,
         prefix: sanitizedPrefix || generateDefaultPrefix(newGroup, 1),

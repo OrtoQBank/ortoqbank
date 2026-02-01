@@ -11,23 +11,45 @@ describe('Quiz Functions', () => {
     it('should create a preset quiz', async () => {
       const t = convexTest(schema);
 
+      // Create test app first
+      let testAppId: Id<'apps'>;
+      await t.run(async ctx => {
+        testAppId = await ctx.db.insert('apps', {
+          slug: 'test-app',
+          name: 'Test App',
+          domain: 'test.localhost',
+          isActive: true,
+          createdAt: Date.now(),
+        });
+      });
+
       const asTeacher = t.withIdentity({
         name: 'Teacher',
         subject: 'test-teacher',
         tokenIdentifier: 'test-teacher-token',
       });
 
-      // Create a user record first
+      // Create a user record with moderator access
       await t.run(async ctx => {
-        await ctx.db.insert('users', {
+        const userId = await ctx.db.insert('users', {
           email: 'teacher@test.com',
           clerkUserId: 'test-teacher',
+          role: 'admin', // Make them admin for test purposes
+        });
+        // Grant app access
+        await ctx.db.insert('userAppAccess', {
+          userId,
+          appId: testAppId!,
+          hasAccess: true,
+          role: 'moderator',
+          grantedAt: Date.now(),
         });
       });
 
       // Create test data
       const themeId = await asTeacher.mutation(api.themes.create, {
         name: 'Test Theme',
+        tenantId: testAppId!,
       });
 
       const questionIds = await Promise.all([
@@ -44,6 +66,7 @@ describe('Quiz Functions', () => {
           alternatives: ['2', '3', '4', '5'],
           correctAlternativeIndex: 0,
           themeId,
+          tenantId: testAppId!,
         }),
         asTeacher.mutation(api.questions.create, {
           title: 'Test Question 2',
@@ -58,6 +81,7 @@ describe('Quiz Functions', () => {
           alternatives: ['2', '3', '4', '5'],
           correctAlternativeIndex: 2,
           themeId,
+          tenantId: testAppId!,
         }),
       ]);
 
@@ -68,6 +92,7 @@ describe('Quiz Functions', () => {
         category: 'trilha',
         questions: questionIds,
         themeId,
+        tenantId: testAppId!,
       });
 
       // Verify the quiz was created
@@ -95,11 +120,31 @@ describe('Quiz Functions', () => {
     it('should get a quiz with its questions', async () => {
       const t = convexTest(schema);
 
+      // Create test app first
+      let testAppId: Id<'apps'>;
+      await t.run(async ctx => {
+        testAppId = await ctx.db.insert('apps', {
+          slug: 'test-app',
+          name: 'Test App',
+          domain: 'test.localhost',
+          isActive: true,
+          createdAt: Date.now(),
+        });
+      });
+
       // Create a user record first
       await t.run(async ctx => {
-        await ctx.db.insert('users', {
+        const userId = await ctx.db.insert('users', {
           email: 'teacher@test.com',
           clerkUserId: 'test-teacher',
+          role: 'admin',
+        });
+        await ctx.db.insert('userAppAccess', {
+          userId,
+          appId: testAppId!,
+          hasAccess: true,
+          role: 'moderator',
+          grantedAt: Date.now(),
         });
       });
 
@@ -112,6 +157,7 @@ describe('Quiz Functions', () => {
       // Create test data
       const themeId = await asTeacher.mutation(api.themes.create, {
         name: 'Test Theme',
+        tenantId: testAppId!,
       });
 
       const questionId = await asTeacher.mutation(api.questions.create, {
@@ -127,6 +173,7 @@ describe('Quiz Functions', () => {
         alternatives: ['2', '3', '4', '5'],
         correctAlternativeIndex: 0,
         themeId,
+        tenantId: testAppId!,
       });
 
       // Create a quiz
@@ -136,6 +183,7 @@ describe('Quiz Functions', () => {
         category: 'trilha',
         questions: [questionId],
         themeId,
+        tenantId: testAppId!,
       });
 
       // Get the quiz
@@ -174,6 +222,18 @@ describe('Quiz Functions', () => {
     it('should get sanitized quiz data', async () => {
       const t = convexTest(schema);
 
+      // Create test app first
+      let testAppId: Id<'apps'>;
+      await t.run(async ctx => {
+        testAppId = await ctx.db.insert('apps', {
+          slug: 'test-app',
+          name: 'Test App',
+          domain: 'test.localhost',
+          isActive: true,
+          createdAt: Date.now(),
+        });
+      });
+
       const asTeacher = t.withIdentity({
         name: 'Teacher',
         subject: 'test-teacher',
@@ -182,15 +242,24 @@ describe('Quiz Functions', () => {
 
       // Create a user record first
       await t.run(async ctx => {
-        await ctx.db.insert('users', {
+        const userId = await ctx.db.insert('users', {
           email: 'teacher@test.com',
           clerkUserId: 'test-teacher',
+          role: 'admin',
+        });
+        await ctx.db.insert('userAppAccess', {
+          userId,
+          appId: testAppId!,
+          hasAccess: true,
+          role: 'moderator',
+          grantedAt: Date.now(),
         });
       });
 
       // Create test data
       const themeId = await asTeacher.mutation(api.themes.create, {
         name: 'Test Theme',
+        tenantId: testAppId!,
       });
 
       const questionId = await asTeacher.mutation(api.questions.create, {
@@ -206,6 +275,7 @@ describe('Quiz Functions', () => {
         alternatives: ['2', '3', '4', '5'],
         correctAlternativeIndex: 0,
         themeId,
+        tenantId: testAppId!,
       });
 
       // Create a quiz
@@ -215,6 +285,7 @@ describe('Quiz Functions', () => {
         category: 'trilha',
         questions: [questionId],
         themeId,
+        tenantId: testAppId!,
       });
 
       // Get the quiz data
