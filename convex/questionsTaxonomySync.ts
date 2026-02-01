@@ -107,11 +107,21 @@ export async function updateTaxonomyDenormalization(
     `Updating userStatsCounts for ${affectedUserIds.size} affected users`,
   );
 
+  const tenantId = newDoc.tenantId;
+
   for (const userId of affectedUserIds) {
-    const userCounts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId))
-      .first();
+    // Query tenant-specific userStatsCounts record
+    const userCounts = tenantId
+      ? await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId),
+          )
+          .first()
+      : await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_user', q => q.eq('userId', userId))
+          .first();
 
     if (!userCounts) {
       // No counts record for this user, nothing to update
