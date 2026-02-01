@@ -1,6 +1,6 @@
 'use client';
 
-import { useMutation } from 'convex/react';
+import { useTenantMutation } from '@/hooks/useTenantQuery';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 import {
@@ -367,7 +367,7 @@ export default function ProfilePage() {
 function ResetStatsButton() {
   const [isPending, setIsPending] = useState(false);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
-  const reset = useMutation(api.userStats.resetMyStatsCounts);
+  const reset = useTenantMutation(api.userStats.resetMyStatsCounts);
 
   const handleReset = async () => {
     try {

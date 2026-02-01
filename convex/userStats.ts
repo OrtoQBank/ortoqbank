@@ -732,26 +732,43 @@ export const getUserWeeklyProgress = query({
  * Does NOT modify bookmarks-related counts.
  */
 export const resetMyStatsCounts = mutation({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.object({ success: v.boolean() }),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // 1) Delete all per-question stats for this user
-    const statsForUser = await ctx.db
-      .query('userQuestionStats')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .collect();
+    // 1) Delete all per-question stats for this user in this tenant
+    const statsForUser = tenantId
+      ? await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .collect()
+      : await ctx.db
+          .query('userQuestionStats')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .collect();
 
     for (const stat of statsForUser) {
       await ctx.db.delete(stat._id);
     }
 
     // 2) Reset aggregate counts (answered/incorrect) but keep bookmarks-related counts
-    const counts = await ctx.db
-      .query('userStatsCounts')
-      .withIndex('by_user', q => q.eq('userId', userId._id))
-      .first();
+    const counts = tenantId
+      ? await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_tenant_and_user', q =>
+            q.eq('tenantId', tenantId).eq('userId', userId._id),
+          )
+          .first()
+      : await ctx.db
+          .query('userStatsCounts')
+          .withIndex('by_user', q => q.eq('userId', userId._id))
+          .first();
 
     if (!counts) {
       // Nothing to reset, treat as success
