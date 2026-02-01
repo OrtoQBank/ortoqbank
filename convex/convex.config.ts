@@ -32,12 +32,4 @@ app.use(aggregate, { name: 'randomQuestionsByTheme' });
 app.use(aggregate, { name: 'randomQuestionsBySubtheme' });
 app.use(aggregate, { name: 'randomQuestionsByGroup' });
 
-// =============================================================================
-// SECTION 3: USER-SPECIFIC COUNT AGGREGATES - REMOVED
-// Replaced by userStatsCounts table for better performance
-// =============================================================================
-
-// All user-specific aggregates have been replaced by the userStatsCounts table
-// This provides much better performance (1-2 DB calls vs 1000+ aggregate calls)
-
 export default app;

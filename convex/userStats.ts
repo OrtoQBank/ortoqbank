@@ -5,7 +5,6 @@ import { Id } from './_generated/dataModel';
 import { internalMutation, mutation, query } from './_generated/server';
 import { getTotalQuestionCount } from './aggregateCounts.js';
 import { verifyTenantAccess } from './auth';
-// Removed user-specific aggregate imports - replaced by userStatsCounts table
 import { getCurrentUser, getCurrentUserOrThrow } from './users';
 import { getWeekString } from './utils';
 
@@ -26,10 +25,6 @@ type UserStats = {
   }[];
   totalQuestions: number;
 };
-
-// OLD getUserStatsFromTable function removed - replaced by getUserStatsFast
-
-// OLD getUserStatsSummaryWithAggregates function removed - replaced by getUserStatsFast
 
 /**
  * Transform flat count records into structured format
