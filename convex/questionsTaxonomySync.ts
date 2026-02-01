@@ -127,7 +127,7 @@ export async function updateTaxonomyDenormalization(
     const userBookmark = questionBookmarks.find(b => b.userId === userId);
 
     // Update theme counts if theme changed
-    if (themeChanged) {
+    if (themeChanged && oldDoc.themeId && newDoc.themeId) {
       const oldThemeId = oldDoc.themeId;
       const newThemeId = newDoc.themeId;
 

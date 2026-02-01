@@ -159,7 +159,7 @@ export default defineSchema({
     legacyGroupId: v.optional(v.string()),
 
     // Taxonomy IDs (for filtering/aggregates)
-    themeId: v.id('themes'),
+    themeId: v.optional(v.id('themes')),
     subthemeId: v.optional(v.id('subthemes')),
     groupId: v.optional(v.id('groups')),
 

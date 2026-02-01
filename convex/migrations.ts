@@ -372,9 +372,11 @@ export const backfillQuestionDenormalizedNames = migrations.define({
     } = {};
 
     // Get theme name
-    const theme = await ctx.db.get(doc.themeId);
-    if (theme) {
-      updates.themeName = theme.name;
+    if (doc.themeId) {
+      const theme = await ctx.db.get(doc.themeId);
+      if (theme) {
+        updates.themeName = theme.name;
+      }
     }
 
     // Get subtheme name if exists
@@ -1024,3 +1026,77 @@ export const runImportRelationshipMigrations = migrations.runner([
   internal.migrations.resolveQuestionsTaxonomy,
   internal.migrations.resolveQuestionContentQuestionId,
 ]);
+
+// =============================================================================
+// IMPORT TENANT ID BACKFILL (with explicit tenantId parameter)
+// =============================================================================
+
+/**
+ * Backfill tenantId for imported records (those with legacyId but no tenantId)
+ * This allows passing a specific tenantId instead of looking up "ortoqbank"
+ *
+ * Usage:
+ * npx convex run migrations:backfillImportedTenantId '{"tenantId":"<your-app-id>"}' --prod
+ */
+export const backfillImportedTenantId = internalMutation({
+  args: {
+    tenantId: v.id('apps'),
+  },
+  returns: v.object({
+    themes: v.number(),
+    subthemes: v.number(),
+    groups: v.number(),
+    questions: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { tenantId } = args;
+    let themesUpdated = 0;
+    let subthemesUpdated = 0;
+    let groupsUpdated = 0;
+    let questionsUpdated = 0;
+
+    // Update themes with legacyId but no tenantId
+    const allThemes = await ctx.db.query('themes').collect();
+    const themes = allThemes.filter(t => t.legacyId && !t.tenantId);
+    for (const theme of themes) {
+      await ctx.db.patch(theme._id, { tenantId });
+      themesUpdated++;
+    }
+
+    // Update subthemes with legacyId but no tenantId
+    const allSubthemes = await ctx.db.query('subthemes').collect();
+    const subthemes = allSubthemes.filter(s => s.legacyId && !s.tenantId);
+    for (const subtheme of subthemes) {
+      await ctx.db.patch(subtheme._id, { tenantId });
+      subthemesUpdated++;
+    }
+
+    // Update groups with legacyId but no tenantId
+    const allGroups = await ctx.db.query('groups').collect();
+    const groups = allGroups.filter(g => g.legacyId && !g.tenantId);
+    for (const group of groups) {
+      await ctx.db.patch(group._id, { tenantId });
+      groupsUpdated++;
+    }
+
+    // Update questions with legacyId but no tenantId
+    const allQuestions = await ctx.db.query('questions').collect();
+    const questions = allQuestions.filter(q => q.legacyId && !q.tenantId);
+    for (const question of questions) {
+      await ctx.db.patch(question._id, { tenantId });
+      questionsUpdated++;
+    }
+
+    console.log(
+      `Backfilled tenantId: ${themesUpdated} themes, ${subthemesUpdated} subthemes, ${groupsUpdated} groups, ${questionsUpdated} questions`,
+    );
+
+    return {
+      themes: themesUpdated,
+      subthemes: subthemesUpdated,
+      groups: groupsUpdated,
+      questions: questionsUpdated,
+    };
+  },
+});
+
