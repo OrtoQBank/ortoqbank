@@ -6,13 +6,13 @@
 // All functions are designed to work within Convex's 15-second timeout limit.
 //
 // USAGE PATTERN:
-// 1. Call the clear function for the aggregate type
-// 2. Call the paginated repair function repeatedly until isDone: true
+// Call the paginated repair function repeatedly until isDone: true
+// Each function clears the aggregate on first call (when cursor is null)
 //
 // Example:
 //   npx convex run aggregateRepairs:repairGlobalQuestionCount \
-//     '{"tenantId":"...", "startCursor": null}'
-//   # Repeat with returned cursor until isComplete: true
+//     '{"tenantId":"...", "cursor": null}'
+//   # Repeat with returned cursor until isDone: true
 //
 // USER STATS:
 // User statistics are handled by the userStatsCounts table, not aggregates.
@@ -21,7 +21,7 @@
 
 import { v } from 'convex/values';
 
-import { internalMutation } from './_generated/server';
+import { internalMutation, internalQuery } from './_generated/server';
 import {
   questionCountByGroup,
   questionCountBySubtheme,
@@ -33,54 +33,51 @@ import {
   totalQuestionCount,
 } from './aggregates';
 
+const DEFAULT_BATCH_SIZE = 100;
+const MAX_BATCHES_PER_CALL = 10;
+
+const paginatedResultValidator = v.object({
+  processed: v.number(),
+  nextCursor: v.union(v.string(), v.null()),
+  isDone: v.boolean(),
+});
+
 // ============================================================================
 // SECTION 1: TOTAL QUESTION COUNT AGGREGATE REPAIR
 // ============================================================================
 
 /**
- * Repair total question count for a tenant with pagination (memory-safe)
+ * Repair total question count for a tenant with pagination
  *
  * Usage:
  *   npx convex run aggregateRepairs:repairGlobalQuestionCount \
- *     '{"tenantId":"...", "startCursor": null}'
- *   # Repeat with returned nextCursor until isComplete: true
+ *     '{"tenantId":"...", "cursor": null}'
+ *   # Repeat with returned cursor until isDone: true
  */
 export const repairGlobalQuestionCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
+    cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
-    startCursor: v.optional(v.union(v.string(), v.null())),
   },
-  returns: v.object({
-    totalProcessed: v.number(),
-    batchCount: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isComplete: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
 
-    // Only clear existing aggregates if this is the first call (no startCursor)
-    if (!args.startCursor) {
+    if (!args.cursor) {
       await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
     }
 
-    // Process questions in paginated batches (filtered by tenant)
-    let cursor: string | null = args.startCursor || null;
+    let cursor: string | null = args.cursor;
     let totalProcessed = 0;
     let batchCount = 0;
-    let isComplete = false;
 
     do {
       const result = await ctx.db
         .query('questions')
         .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-        .paginate({
-          cursor,
-          numItems: batchSize,
-        });
+        .paginate({ cursor, numItems: batchSize });
 
-      // Process this batch
       for (const question of result.page) {
         await totalQuestionCount.insertIfDoesNotExist(ctx, question);
       }
@@ -89,240 +86,181 @@ export const repairGlobalQuestionCount = internalMutation({
       cursor = result.continueCursor;
       batchCount++;
 
-      console.log(
-        `Processed batch ${batchCount}: ${result.page.length} questions for tenant ${args.tenantId}`,
-      );
-
-      // Check if we're done with all data
       if (result.isDone) {
-        isComplete = true;
-        cursor = null;
-        break;
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
       }
 
-      // If we have more data but this is getting large, we should break
-      // and let the caller call us again with the cursor
-      if (batchCount >= 10) {
-        console.log(
-          `Processed ${batchCount} batches, stopping to prevent timeout. Resume with cursor: ${cursor}`,
-        );
-        break;
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
       }
     } while (cursor);
 
-    const message = isComplete
-      ? `Repair completed: ${totalProcessed} questions processed in ${batchCount} batches for tenant ${args.tenantId}`
-      : `Partial repair: ${totalProcessed} questions processed in ${batchCount} batches. Resume with returned cursor.`;
-
-    console.log(message);
-
-    return {
-      totalProcessed,
-      batchCount,
-      nextCursor: cursor,
-      isComplete,
-    };
-  },
-});
-
-/**
- * Clear Section 1 aggregates for a tenant (fast operation)
- */
-export const internalRepairClearSection1Aggregates = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await totalQuestionCount.clear(ctx, { namespace: args.tenantId });
-    console.log(`Section 1 aggregates cleared for tenant ${args.tenantId}`);
-    return null;
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 // ============================================================================
-// SECTION 1: THEME/SUBTHEME/GROUP COUNT AGGREGATES REPAIR (Paginated)
+// SECTION 2: THEME/SUBTHEME/GROUP COUNT AGGREGATES REPAIR
 // ============================================================================
-
-/**
- * Clear theme count aggregate for a specific theme
- */
-export const internalRepairClearThemeCountAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    themeId: v.id('themes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.themeId}`;
-    await questionCountByTheme.clear(ctx, { namespace });
-    return null;
-  },
-});
 
 /**
  * Repair theme count aggregate with pagination
  */
-export const repairThemeCountPage = internalMutation({
+export const repairThemeCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
     themeId: v.id('themes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.themeId}`;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
-      const namespace = `${args.tenantId}:${args.themeId}`;
       await questionCountByTheme.clear(ctx, { namespace });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_theme', q =>
-        q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await questionCountByTheme.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+        )
+        .paginate({ cursor, numItems: batchSize });
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
+      for (const question of result.page) {
+        await questionCountByTheme.insertIfDoesNotExist(ctx, question);
+      }
 
-/**
- * Clear subtheme count aggregate for a specific subtheme
- */
-export const internalRepairClearSubthemeCountAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    subthemeId: v.id('subthemes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.subthemeId}`;
-    await questionCountBySubtheme.clear(ctx, { namespace });
-    return null;
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
  * Repair subtheme count aggregate with pagination
  */
-export const repairSubthemeCountPage = internalMutation({
+export const repairSubthemeCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
     subthemeId: v.id('subthemes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
-      const namespace = `${args.tenantId}:${args.subthemeId}`;
       await questionCountBySubtheme.clear(ctx, { namespace });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_subtheme', q =>
-        q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+        )
+        .paginate({ cursor, numItems: batchSize });
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
+      for (const question of result.page) {
+        await questionCountBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
 
-/**
- * Clear group count aggregate for a specific group
- */
-export const internalRepairClearGroupCountAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    groupId: v.id('groups'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.groupId}`;
-    await questionCountByGroup.clear(ctx, { namespace });
-    return null;
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
  * Repair group count aggregate with pagination
  */
-export const repairGroupCountPage = internalMutation({
+export const repairGroupCount = internalMutation({
   args: {
     tenantId: v.id('apps'),
     groupId: v.id('groups'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.groupId}`;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
-      const namespace = `${args.tenantId}:${args.groupId}`;
       await questionCountByGroup.clear(ctx, { namespace });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_group', q =>
-        q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await questionCountByGroup.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+        )
+        .paginate({ cursor, numItems: batchSize });
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
+      for (const question of result.page) {
+        await questionCountByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 // ============================================================================
-// SECTION 2: RANDOM QUESTION SELECTION AGGREGATES REPAIR (Paginated)
+// SECTION 3: RANDOM QUESTION SELECTION AGGREGATES REPAIR
 // ============================================================================
 
 /**
@@ -334,243 +272,209 @@ export const repairRandomQuestions = internalMutation({
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
       await randomQuestions.clear(ctx, { namespace: args.tenantId });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
-      .paginate({
-        cursor: args.cursor,
-        numItems: batchSize,
-      });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await randomQuestions.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant', q => q.eq('tenantId', args.tenantId))
+        .paginate({ cursor, numItems: batchSize });
 
-    console.log(
-      `Processed ${result.page.length} questions for random selection`,
-    );
+      for (const question of result.page) {
+        await randomQuestions.insertIfDoesNotExist(ctx, question);
+      }
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
 
-/**
- * Clear Section 2 aggregates for a tenant (fast operation)
- */
-export const internalRepairClearSection2Aggregates = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    await randomQuestions.clear(ctx, { namespace: args.tenantId });
-    console.log(`Section 2 aggregates cleared for tenant ${args.tenantId}`);
-    return null;
-  },
-});
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
 
-/**
- * Clear theme random aggregate
- */
-export const internalRepairClearThemeRandomAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    themeId: v.id('themes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.themeId}`;
-    await randomQuestionsByTheme.clear(ctx, { namespace });
-    return null;
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
  * Repair theme random aggregate with pagination
  */
-export const internalRepairProcessThemeRandomPage = internalMutation({
+export const repairRandomQuestionsByTheme = internalMutation({
   args: {
     tenantId: v.id('apps'),
     themeId: v.id('themes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.themeId}`;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
-      const namespace = `${args.tenantId}:${args.themeId}`;
       await randomQuestionsByTheme.clear(ctx, { namespace });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_theme', q =>
-        q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_theme', q =>
+          q.eq('tenantId', args.tenantId).eq('themeId', args.themeId),
+        )
+        .paginate({ cursor, numItems: batchSize });
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
+      for (const question of result.page) {
+        await randomQuestionsByTheme.insertIfDoesNotExist(ctx, question);
+      }
 
-/**
- * Clear subtheme random aggregate
- */
-export const internalRepairClearSubthemeRandomAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    subthemeId: v.id('subthemes'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.subthemeId}`;
-    await randomQuestionsBySubtheme.clear(ctx, { namespace });
-    return null;
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
  * Repair subtheme random aggregate with pagination
  */
-export const internalRepairProcessSubthemeRandomPage = internalMutation({
+export const repairRandomQuestionsBySubtheme = internalMutation({
   args: {
     tenantId: v.id('apps'),
     subthemeId: v.id('subthemes'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.subthemeId}`;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
-      const namespace = `${args.tenantId}:${args.subthemeId}`;
       await randomQuestionsBySubtheme.clear(ctx, { namespace });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_subtheme', q =>
-        q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_subtheme', q =>
+          q.eq('tenantId', args.tenantId).eq('subthemeId', args.subthemeId),
+        )
+        .paginate({ cursor, numItems: batchSize });
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
-  },
-});
+      for (const question of result.page) {
+        await randomQuestionsBySubtheme.insertIfDoesNotExist(ctx, question);
+      }
 
-/**
- * Clear group random aggregate
- */
-export const internalRepairClearGroupRandomAggregate = internalMutation({
-  args: {
-    tenantId: v.id('apps'),
-    groupId: v.id('groups'),
-  },
-  returns: v.null(),
-  handler: async (ctx, args) => {
-    const namespace = `${args.tenantId}:${args.groupId}`;
-    await randomQuestionsByGroup.clear(ctx, { namespace });
-    return null;
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 /**
  * Repair group random aggregate with pagination
  */
-export const internalRepairProcessGroupRandomPage = internalMutation({
+export const repairRandomQuestionsByGroup = internalMutation({
   args: {
     tenantId: v.id('apps'),
     groupId: v.id('groups'),
     cursor: v.union(v.string(), v.null()),
     batchSize: v.optional(v.number()),
   },
-  returns: v.object({
-    processed: v.number(),
-    nextCursor: v.union(v.string(), v.null()),
-    isDone: v.boolean(),
-  }),
+  returns: paginatedResultValidator,
   handler: async (ctx, args) => {
-    const batchSize = args.batchSize || 100;
+    const batchSize = args.batchSize ?? DEFAULT_BATCH_SIZE;
+    const namespace = `${args.tenantId}:${args.groupId}`;
 
-    // Clear on first call (no cursor)
     if (!args.cursor) {
-      const namespace = `${args.tenantId}:${args.groupId}`;
       await randomQuestionsByGroup.clear(ctx, { namespace });
     }
 
-    const result = await ctx.db
-      .query('questions')
-      .withIndex('by_tenant_and_group', q =>
-        q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
-      )
-      .paginate({ cursor: args.cursor, numItems: batchSize });
+    let cursor: string | null = args.cursor;
+    let totalProcessed = 0;
+    let batchCount = 0;
 
-    for (const question of result.page) {
-      await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
-    }
+    do {
+      const result = await ctx.db
+        .query('questions')
+        .withIndex('by_tenant_and_group', q =>
+          q.eq('tenantId', args.tenantId).eq('groupId', args.groupId),
+        )
+        .paginate({ cursor, numItems: batchSize });
 
-    return {
-      processed: result.page.length,
-      nextCursor: result.continueCursor,
-      isDone: result.isDone,
-    };
+      for (const question of result.page) {
+        await randomQuestionsByGroup.insertIfDoesNotExist(ctx, question);
+      }
+
+      totalProcessed += result.page.length;
+      cursor = result.continueCursor;
+      batchCount++;
+
+      if (result.isDone) {
+        return { processed: totalProcessed, nextCursor: null, isDone: true };
+      }
+
+      if (batchCount >= MAX_BATCHES_PER_CALL) {
+        return { processed: totalProcessed, nextCursor: cursor, isDone: false };
+      }
+    } while (cursor);
+
+    return { processed: totalProcessed, nextCursor: null, isDone: true };
   },
 });
 
 // ============================================================================
-// HELPER FUNCTIONS
+// HELPER QUERIES
 // ============================================================================
 
 /**
  * Get all theme IDs for a tenant (for batch processing)
  */
-export const getThemeIdsForTenant = internalMutation({
+export const getThemeIdsForTenant = internalQuery({
   args: {
     tenantId: v.id('apps'),
   },
@@ -587,7 +491,7 @@ export const getThemeIdsForTenant = internalMutation({
 /**
  * Get all subtheme IDs for a tenant (for batch processing)
  */
-export const getSubthemeIdsForTenant = internalMutation({
+export const getSubthemeIdsForTenant = internalQuery({
   args: {
     tenantId: v.id('apps'),
   },
@@ -604,7 +508,7 @@ export const getSubthemeIdsForTenant = internalMutation({
 /**
  * Get all group IDs for a tenant (for batch processing)
  */
-export const getGroupIdsForTenant = internalMutation({
+export const getGroupIdsForTenant = internalQuery({
   args: {
     tenantId: v.id('apps'),
   },
