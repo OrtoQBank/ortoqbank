@@ -4,9 +4,9 @@ import { clerkMiddleware, createRouteMatcher } from '@clerk/nextjs/server';
 import { NextResponse } from 'next/server';
 
 import {
-  extractSubdomain,
   getTenantCookieOptions,
   isValidTenantSlug,
+  resolveTenant,
   TENANT_COOKIE_NAME,
 } from '@/lib/tenant';
 
@@ -32,7 +32,7 @@ export default clerkMiddleware(async (auth, request) => {
   // Extract subdomain from hostname and set tenant cookie
   // ==========================================================================
   const hostname = request.headers.get('host') || 'localhost:3000';
-  const subdomain = extractSubdomain(hostname);
+  const subdomain = resolveTenant(hostname);
   const pathname = request.nextUrl.pathname;
 
   // DEBUG: Log raw hostname and subdomain extraction

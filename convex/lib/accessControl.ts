@@ -24,7 +24,6 @@ import {
   checkAppAccess,
   requireAppAccess,
   requireAppModerator,
-  requireSuperAdmin,
   type UserAppAccessRecord,
 } from '../auth';
 import { getCurrentUserOrThrow } from '../users';
@@ -156,4 +155,4 @@ export async function requireTenantAccessOptional(
 }
 
 // Re-export core functions for convenience
-export { requireSuperAdmin };
+export { requireSuperAdmin } from '../auth';
