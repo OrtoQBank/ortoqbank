@@ -10,6 +10,7 @@ import { useForm } from 'react-hook-form';
 import { z } from 'zod';
 
 import { CreditCardPreview } from '@/components/checkout/CreditCardPreview';
+import { useTenantId } from '@/components/providers/TenantProvider';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import {
@@ -195,6 +196,7 @@ type CheckoutForm = z.infer<typeof checkoutSchema>;
 function CheckoutPageContent() {
   const router = useRouter();
   const planId = useSearchParams().get('plan'); // get planId from url
+  const tenantId = useTenantId(); // Get current tenant for multi-tenancy
 
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -365,6 +367,7 @@ function CheckoutPageContent() {
 
       // Step 1: Create pending order first (robust pattern)
       const { pendingOrderId, priceBreakdown } = await createPendingOrder({
+        tenantId: tenantId ?? undefined, // Pass current tenant for multi-tenancy
         email: data.email,
         cpf: data.cpf.replaceAll(/\D/g, ''),
         name: data.name,
