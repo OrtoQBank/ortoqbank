@@ -668,7 +668,7 @@ export const getQuestionStatus = query({
  * Get user progress over time grouped by weeks
  */
 export const getUserWeeklyProgress = query({
-  args: {},
+  args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(
     v.object({
       week: v.string(),
@@ -676,16 +676,22 @@ export const getUserWeeklyProgress = query({
       weeklyAnswered: v.number(),
     }),
   ),
-  handler: async ctx => {
+  handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     const userId = await getCurrentUserOrThrow(ctx);
 
-    // Get all answered questions with timestamps
-    const answeredStats = await ctx.db
+    // Get all answered questions with timestamps, scoped by tenant
+    const allStats = await ctx.db
       .query('userQuestionStats')
-      .withIndex('by_user_answered', q =>
-        q.eq('userId', userId._id).eq('hasAnswered', true),
+      .withIndex('by_tenant_and_user', q =>
+        q.eq('tenantId', tenantId).eq('userId', userId._id),
       )
       .collect();
+
+    // Filter for answered questions only
+    const answeredStats = allStats.filter(stat => stat.hasAnswered);
 
     if (answeredStats.length === 0) {
       return [];
