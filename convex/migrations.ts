@@ -839,3 +839,188 @@ export const backfillUserAppAccess = migrations.define({
 export const runUserAppAccessMigration = migrations.runner([
   internal.migrations.backfillUserAppAccess,
 ]);
+
+// =============================================================================
+// IMPORT RELATIONSHIP RESOLUTION MIGRATIONS
+// =============================================================================
+// These migrations resolve legacy IDs to actual Convex IDs after importing data
+// from JSONL files. Run these after importing data with `npx convex import --append`.
+
+/**
+ * Resolve subthemes.themeId by looking up legacyThemeId in themes table
+ * Run AFTER importing themes and subthemes
+ */
+export const resolveSubthemesThemeId = migrations.define({
+  table: 'subthemes',
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ themeId: Id<'themes'> } | undefined> => {
+    // Skip if already has themeId or no legacyThemeId to resolve
+    if (doc.themeId || !doc.legacyThemeId) {
+      return;
+    }
+
+    const theme = await ctx.db
+      .query('themes')
+      .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacyThemeId))
+      .first();
+
+    if (!theme) {
+      console.warn(
+        `Theme not found for legacyThemeId: ${doc.legacyThemeId} (subtheme: ${doc._id})`,
+      );
+      return;
+    }
+
+    return { themeId: theme._id };
+  },
+});
+
+/**
+ * Resolve groups.subthemeId by looking up legacySubthemeId in subthemes table
+ * Run AFTER importing subthemes and groups, and AFTER resolving subthemes.themeId
+ */
+export const resolveGroupsSubthemeId = migrations.define({
+  table: 'groups',
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ subthemeId: Id<'subthemes'> } | undefined> => {
+    // Skip if already has subthemeId or no legacySubthemeId to resolve
+    if (doc.subthemeId || !doc.legacySubthemeId) {
+      return;
+    }
+
+    const subtheme = await ctx.db
+      .query('subthemes')
+      .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacySubthemeId))
+      .first();
+
+    if (!subtheme) {
+      console.warn(
+        `Subtheme not found for legacySubthemeId: ${doc.legacySubthemeId} (group: ${doc._id})`,
+      );
+      return;
+    }
+
+    return { subthemeId: subtheme._id };
+  },
+});
+
+/**
+ * Resolve questions.themeId, subthemeId, groupId by looking up legacy IDs
+ * Run AFTER importing all taxonomy tables and resolving their relationships
+ */
+export const resolveQuestionsTaxonomy = migrations.define({
+  table: 'questions',
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<
+    | {
+        themeId?: Id<'themes'>;
+        subthemeId?: Id<'subthemes'>;
+        groupId?: Id<'groups'>;
+      }
+    | undefined
+  > => {
+    const updates: {
+      themeId?: Id<'themes'>;
+      subthemeId?: Id<'subthemes'>;
+      groupId?: Id<'groups'>;
+    } = {};
+
+    // Resolve themeId from legacyThemeId
+    if (!doc.themeId && doc.legacyThemeId) {
+      const theme = await ctx.db
+        .query('themes')
+        .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacyThemeId))
+        .first();
+      if (theme) {
+        updates.themeId = theme._id;
+      } else {
+        console.warn(
+          `Theme not found for legacyThemeId: ${doc.legacyThemeId} (question: ${doc._id})`,
+        );
+      }
+    }
+
+    // Resolve subthemeId from legacySubthemeId
+    if (!doc.subthemeId && doc.legacySubthemeId) {
+      const subtheme = await ctx.db
+        .query('subthemes')
+        .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacySubthemeId))
+        .first();
+      if (subtheme) {
+        updates.subthemeId = subtheme._id;
+      } else {
+        console.warn(
+          `Subtheme not found for legacySubthemeId: ${doc.legacySubthemeId} (question: ${doc._id})`,
+        );
+      }
+    }
+
+    // Resolve groupId from legacyGroupId
+    if (!doc.groupId && doc.legacyGroupId) {
+      const group = await ctx.db
+        .query('groups')
+        .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacyGroupId))
+        .first();
+      if (group) {
+        updates.groupId = group._id;
+      } else {
+        console.warn(
+          `Group not found for legacyGroupId: ${doc.legacyGroupId} (question: ${doc._id})`,
+        );
+      }
+    }
+
+    return Object.keys(updates).length > 0 ? updates : undefined;
+  },
+});
+
+/**
+ * Resolve questionContent.questionId by looking up legacyQuestionId in questions table
+ * Run AFTER importing questions and questionContent, and AFTER resolving questions taxonomy
+ */
+export const resolveQuestionContentQuestionId = migrations.define({
+  table: 'questionContent',
+  migrateOne: async (
+    ctx,
+    doc,
+  ): Promise<{ questionId: Id<'questions'> } | undefined> => {
+    // Skip if already has questionId or no legacyQuestionId to resolve
+    if (doc.questionId || !doc.legacyQuestionId) {
+      return;
+    }
+
+    const question = await ctx.db
+      .query('questions')
+      .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacyQuestionId))
+      .first();
+
+    if (!question) {
+      console.warn(
+        `Question not found for legacyQuestionId: ${doc.legacyQuestionId} (questionContent: ${doc._id})`,
+      );
+      return;
+    }
+
+    return { questionId: question._id };
+  },
+});
+
+/**
+ * Runner for import relationship resolution migrations
+ * Run these in order after importing JSONL data with `npx convex import --append`
+ *
+ * Usage:
+ * npx convex run migrations:runImportRelationshipMigrations
+ */
+export const runImportRelationshipMigrations = migrations.runner([
+  internal.migrations.resolveSubthemesThemeId,
+  internal.migrations.resolveGroupsSubthemeId,
+  internal.migrations.resolveQuestionsTaxonomy,
+  internal.migrations.resolveQuestionContentQuestionId,
+]);

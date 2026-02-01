@@ -88,7 +88,8 @@ export default defineSchema({
   })
     .index('by_name', ['name'])
     .index('by_tenant', ['tenantId'])
-    .index('by_tenant_and_name', ['tenantId', 'name']),
+    .index('by_tenant_and_name', ['tenantId', 'name'])
+    .index('by_legacy_id', ['legacyId']),
 
   subthemes: defineTable({
     // Multi-tenancy
@@ -102,7 +103,8 @@ export default defineSchema({
   })
     .index('by_theme', ['themeId'])
     .index('by_tenant', ['tenantId'])
-    .index('by_tenant_and_theme', ['tenantId', 'themeId']),
+    .index('by_tenant_and_theme', ['tenantId', 'themeId'])
+    .index('by_legacy_id', ['legacyId']),
 
   groups: defineTable({
     // Multi-tenancy
@@ -116,7 +118,8 @@ export default defineSchema({
   })
     .index('by_subtheme', ['subthemeId'])
     .index('by_tenant', ['tenantId'])
-    .index('by_tenant_and_subtheme', ['tenantId', 'subthemeId']),
+    .index('by_tenant_and_subtheme', ['tenantId', 'subthemeId'])
+    .index('by_legacy_id', ['legacyId']),
 
   // Tags table
   tags: defineTable({ name: v.string() }),
@@ -134,7 +137,9 @@ export default defineSchema({
     // Legacy IDs for cross-deployment import
     legacyId: v.optional(v.string()),
     legacyQuestionId: v.optional(v.string()),
-  }).index('by_question', ['questionId']),
+  })
+    .index('by_question', ['questionId'])
+    .index('by_legacy_id', ['legacyId']),
 
   // Questions - Light metadata for lists, filtering, aggregates
   questions: defineTable({
@@ -211,6 +216,7 @@ export default defineSchema({
     .index('by_tenant_and_theme', ['tenantId', 'themeId'])
     .index('by_tenant_and_subtheme', ['tenantId', 'subthemeId'])
     .index('by_tenant_and_group', ['tenantId', 'groupId'])
+    .index('by_legacy_id', ['legacyId'])
     .searchIndex('search_by_title', { searchField: 'title' })
     .searchIndex('search_by_code', { searchField: 'questionCode' }),
 
