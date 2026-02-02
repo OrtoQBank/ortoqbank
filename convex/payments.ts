@@ -49,6 +49,7 @@ interface PendingOrderWithInstallments {
  */
 export const createPendingOrder = mutation({
   args: {
+    tenantId: v.optional(v.id('apps')), // Which app/tenant this order is for (resolved from pricingPlan if not provided)
     email: v.string(),
     cpf: v.string(),
     name: v.string(),
@@ -84,6 +85,9 @@ export const createPendingOrder = mutation({
       console.error(args);
       throw new Error('Product not found or inactive');
     }
+
+    // Resolve tenantId: use provided value or fall back to pricingPlan's tenantId
+    const tenantId = args.tenantId ?? pricingPlan.tenantId;
 
     // Base prices from the pricing plan (set by admin)
     const regularPrice = pricingPlan.regularPriceNum || 0;
@@ -141,6 +145,7 @@ export const createPendingOrder = mutation({
 
     // Create pending order
     const pendingOrderId = await ctx.db.insert('pendingOrders', {
+      tenantId, // Which app/tenant this order is for
       email: args.email,
       cpf: args.cpf.replaceAll(/\D/g, ''), // Clean CPF
       name: args.name,
@@ -239,12 +244,21 @@ export const processAsaasWebhook = internalAction({
       (event === 'PAYMENT_CONFIRMED' || event === 'PAYMENT_RECEIVED') &&
       (payment.status === 'RECEIVED' || payment.status === 'CONFIRMED')
     ) {
-      // Use externalReference to find the pending order
-      const pendingOrderId = payment.externalReference;
-      if (!pendingOrderId) {
+      // Parse externalReference which is in format: deploymentSlug:pendingOrderId
+      const externalReference = payment.externalReference;
+      if (!externalReference) {
         console.error(`No externalReference found in payment ${payment.id}`);
         return null;
       }
+
+      // Extract pendingOrderId from deploymentSlug:orderId format
+      const colonIndex = externalReference.indexOf(':');
+      const pendingOrderId =
+        colonIndex === -1
+          ? externalReference
+          : externalReference.slice(Math.max(0, colonIndex + 1)); // Fallback for legacy orders without prefix
+
+      console.log(`📦 Parsed externalReference: ${externalReference} -> orderId: ${pendingOrderId}`);
 
       // SECURITY: Verify payment amount matches order amount
       const pendingOrder = (await ctx.runQuery(
@@ -536,17 +550,90 @@ export const maybeProvisionAccess = internalMutation({
     try {
       console.log(`🚀 Provisioning access for order ${args.orderId}`);
 
-      // Update order status
+      // Update order status to provisioning
       await ctx.db.patch(args.orderId, {
         status: 'provisioned',
         provisionedAt: Date.now(),
       });
 
-      // TODO: Add actual access provisioning logic here
-      // - Create user in users table if needed
-      // - Grant product access
-      // - Send welcome email
-      // - etc.
+      // Get user from Clerk ID
+      const user = await ctx.db
+        .query('users')
+        .withIndex('by_clerkUserId', q => q.eq('clerkUserId', order.userId!))
+        .unique();
+
+      if (!user) {
+        console.error(`User not found for clerkUserId: ${order.userId}`);
+        return null;
+      }
+
+      // Get pricing plan for expiration and product info
+      const pricingPlan = await ctx.db
+        .query('pricingPlans')
+        .withIndex('by_product_id', q => q.eq('productId', order.productId))
+        .unique();
+
+      if (!pricingPlan) {
+        console.error(`Pricing plan not found for productId: ${order.productId}`);
+        return null;
+      }
+
+      // Calculate access expiration from pricing plan's accessYears
+      let accessExpiresAt: number | undefined;
+      if (pricingPlan.accessYears && pricingPlan.accessYears.length > 0) {
+        // Expire at end of the latest year in accessYears (Dec 31, 23:59:59.999)
+        const latestYear = Math.max(...pricingPlan.accessYears);
+        accessExpiresAt = new Date(latestYear, 11, 31, 23, 59, 59, 999).getTime();
+      }
+
+      // Grant userAppAccess for the tenant
+      if (order.tenantId) {
+        const existingAccess = await ctx.db
+          .query('userAppAccess')
+          .withIndex('by_user_app', q =>
+            q.eq('userId', user._id).eq('appId', order.tenantId!),
+          )
+          .unique();
+
+        if (existingAccess) {
+          // Update existing access - extend expiration if new one is later
+          const newExpiry = accessExpiresAt ?? existingAccess.expiresAt;
+          const currentExpiry = existingAccess.expiresAt ?? 0;
+          await ctx.db.patch(existingAccess._id, {
+            hasAccess: true,
+            expiresAt: newExpiry ? Math.max(currentExpiry, newExpiry) : undefined,
+          });
+          console.log(`📝 Updated userAppAccess for user ${user._id} to app ${order.tenantId}`);
+        } else {
+          // Create new access record
+          await ctx.db.insert('userAppAccess', {
+            userId: user._id,
+            appId: order.tenantId,
+            hasAccess: true,
+            role: 'user',
+            grantedAt: Date.now(),
+            expiresAt: accessExpiresAt,
+          });
+          console.log(`✅ Created userAppAccess for user ${user._id} to app ${order.tenantId}`);
+        }
+      } else {
+        console.warn(`⚠️ Order ${args.orderId} has no tenantId - skipping userAppAccess grant`);
+      }
+
+      // Grant product access via pricingPlans.grantProductAccess
+      await ctx.runMutation(internal.pricingPlans.grantProductAccess, {
+        userId: user._id,
+        pricingPlanId: pricingPlan._id,
+        productId: order.productId,
+        paymentId: order.asaasPaymentId || '',
+        paymentGateway: 'asaas',
+        purchasePrice: order.finalPrice,
+        couponUsed: order.couponCode,
+        discountAmount: order.couponDiscount,
+        checkoutId: args.orderId,
+      });
+
+      console.log(`✅ Granted product access for user ${user._id} to ${order.productId}`);
 
       // Mark as completed
       await ctx.db.patch(args.orderId, {
@@ -701,6 +788,27 @@ export const sendClerkInvitationAttempt = internalAction({
       `📤 Attempt ${args.attemptNumber}: Sending Clerk invitation to ${args.email}`,
     );
 
+    // Get order to find tenantId for redirect URL
+    const order = await ctx.runQuery(api.payments.getPendingOrderById, {
+      orderId: args.orderId,
+    });
+
+    // Determine redirect URL based on tenant
+    let redirectUrl = process.env.NEXT_PUBLIC_APP_URL || 'https://ortoqbank.com';
+    let tenantId: string | undefined;
+
+    if (order?.tenantId) {
+      tenantId = order.tenantId;
+      // Get tenant info for redirect URL
+      const app = await ctx.runQuery(api.apps.getAppById, {
+        appId: order.tenantId,
+      });
+      if (app && app.domain) {
+        redirectUrl = `https://${app.domain}/sign-up`;
+        console.log(`📍 Redirecting invitation to tenant: ${app.domain}`);
+      }
+    }
+
     const response = await fetch('https://api.clerk.com/v1/invitations', {
       method: 'POST',
       headers: {
@@ -709,8 +817,10 @@ export const sendClerkInvitationAttempt = internalAction({
       },
       body: JSON.stringify({
         email_address: args.email,
+        redirect_url: redirectUrl,
         public_metadata: {
           orderId: args.orderId,
+          tenantId: tenantId,
           customerName: args.customerName,
         },
       }),
@@ -819,6 +929,7 @@ export const getPendingOrderById = query({
   returns: v.union(
     v.object({
       _id: v.id('pendingOrders'),
+      tenantId: v.optional(v.id('apps')),
       email: v.string(),
       cpf: v.string(),
       name: v.string(),
@@ -842,6 +953,7 @@ export const getPendingOrderById = query({
       }
       return {
         _id: order._id,
+        tenantId: order.tenantId,
         email: order.email,
         cpf: order.cpf,
         name: order.name,

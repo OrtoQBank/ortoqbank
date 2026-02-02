@@ -534,6 +534,9 @@ export default defineSchema({
 
   // Pending orders - tracks checkout sessions and payment lifecycle
   pendingOrders: defineTable({
+    // Multi-tenancy - which app/tenant this order is for
+    tenantId: v.optional(v.id('apps')), // Optional during migration, resolved from pricingPlan if not provided
+
     // Contact info (from checkout)
     email: v.string(), // Contact email from checkout
     cpf: v.string(),
@@ -592,7 +595,8 @@ export default defineSchema({
     .index('by_user_id', ['userId'])
     .index('by_status', ['status'])
     .index('by_asaas_payment', ['asaasPaymentId'])
-    .index('by_external_reference', ['externalReference']),
+    .index('by_external_reference', ['externalReference'])
+    .index('by_tenant', ['tenantId']),
 
   // Invoices - tracks nota fiscal (invoice) generation for paid orders
   // IMPORTANT: For installment payments, ONE invoice is generated with the TOTAL value

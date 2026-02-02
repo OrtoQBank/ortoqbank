@@ -306,6 +306,17 @@ export const createPixPayment = action({
       throw new Error('Product not found or inactive');
     }
 
+    // Get app slug for webhook routing (from order's tenantId)
+    let appSlug = 'default';
+    if (pendingOrder.tenantId) {
+      const app: any = await ctx.runQuery(api.apps.getAppById, {
+        appId: pendingOrder.tenantId,
+      });
+      if (app?.slug) {
+        appSlug = app.slug;
+      }
+    }
+
     const asaas = new AsaasClient();
 
     // Build description with coupon info if applicable
@@ -314,7 +325,9 @@ export const createPixPayment = action({
       description += ` (Cupom: ${pendingOrder.couponCode})`;
     }
 
-    // Create PIX payment with pendingOrderId as externalReference
+    // Create PIX payment with appSlug:pendingOrderId as externalReference
+    // The webhook proxy uses this to route to the correct Convex deployment
+    const externalReference = `${appSlug}:${args.pendingOrderId}`;
     const payment = await asaas.createCharge({
       customer: args.customerId,
       billingType: 'PIX',
@@ -323,7 +336,7 @@ export const createPixPayment = action({
         .toISOString()
         .split('T')[0], // Tomorrow
       description,
-      externalReference: args.pendingOrderId, // This is the key for webhook correlation
+      externalReference,
     });
 
     // Get PIX QR Code
@@ -420,6 +433,17 @@ export const createCreditCardPayment = action({
       throw new Error('Product not found or inactive');
     }
 
+    // Get app slug for webhook routing (from order's tenantId)
+    let appSlug = 'default';
+    if (pendingOrder.tenantId) {
+      const app: any = await ctx.runQuery(api.apps.getAppById, {
+        appId: pendingOrder.tenantId,
+      });
+      if (app?.slug) {
+        appSlug = app.slug;
+      }
+    }
+
     const asaas = new AsaasClient();
 
     // Build description with coupon info if applicable
@@ -464,12 +488,14 @@ export const createCreditCardPayment = action({
     // Build payment request object
     // IMPORTANT: For installments, use 'totalValue' instead of 'value'
     // For single payments, use 'value'
+    // The externalReference uses appSlug:orderId format for webhook routing
+    const externalReference = `${appSlug}:${args.pendingOrderId}`;
     const paymentRequest: any = {
       customer: args.customerId,
       billingType: 'CREDIT_CARD',
       dueDate: new Date().toISOString().split('T')[0], // Today (immediate processing)
       description,
-      externalReference: args.pendingOrderId, // This is the key for webhook correlation
+      externalReference,
       creditCard: args.creditCard,
       creditCardHolderInfo: args.creditCardHolderInfo,
     };
