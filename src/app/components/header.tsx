@@ -1,6 +1,7 @@
 'use client';
 
-import { SignInButton } from '@clerk/nextjs';
+import { SignInButton, useAuth } from '@clerk/nextjs';
+import { Loader2 } from 'lucide-react';
 import Image from 'next/image';
 import Link from 'next/link';
 
@@ -9,6 +10,7 @@ import { Button } from '@/components/ui/button';
 
 export default function Header() {
   const { config, data } = useTenant();
+  const { isLoaded } = useAuth();
 
   // Use logo from database if available, otherwise fall back to static config or default
   const logoSrc = data?.logoUrl || '/logo-transparente.png';
@@ -32,18 +34,30 @@ export default function Header() {
           </span>
         </Link>
         <div className="flex items-center gap-8">
-          <SignInButton forceRedirectUrl="/criar-teste">
+          {isLoaded ? (
+            <SignInButton forceRedirectUrl="/criar-teste" mode="modal">
+              <Button
+                className="min-h-[44px] cursor-pointer rounded-full border border-white px-4 py-2 text-sm font-medium transition-colors hover:bg-white active:bg-white/90"
+                style={
+                  {
+                    '--hover-text-color': config.branding.primaryColor,
+                    WebkitTapHighlightColor: 'transparent',
+                    touchAction: 'manipulation',
+                  } as React.CSSProperties
+                }
+              >
+                Entrar
+              </Button>
+            </SignInButton>
+          ) : (
             <Button
-              className="translate-y-1 rounded-full border border-white px-4 py-1.5 text-sm font-medium transition-colors hover:bg-white"
-              style={
-                {
-                  '--hover-text-color': config.branding.primaryColor,
-                } as React.CSSProperties
-              }
+              disabled
+              className="min-h-[44px] rounded-full border border-white px-4 py-2 text-sm font-medium"
             >
+              <Loader2 className="h-4 w-4 animate-spin" />
               Entrar
             </Button>
-          </SignInButton>
+          )}
         </div>
       </div>
     </header>
