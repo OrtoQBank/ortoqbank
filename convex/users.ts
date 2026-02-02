@@ -141,9 +141,25 @@ export const deleteFromClerk = internalMutation({
 export async function getCurrentUser(context: QueryContext) {
   const identity = await context.auth.getUserIdentity();
   if (identity === null) {
+    console.log(
+      '[DEBUG:users.getCurrentUser] No identity found (not authenticated)',
+    );
     return null;
   }
-  return await userByClerkUserId(context, identity.subject);
+  console.log(
+    `[DEBUG:users.getCurrentUser] Looking up user with clerkUserId: ${identity.subject}`,
+  );
+  const user = await userByClerkUserId(context, identity.subject);
+  if (user) {
+    console.log(
+      `[DEBUG:users.getCurrentUser] User FOUND - { _id: "${user._id}", email: "${user.email}" }`,
+    );
+  } else {
+    console.log(
+      `[DEBUG:users.getCurrentUser] User NOT FOUND for clerkUserId: ${identity.subject}`,
+    );
+  }
+  return user;
 }
 
 /**

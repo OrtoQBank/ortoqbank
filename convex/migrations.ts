@@ -1101,6 +1101,93 @@ export const backfillImportedTenantId = internalMutation({
 });
 
 /**
+ * Grant all users access to a specific app/tenant
+ * This is a one-time migration to give all existing users access to an app.
+ *
+ * Usage:
+ * npx convex run migrations:grantAllUsersAppAccess \
+ *   '{"appId":"j975wzs25kspagkkm8m125tath7y2p2s"}' --prod
+ */
+export const grantAllUsersAppAccess = internalMutation({
+  args: {
+    appId: v.id('apps'),
+    role: v.optional(v.union(v.literal('user'), v.literal('moderator'))),
+  },
+  returns: v.object({
+    totalUsers: v.number(),
+    alreadyHadAccess: v.number(),
+    newlyGranted: v.number(),
+    updated: v.number(),
+  }),
+  handler: async (ctx, args) => {
+    const { appId, role = 'user' } = args;
+
+    // Verify the app exists
+    const app = await ctx.db.get(appId);
+    if (!app) {
+      throw new Error(`App not found: ${appId}`);
+    }
+
+    console.log(
+      `Granting access to app "${app.name}" (${app.slug}) for all users...`,
+    );
+
+    // Get all users
+    const users = await ctx.db.query('users').collect();
+    const totalUsers = users.length;
+
+    let alreadyHadAccess = 0;
+    let newlyGranted = 0;
+    let updated = 0;
+
+    for (const user of users) {
+      // Check if access record already exists
+      const existingAccess = await ctx.db
+        .query('userAppAccess')
+        .withIndex('by_user_app', q =>
+          q.eq('userId', user._id).eq('appId', appId),
+        )
+        .unique();
+
+      if (existingAccess) {
+        if (existingAccess.hasAccess) {
+          alreadyHadAccess++;
+        } else {
+          // Re-enable access
+          await ctx.db.patch(existingAccess._id, {
+            hasAccess: true,
+            role: role,
+            grantedAt: Date.now(),
+          });
+          updated++;
+        }
+      } else {
+        // Create new access record
+        await ctx.db.insert('userAppAccess', {
+          userId: user._id,
+          appId: appId,
+          hasAccess: true,
+          role: role,
+          grantedAt: Date.now(),
+        });
+        newlyGranted++;
+      }
+    }
+
+    console.log(
+      `Granted access: ${newlyGranted} new, ${updated} updated, ${alreadyHadAccess} already had access (${totalUsers} total users)`,
+    );
+
+    return {
+      totalUsers,
+      alreadyHadAccess,
+      newlyGranted,
+      updated,
+    };
+  },
+});
+
+/**
  * Resolve questions taxonomy for a specific tenant
  * Use this when the standard migration says "already done" but new data was imported
  *
@@ -1158,7 +1245,9 @@ export const resolveQuestionsTaxonomyForTenant = internalMutation({
       if (!doc.subthemeId && doc.legacySubthemeId) {
         const subtheme = await ctx.db
           .query('subthemes')
-          .withIndex('by_legacy_id', q => q.eq('legacyId', doc.legacySubthemeId))
+          .withIndex('by_legacy_id', q =>
+            q.eq('legacyId', doc.legacySubthemeId),
+          )
           .first();
         if (subtheme) {
           updates.subthemeId = subtheme._id;
