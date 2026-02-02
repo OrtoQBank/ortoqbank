@@ -109,7 +109,7 @@ export default function UniversalQuizResultsPage() {
         <p className="text-muted-foreground mb-4">
           Faça login para visualizar os resultados deste teste.
         </p>
-        <SignInButton forceRedirectUrl={`/quiz-results/${id}`}>
+        <SignInButton forceRedirectUrl={`/quiz-results/${id}`} mode="modal">
           <Button>Entrar</Button>
         </SignInButton>
       </div>
