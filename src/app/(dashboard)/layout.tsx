@@ -154,7 +154,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </p>
           <div className="flex flex-col gap-3">
             <Button
-              onClick={() => window.location.reload()}
+              onClick={() => globalThis.location.reload()}
               variant="outline"
               className="w-full"
             >

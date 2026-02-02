@@ -254,9 +254,9 @@ export const processAsaasWebhook = internalAction({
       // Extract pendingOrderId from deploymentSlug:orderId format
       const colonIndex = externalReference.indexOf(':');
       const pendingOrderId =
-        colonIndex !== -1
-          ? externalReference.substring(colonIndex + 1)
-          : externalReference; // Fallback for legacy orders without prefix
+        colonIndex === -1
+          ? externalReference
+          : externalReference.slice(Math.max(0, colonIndex + 1)); // Fallback for legacy orders without prefix
 
       console.log(`📦 Parsed externalReference: ${externalReference} -> orderId: ${pendingOrderId}`);
 
