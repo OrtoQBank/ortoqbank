@@ -486,10 +486,20 @@ export const countQuestionsByMode = query({
 });
 
 export const getQuestionCountForTheme = query({
-  args: { themeId: v.id('themes') },
+  args: {
+    tenantId: v.optional(v.id('apps')),
+    themeId: v.id('themes'),
+  },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
+    if (!args.tenantId) {
+      return 0;
+    }
+
     const count = await questionCountByTheme.count(ctx, {
-      namespace: args.themeId,
+      namespace: `${args.tenantId}:${args.themeId}`,
       bounds: {},
     });
     return count;
@@ -546,10 +556,14 @@ export const deleteQuestion = mutation({
 
 export const searchByCode = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     code: v.string(),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.code || args.code.trim() === '') {
       return [];
     }
@@ -561,21 +575,27 @@ export const searchByCode = query({
     const limit = args.limit || 50;
 
     // First search by code (since that's more specific)
+    // Fetch more than limit to account for filtering
     const codeResults = await ctx.db
       .query('questions')
       .withSearchIndex('search_by_code', q =>
         q.search('questionCode', searchTerm),
       )
-      .take(limit); // Use the limit parameter
+      .take(limit * 2);
+
+    // Filter by tenant
+    const filteredCodeResults = codeResults
+      .filter(q => q.tenantId === args.tenantId)
+      .slice(0, limit);
 
     // If we have enough code results, just return those
-    if (codeResults.length >= limit) {
+    if (filteredCodeResults.length >= limit) {
       const themes = await Promise.all(
-        codeResults.map(question =>
+        filteredCodeResults.map(question =>
           question.themeId ? ctx.db.get(question.themeId) : null,
         ),
       );
-      return codeResults.map((question, index) => ({
+      return filteredCodeResults.map((question, index) => ({
         _id: question._id,
         title: question.title,
         questionCode: question.questionCode,
@@ -588,14 +608,19 @@ export const searchByCode = query({
     const titleResults = await ctx.db
       .query('questions')
       .withSearchIndex('search_by_title', q => q.search('title', searchTerm))
-      .take(limit - codeResults.length);
+      .take((limit - filteredCodeResults.length) * 2);
+
+    // Filter by tenant
+    const filteredTitleResults = titleResults.filter(
+      q => q.tenantId === args.tenantId,
+    );
 
     // Combine results, eliminating duplicates (code results take priority)
-    const seenIds = new Set(codeResults.map(q => q._id.toString()));
+    const seenIds = new Set(filteredCodeResults.map(q => q._id.toString()));
     const combinedResults = [
-      ...codeResults,
-      ...titleResults.filter(q => !seenIds.has(q._id.toString())),
-    ];
+      ...filteredCodeResults,
+      ...filteredTitleResults.filter(q => !seenIds.has(q._id.toString())),
+    ].slice(0, limit);
 
     // If we have questions, fetch their themes
     if (combinedResults.length > 0) {
@@ -622,10 +647,14 @@ export const searchByCode = query({
 // Add a standalone search by title function for specific title-only searches
 export const searchByTitle = query({
   args: {
+    tenantId: v.optional(v.id('apps')),
     title: v.string(),
     limit: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     if (!args.title || args.title.trim() === '') {
       return [];
     }
@@ -637,21 +666,27 @@ export const searchByTitle = query({
     const limit = args.limit || 50;
 
     // Use the search index for efficient text search
+    // Fetch more than limit to account for tenant filtering
     const matchingQuestions = await ctx.db
       .query('questions')
       .withSearchIndex('search_by_title', q => q.search('title', searchTerm))
-      .take(limit);
+      .take(limit * 2);
+
+    // Filter by tenant
+    const filteredQuestions = matchingQuestions
+      .filter(q => q.tenantId === args.tenantId)
+      .slice(0, limit);
 
     // If we have questions, fetch their themes
-    if (matchingQuestions.length > 0) {
+    if (filteredQuestions.length > 0) {
       const themes = await Promise.all(
-        matchingQuestions.map(question =>
+        filteredQuestions.map(question =>
           question.themeId ? ctx.db.get(question.themeId) : null,
         ),
       );
 
       // Return minimal data to reduce bandwidth
-      return matchingQuestions.map((question, index) => ({
+      return filteredQuestions.map((question, index) => ({
         _id: question._id,
         title: question.title,
         questionCode: question.questionCode,

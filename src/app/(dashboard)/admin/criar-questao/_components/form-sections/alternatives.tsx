@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect } from 'react';
-import { useFieldArray, type UseFormReturn } from 'react-hook-form';
+import { useFieldArray, useWatch, type UseFormReturn } from 'react-hook-form';
 
 import { Button } from '@/components/ui/button';
 import { Card, CardContent } from '@/components/ui/card';
@@ -20,6 +20,12 @@ export function Alternatives({ form }: AlternativesProps) {
     control: form.control,
     name: 'alternatives',
   } as any);
+
+  // Use useWatch to properly subscribe to correctAlternativeIndex changes
+  const correctAlternativeIndex = useWatch({
+    control: form.control,
+    name: 'correctAlternativeIndex',
+  });
 
   // Ensure field array is initialized with default values
   useEffect(() => {
@@ -77,7 +83,7 @@ export function Alternatives({ form }: AlternativesProps) {
               key={field.id}
               control={form.control}
               index={index}
-              isSelected={form.watch('correctAlternativeIndex') === index}
+              isSelected={correctAlternativeIndex === index}
               onSelect={() =>
                 form.setValue('correctAlternativeIndex', index, {
                   shouldValidate: true,

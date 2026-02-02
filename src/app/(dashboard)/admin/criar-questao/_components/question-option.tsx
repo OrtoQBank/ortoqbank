@@ -28,9 +28,14 @@ export function QuestionOption({
     <div className="flex items-center gap-2">
       <Button
         type="button"
-        variant={isSelected ? 'default' : 'outline'}
+        variant="outline"
         size="sm"
         onClick={onSelect}
+        className={
+          isSelected
+            ? 'bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground'
+            : ''
+        }
       >
         {String.fromCodePoint(ASCII_UPPERCASE_A + index)}
       </Button>
@@ -42,6 +47,7 @@ export function QuestionOption({
             <FormControl>
               <Input
                 {...field}
+                value={field.value ?? ''}
                 placeholder={`Alternativa ${String.fromCodePoint(ASCII_UPPERCASE_A + index)}`}
               />
             </FormControl>

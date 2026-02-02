@@ -1,7 +1,6 @@
 import { IMAGE_OPTIMIZATION } from '@/components/rich-text-editor/constants';
 import {
   hasBlobUrls,
-  InvalidImageInfo,
   processEditorContent,
   TiptapNode,
   validateImageSourcesWithDetails,
@@ -31,6 +30,7 @@ interface SubmissionOptions {
   selectedTheme: Id<'themes'> | undefined;
   selectedSubtheme: Id<'subthemes'> | undefined;
   generatedId: string;
+  tenantId: Id<'apps'> | null;
   onSuccess?: () => void;
 }
 
@@ -43,6 +43,7 @@ export async function processAndSubmitQuestion(
     selectedTheme,
     selectedSubtheme,
     generatedId,
+    tenantId,
     onSuccess,
   }: SubmissionOptions,
   createQuestion: any,
@@ -182,6 +183,15 @@ export async function processAndSubmitQuestion(
       });
       return false; // Prevent submission if themeId is somehow undefined
     }
+
+    if (mode === 'create' && !tenantId) {
+      toast({
+        title: 'Erro Interno',
+        description: 'Tenant não identificado. Recarregue a página.',
+        variant: 'destructive',
+      });
+      return false;
+    }
     // --- End Final Type Check ---
 
     // Final data structure for DB operations
@@ -216,7 +226,11 @@ export async function processAndSubmitQuestion(
         onSuccess();
       }
     } else {
-      await createQuestion(processedData);
+      // Include tenantId for create operation
+      await createQuestion({
+        ...processedData,
+        tenantId: tenantId!,
+      });
       toast({ title: 'Questão criada com sucesso!' });
 
       // Only clear the form if we're in create mode

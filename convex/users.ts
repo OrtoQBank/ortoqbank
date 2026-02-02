@@ -36,6 +36,7 @@ export const current = query({
           v.literal('expired'),
         ),
       ),
+      hasActiveYearAccess: v.optional(v.boolean()),
     }),
     v.null(),
   ),
@@ -350,6 +351,7 @@ export const getAllUsersForAdmin = query({
           v.literal('expired'),
         ),
       ),
+      hasActiveYearAccess: v.optional(v.boolean()),
     }),
   ),
   handler: async (ctx, args) => {
@@ -393,6 +395,7 @@ export const searchUsersForAdmin = query({
           v.literal('expired'),
         ),
       ),
+      hasActiveYearAccess: v.optional(v.boolean()),
     }),
   ),
   handler: async (ctx, args) => {
