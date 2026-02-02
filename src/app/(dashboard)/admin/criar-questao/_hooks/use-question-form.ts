@@ -3,6 +3,8 @@ import { useMutation } from 'convex/react';
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 
+import { useTenantId } from '@/components/providers/TenantProvider';
+
 import { api } from '../../../../../../convex/_generated/api';
 import { Id } from '../../../../../../convex/_generated/dataModel';
 import { QuestionFormData, questionSchema } from '../_components/schema';
@@ -22,6 +24,9 @@ export function useQuestionForm({
   defaultValues,
   onSuccess,
 }: UseQuestionFormProps = {}) {
+  // Get tenant ID for multi-tenancy
+  const tenantId = useTenantId();
+
   // Convex mutations
   const createQuestion = useMutation(api.questions.create);
   const updateQuestion = useMutation(api.questions.update);
@@ -104,6 +109,7 @@ export function useQuestionForm({
         selectedTheme: taxonomy.selectedTheme,
         selectedSubtheme: taxonomy.selectedSubtheme,
         generatedId: taxonomy.generatedId,
+        tenantId,
         onSuccess,
       },
       createQuestion,
