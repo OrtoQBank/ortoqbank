@@ -18,9 +18,6 @@ import { useCurrentUser } from '@/hooks/useCurrentUser';
 
 import { api } from '../../../convex/_generated/api';
 
-// TODO: TEMPORARY - Remove this after fixing auth/access issues
-const SKIP_ACCESS_CHECK = true;
-
 // Show debug info in development
 const IS_DEV = process.env.NODE_ENV === 'development';
 
@@ -44,7 +41,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   );
 
   // Build access object compatible with the old interface
-  const rawAccess = {
+  const access = {
     hasAccess: accessData?.hasAccess ?? false,
     isModerator: accessData?.isModerator ?? false,
     isSuperAdmin: accessData?.isSuperAdmin ?? false,
@@ -52,11 +49,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     isLoading:
       isTenantLoading || (tenantId !== null && accessData === undefined),
   };
-
-  // TEMPORARY: Bypass access check for testing
-  const access = SKIP_ACCESS_CHECK
-    ? { ...rawAccess, hasAccess: true, isLoading: false }
-    : rawAccess;
 
   // Track if we've already initiated redirect to prevent multiple calls
   const redirectInitiatedRef = useRef(false);
