@@ -68,8 +68,8 @@ export const tenantsConfig = {
     branding: {
       name: 'OrtoQBank',
       shortName: 'OQB',
-      primaryColor: '#2563eb', // Blue
-      secondaryColor: '#1e40af',
+      primaryColor: '#3b82f6', // Blue 
+      secondaryColor: '#3b82f6',
       accentColor: '#3b82f6',
       logo: '/logos/ortoqbank.svg',
       logoDark: '/logos/ortoqbank-dark.svg',
