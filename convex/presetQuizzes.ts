@@ -242,15 +242,30 @@ export const deleteQuiz = mutation({
 });
 
 export const get = query({
-  args: { id: v.id('presetQuizzes') },
+  args: {
+    id: v.id('presetQuizzes'),
+    tenantId: v.optional(v.id('apps')),
+  },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant if provided
+    if (args.tenantId) {
+      await verifyTenantAccess(ctx, args.tenantId);
+    }
     return await ctx.db.get(args.id);
   },
 });
 
 export const getWithQuestions = query({
-  args: { id: v.id('presetQuizzes') },
+  args: {
+    id: v.id('presetQuizzes'),
+    tenantId: v.optional(v.id('apps')),
+  },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant if provided
+    if (args.tenantId) {
+      await verifyTenantAccess(ctx, args.tenantId);
+    }
+
     const quiz = await ctx.db.get(args.id);
     if (!quiz) return;
 
