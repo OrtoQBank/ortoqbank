@@ -8,9 +8,77 @@
 import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
-import { mutation, query } from './_generated/server';
+import { internalMutation, mutation, query } from './_generated/server';
 import { requireAppModerator, requireSuperAdmin } from './auth';
 import { getCurrentUserOrThrow } from './users';
+
+/**
+ * Internal mutation to grant access to a user from webhook
+ * This is called when a new user is created via Clerk webhook and has tenant metadata
+ * No authentication check since it's called from internal webhook handler
+ */
+export const grantAccessFromWebhook = internalMutation({
+  args: {
+    userId: v.id('users'),
+    tenantSlug: v.string(),
+  },
+  returns: v.union(v.id('userAppAccess'), v.null()),
+  handler: async (ctx, args) => {
+    // Find the app by slug
+    const app = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', q => q.eq('slug', args.tenantSlug))
+      .unique();
+
+    if (!app) {
+      console.log(
+        `⚠️ App not found for tenant slug: ${args.tenantSlug}. Skipping access grant.`,
+      );
+      return null;
+    }
+
+    // Check if access record already exists
+    const existingAccess = await ctx.db
+      .query('userAppAccess')
+      .withIndex('by_user_app', q =>
+        q.eq('userId', args.userId).eq('appId', app._id),
+      )
+      .unique();
+
+    if (existingAccess) {
+      // Update existing record to grant access if it was revoked
+      if (existingAccess.hasAccess) {
+        console.log(
+          `ℹ️ User ${args.userId} already has access to app ${args.tenantSlug}`,
+        );
+      } else {
+        await ctx.db.patch(existingAccess._id, {
+          hasAccess: true,
+          grantedAt: Date.now(),
+        });
+        console.log(
+          `✅ Re-granted access to user ${args.userId} for app ${args.tenantSlug}`,
+        );
+      }
+      return existingAccess._id;
+    }
+
+    // Create new access record
+    const accessId = await ctx.db.insert('userAppAccess', {
+      userId: args.userId,
+      appId: app._id,
+      hasAccess: true,
+      role: 'user',
+      grantedAt: Date.now(),
+    });
+
+    console.log(
+      `✅ Granted access to user ${args.userId} for app ${args.tenantSlug}`,
+    );
+
+    return accessId;
+  },
+});
 
 /**
  * Grant a user access to an app
