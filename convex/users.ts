@@ -95,10 +95,11 @@ export const upsertFromClerk = internalMutation({
             paymentStatus: existingUser.paymentStatus,
           };
 
-      return await context.db.patch(existingUser._id, {
+      await context.db.patch(existingUser._id, {
         ...userData,
         ...paymentData,
       });
+      return existingUser._id;
     }
 
     // Create new user with payment data if it exists in Clerk
