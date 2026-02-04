@@ -43,7 +43,7 @@ http.route({
               const email = event.data.email_addresses[0].email_address;
               console.log(`🔗 New user created: ${email}`);
 
-              // Try to find and claim any paid orders for this email
+              // Try to find and claim any paid orders for this email (legacy flow)
               const result = await ctx.runMutation(
                 api.payments.claimOrderByEmail,
                 {
@@ -53,6 +53,23 @@ http.route({
               );
 
               console.log(`✅ Claim result:`, result);
+
+              // Claim pending access grants from ortoclub (new flow)
+              try {
+                const grantResult = await ctx.runMutation(
+                  internal.provisioning.claimPendingGrants,
+                  {
+                    email: email,
+                    clerkUserId: event.data.id,
+                  },
+                );
+                console.log(
+                  `✅ Claimed ${grantResult.claimedCount} pending access grant(s) for ${email}`,
+                );
+              } catch (grantError) {
+                console.error('Error claiming pending grants:', grantError);
+                // Don't fail the webhook if this fails
+              }
 
               // Try to update email invitation status to accepted
               try {
@@ -199,6 +216,72 @@ http.route({
     } catch (error) {
       console.error('Error processing AsaaS webhook:', error);
       return new Response('Webhook processing failed', { status: 500 });
+    }
+  }),
+});
+
+// Provision access endpoint - called by ortoclub after payment confirmed
+http.route({
+  path: '/api/provision-access',
+  method: 'POST',
+  handler: httpAction(async (ctx, request) => {
+    try {
+      // Validate shared secret
+      const authHeader = request.headers.get('Authorization');
+      const provisionSecret = process.env.PROVISION_SECRET;
+
+      if (!provisionSecret) {
+        console.error('PROVISION_SECRET not configured');
+        return new Response(
+          JSON.stringify({ error: 'Server configuration error' }),
+          { status: 500, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+
+      if (authHeader !== `Bearer ${provisionSecret}`) {
+        console.error('Invalid provision secret');
+        return new Response(JSON.stringify({ error: 'Unauthorized' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      const body = await request.json();
+      console.log('📥 Provision request received:', {
+        email: body.email,
+        productName: body.productName,
+        orderId: body.orderId,
+      });
+
+      // Run the provisioning mutation
+      const result = await ctx.runMutation(
+        internal.provisioning.provisionAccess,
+        {
+          email: body.email,
+          clerkUserId: body.clerkUserId,
+          productName: body.productName,
+          orderId: body.orderId,
+          purchasePrice: body.purchasePrice,
+          accessExpiresAt: body.accessExpiresAt,
+          couponUsed: body.couponUsed,
+          discountAmount: body.discountAmount,
+        },
+      );
+
+      console.log('✅ Provisioning result:', result);
+
+      return new Response(JSON.stringify(result), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (error) {
+      console.error('❌ Provisioning error:', error);
+      return new Response(
+        JSON.stringify({
+          error: error instanceof Error ? error.message : 'Unknown error',
+        }),
+        { status: 500, headers: { 'Content-Type': 'application/json' } },
+      );
     }
   }),
 });

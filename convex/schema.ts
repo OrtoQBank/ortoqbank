@@ -659,6 +659,24 @@ export default defineSchema({
     .index('by_email', ['email'])
     .index('by_status', ['status']),
 
+  // Pending access grants - stores access grants from ortoclub for users who haven't signed up yet
+  pendingAccessGrants: defineTable({
+    email: v.string(),
+    productName: v.string(),
+    orderId: v.string(), // External order ID from ortoclub
+    purchasePrice: v.number(),
+    accessExpiresAt: v.optional(v.number()),
+    couponUsed: v.optional(v.string()),
+    discountAmount: v.optional(v.number()),
+    createdAt: v.number(),
+    updatedAt: v.optional(v.number()),
+    // Claimed when user signs up
+    claimedAt: v.optional(v.number()),
+    claimedByUserId: v.optional(v.id('users')),
+  })
+    .index('by_email', ['email'])
+    .index('by_order_id', ['orderId']),
+
   // Waitlist - tracks users interested in OrtoClub TEOT
   waitlist: defineTable({
     // Multi-tenancy
