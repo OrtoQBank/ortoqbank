@@ -13,17 +13,38 @@ import * as aggregates from './aggregates';
 
 export const triggers = new Triggers<DataModel>();
 
-// Question count aggregates
-triggers.register('questions', aggregates.totalQuestionCount.trigger());
-triggers.register('questions', aggregates.questionCountByTheme.trigger());
-triggers.register('questions', aggregates.questionCountBySubtheme.trigger());
-triggers.register('questions', aggregates.questionCountByGroup.trigger());
+// Question count aggregates (using idempotentTrigger for self-healing behavior)
+triggers.register(
+  'questions',
+  aggregates.totalQuestionCount.idempotentTrigger(),
+);
+triggers.register(
+  'questions',
+  aggregates.questionCountByTheme.idempotentTrigger(),
+);
+triggers.register(
+  'questions',
+  aggregates.questionCountBySubtheme.idempotentTrigger(),
+);
+triggers.register(
+  'questions',
+  aggregates.questionCountByGroup.idempotentTrigger(),
+);
 
-// Register random selection aggregates
-triggers.register('questions', aggregates.randomQuestions.trigger());
-triggers.register('questions', aggregates.randomQuestionsByTheme.trigger());
-triggers.register('questions', aggregates.randomQuestionsBySubtheme.trigger());
-triggers.register('questions', aggregates.randomQuestionsByGroup.trigger());
+// Register random selection aggregates (using idempotentTrigger for self-healing behavior)
+triggers.register('questions', aggregates.randomQuestions.idempotentTrigger());
+triggers.register(
+  'questions',
+  aggregates.randomQuestionsByTheme.idempotentTrigger(),
+);
+triggers.register(
+  'questions',
+  aggregates.randomQuestionsBySubtheme.idempotentTrigger(),
+);
+triggers.register(
+  'questions',
+  aggregates.randomQuestionsByGroup.idempotentTrigger(),
+);
 
 // Export custom mutation and query that wrap the triggers
 export const mutation = customMutation(rawMutation, customCtx(triggers.wrapDB));
