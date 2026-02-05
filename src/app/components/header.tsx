@@ -35,7 +35,7 @@ export default function Header() {
         </Link>
         <div className="flex items-center gap-8">
           {isLoaded ? (
-            <SignInButton forceRedirectUrl="/criar-teste" mode="modal">
+            <SignInButton forceRedirectUrl="/criar-teste" >
               <Button
                 className="min-h-[44px] cursor-pointer rounded-full border border-white px-4 py-2 text-sm font-medium transition-colors hover:bg-white active:bg-white/90"
                 style={
