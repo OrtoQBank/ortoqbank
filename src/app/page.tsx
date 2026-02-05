@@ -10,9 +10,15 @@ export default async function Home() {
   return (
     <div className="flex min-h-screen flex-col">
       <Header />
-      <Pricing tenantId={tenantId} />
-
-
+      {tenantId ? (
+        <Pricing tenantId={tenantId} />
+      ) : (
+        <div className="flex flex-1 items-center justify-center">
+          <p className="text-muted-foreground">
+            Não foi possível carregar os planos. Tente novamente mais tarde.
+          </p>
+        </div>
+      )}
       <Footer />
     </div>
   );
