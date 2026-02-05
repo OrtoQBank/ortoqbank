@@ -5,15 +5,15 @@ import type { Id } from '../../../convex/_generated/dataModel';
 import { PricingClient } from './pricing-client';
 
 interface PricingProps {
-  tenantId: Id<'apps'> | null;
+  tenantId: Id<'apps'>;
 }
 
 // Helper function to fetch plans with error handling
-async function getPlans(tenantId: Id<'apps'> | null) {
+async function getPlans(tenantId: Id<'apps'>) {
   try {
     // Pass tenantId to filter plans for the current tenant
     return await fetchQuery(api.pricingPlans.getPricingPlans, {
-      tenantId: tenantId ?? undefined,
+      tenantId,
     });
   } catch (error) {
     console.error('Failed to fetch pricing plans:', error);
