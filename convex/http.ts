@@ -30,7 +30,7 @@ http.route({
             },
           };
 
-          await ctx.runMutation(internal.users.upsertFromClerk, {
+          const userId = await ctx.runMutation(internal.users.upsertFromClerk, {
             data: userData,
           });
 
@@ -42,6 +42,29 @@ http.route({
             try {
               const email = event.data.email_addresses[0].email_address;
               console.log(`🔗 New user created: ${email}`);
+
+              // Grant tenant access if tenant metadata is present
+              const tenantSlug =
+                event.data.public_metadata?.tenant ||
+                event.data.public_metadata?.tenantSlug;
+
+              if (tenantSlug && userId) {
+                try {
+                  await ctx.runMutation(
+                    internal.userAppAccess.grantAccessFromWebhook,
+                    {
+                      userId: userId,
+                      tenantSlug: tenantSlug as string,
+                    },
+                  );
+                  console.log(
+                    `✅ Granted tenant access for ${email} to tenant: ${tenantSlug}`,
+                  );
+                } catch (tenantError) {
+                  console.error('Error granting tenant access:', tenantError);
+                  // Don't fail the webhook if this fails
+                }
+              }
 
               // Try to find and claim any paid orders for this email
               const result = await ctx.runMutation(
