@@ -38,6 +38,8 @@ export interface TenantContent {
   tagline: string;
   /** Meta description for SEO */
   metaDescription?: string;
+  /** External purchase URL (e.g. https://www.ortoclub.com/orto-qbank) */
+  purchaseUrl: string;
   /** Custom labels/copy overrides */
   labels?: {
     /** Label for "themes" in this tenant's context */
@@ -79,6 +81,7 @@ export const tenantsConfig = {
       tagline: 'Banco de questões de ortopedia',
       metaDescription:
         'Prepare-se para o TEOT com o maior banco de questões de ortopedia do Brasil.',
+      purchaseUrl: 'https://www.ortoclub.com/orto-qbank',
       labels: {
         themes: 'Temas',
         subthemes: 'Subtemas',
@@ -107,6 +110,7 @@ export const tenantsConfig = {
       tagline: 'Banco de questões de Cirurgia da Mão',
       metaDescription:
         'Prepare-se para a prova de especialista em Cirurgia da Mão com questões comentadas.',
+      purchaseUrl: 'https://www.ortoclub.com/mao-qbank',
       labels: {
         themes: 'Temas',
         subthemes: 'Subtemas',
@@ -135,6 +139,7 @@ export const tenantsConfig = {
       tagline: 'Banco de questões de Cirurgia do Joelho',
       metaDescription:
         'Prepare-se para a prova de especialista em Cirurgia do Joelho com questões comentadas.',
+      purchaseUrl: 'https://www.ortoclub.com/sbcj-qbank',
       labels: {
         themes: 'Temas',
         subthemes: 'Subtemas',
@@ -162,6 +167,7 @@ export const tenantsConfig = {
     content: {
       tagline: 'Test tenant for development',
       metaDescription: 'Test tenant used for local multi-tenancy development.',
+      purchaseUrl: 'https://www.ortoclub.com',
       labels: {
         themes: 'Categories',
         subthemes: 'Topics',
@@ -188,6 +194,7 @@ export const tenantsConfig = {
       tagline: 'Preparação completa para o TEOT',
       metaDescription:
         'Estude para a prova do TEOT com questões comentadas e simulados.',
+      purchaseUrl: 'https://www.ortoclub.com',
       labels: {
         themes: 'Especialidades',
         subthemes: 'Áreas',
@@ -216,6 +223,7 @@ export const tenantsConfig = {
       tagline: 'Preparatório para o TED - Título de Especialista em Dermatologia',
       metaDescription:
         'Prepare-se para a prova do TED com questões comentadas de dermatologia.',
+      purchaseUrl: 'https://www.ortoclub.com',
       labels: {
         themes: 'Áreas',
         subthemes: 'Subtemas',
@@ -244,6 +252,7 @@ export const tenantsConfig = {
       tagline: 'Preparatório para o TEC - Título de Especialista em Cardiologia',
       metaDescription:
         'Prepare-se para a prova do TEC com questões comentadas de cardiologia.',
+      purchaseUrl: 'https://www.ortoclub.com',
       labels: {
         themes: 'Áreas',
         subthemes: 'Subtemas',

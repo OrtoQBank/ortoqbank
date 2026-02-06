@@ -6,13 +6,6 @@ import Image from 'next/image';
 import { useTenant } from '@/components/providers/TenantProvider';
 import { Button } from '@/components/ui/button';
 
-const scrollToPricing = () => {
-  const pricingSection = document.querySelector('#pricing');
-  if (pricingSection) {
-    pricingSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  }
-};
-
 // Default features for all tenants (can be customized per tenant later)
 const defaultFeatures = [
   'Provas antigas corrigidas e comentadas',
@@ -23,6 +16,7 @@ const defaultFeatures = [
 
 export default function HeroSection() {
   const { config } = useTenant();
+  const purchaseUrl = config.content.purchaseUrl;
 
   return (
     <section className="w-full bg-white py-12 md:py-18">
@@ -30,31 +24,30 @@ export default function HeroSection() {
         <div className="mx-auto max-w-7xl">
           <div className="grid items-center justify-center gap-4 lg:grid-cols-12">
             <div className="flex flex-col justify-center space-y-4 lg:col-span-4">
-              <h1
-                className="text-center text-3xl font-bold sm:text-4xl md:text-start md:text-4xl lg:text-5xl"
-                style={{ color: config.branding.primaryColor }}
-              >
+              <h1 className="text-brand-blue text-center text-3xl font-bold sm:text-4xl md:text-start md:text-4xl lg:text-5xl">
                 {config.content.tagline}
               </h1>
               <ul className="space-y-4 text-base text-gray-700 sm:text-lg md:text-start">
                 {defaultFeatures.map(text => (
                   <li key={text} className="flex items-center gap-3">
-                    <CircleCheckIcon
-                      className="h-6 w-6 flex-shrink-0"
-                      style={{ color: config.branding.primaryColor }}
-                    />
+                    <CircleCheckIcon className="text-brand-blue h-6 w-6 flex-shrink-0" />
                     <span className="flex-1">{text}</span>
                   </li>
                 ))}
               </ul>
               <div className="mt-4 flex flex-col gap-3 sm:flex-row">
                 <Button
+                  asChild
                   size="lg"
-                  onClick={scrollToPricing}
-                  className="cursor-pointer"
-                  style={{ backgroundColor: config.branding.primaryColor }}
+                  className="bg-brand-blue hover:bg-brand-blue/90 cursor-pointer"
                 >
-                  Comprar Acesso
+                  <a
+                    href={purchaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    Comprar Acesso
+                  </a>
                 </Button>
               </div>
             </div>
