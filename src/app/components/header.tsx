@@ -16,10 +16,7 @@ export default function Header() {
   const logoSrc = data?.logoUrl || '/logo-transparente.png';
 
   return (
-    <header
-      className="sticky top-0 z-50 text-white"
-      style={{ backgroundColor: config.branding.primaryColor }}
-    >
+    <header className="bg-brand-blue sticky top-0 z-50 text-white">
       <div className="container mx-auto flex items-center justify-between px-4 py-4">
         <Link href="/" className="flex items-end space-x-2">
           <Image
@@ -35,17 +32,8 @@ export default function Header() {
         </Link>
         <div className="flex items-center gap-8">
           {isLoaded ? (
-            <SignInButton forceRedirectUrl="/criar-teste" >
-              <Button
-                className="min-h-[44px] cursor-pointer rounded-full border border-white px-4 py-2 text-sm font-medium transition-colors hover:bg-white active:bg-white/90"
-                style={
-                  {
-                    '--hover-text-color': config.branding.primaryColor,
-                    WebkitTapHighlightColor: 'transparent',
-                    touchAction: 'manipulation',
-                  } as React.CSSProperties
-                }
-              >
+            <SignInButton forceRedirectUrl="/criar-teste">
+              <Button className="hover:text-brand-blue min-h-[44px] cursor-pointer rounded-full border border-white px-4 py-2 text-sm font-medium transition-colors hover:bg-white active:bg-white/90">
                 Entrar
               </Button>
             </SignInButton>

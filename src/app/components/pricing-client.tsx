@@ -1,8 +1,6 @@
 'use client';
 
-import { Check, Loader2 } from 'lucide-react';
-import { useRouter } from 'next/navigation';
-import { useState } from 'react';
+import { Check } from 'lucide-react';
 
 import { useTenant } from '@/components/providers/TenantProvider';
 import { Button } from '@/components/ui/button';
@@ -14,44 +12,16 @@ interface PricingClientProps {
 }
 
 export function PricingClient({ plans }: PricingClientProps) {
-  const [loadingPlanId, setLoadingPlanId] = useState<string | null>(null);
-  const router = useRouter();
   const { config } = useTenant();
-
-  const handleCheckout = async (plan: Doc<'pricingPlans'>) => {
-    setLoadingPlanId(plan._id);
-
-    try {
-      // Redirect to transparent checkout with plan details
-      const searchParams = new URLSearchParams({
-        plan: plan.productId || plan._id,
-      });
-
-      router.push(`/checkout?${searchParams.toString()}`);
-    } catch (error) {
-      console.error('Erro ao redirecionar para checkout:', error);
-      setLoadingPlanId(null);
-    }
-  };
-
-  // Generate CSS variable styles for dynamic colors
-  const primaryColor = config.branding.primaryColor;
+  const purchaseUrl = config.content.purchaseUrl;
 
   return (
     <div
       id="pricing"
       className="bg-gradient-to-br from-slate-50 to-slate-100 py-8"
-      style={
-        {
-          '--tenant-primary': primaryColor,
-        } as React.CSSProperties
-      }
     >
       <div className="container mx-auto mb-16 px-4 text-center">
-        <h1
-          className="mb-3 text-4xl font-bold"
-          style={{ color: primaryColor }}
-        >
+        <h1 className="text-brand-blue mb-3 text-4xl font-bold">
           {config.branding.name}
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-gray-600">
@@ -63,27 +33,10 @@ export function PricingClient({ plans }: PricingClientProps) {
           {plans?.map(plan => (
             <div
               key={plan._id}
-              className="group relative flex w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl transition-all duration-300 hover:scale-105 hover:shadow-2xl lg:w-90 lg:max-w-none"
-              style={
-                {
-                  '--hover-bg': primaryColor,
-                } as React.CSSProperties
-              }
-              onMouseEnter={e => {
-                e.currentTarget.style.backgroundColor = primaryColor;
-              }}
-              onMouseLeave={e => {
-                e.currentTarget.style.backgroundColor = '';
-              }}
+              className="group hover:bg-brand-blue relative flex w-full max-w-sm flex-col rounded-2xl bg-white shadow-xl transition-all duration-300 hover:scale-105 hover:shadow-2xl lg:w-90 lg:max-w-none"
             >
               <div className="py-4 text-center">
-                <div
-                  className="inline-block rounded-full px-6 py-2 text-base font-bold transition-all duration-300 group-hover:bg-white"
-                  style={{
-                    backgroundColor: `${primaryColor}20`,
-                    color: primaryColor,
-                  }}
-                >
+                <div className="text-brand-blue bg-brand-blue/10 inline-block rounded-full px-6 py-2 text-base font-bold transition-all duration-300 group-hover:bg-white">
                   {plan.badge}
                 </div>
               </div>
@@ -120,14 +73,8 @@ export function PricingClient({ plans }: PricingClientProps) {
                 <ul className="space-y-3">
                   {plan.features.map((feature, featureIndex) => (
                     <li key={featureIndex} className="flex items-center gap-3">
-                      <div
-                        className="flex h-5 w-5 items-center justify-center rounded-full transition-all duration-300 group-hover:bg-white/20"
-                        style={{ backgroundColor: `${primaryColor}20` }}
-                      >
-                        <Check
-                          className="h-3 w-3 transition-all duration-300 group-hover:text-white"
-                          style={{ color: primaryColor }}
-                        />
+                      <div className="bg-brand-blue/10 flex h-5 w-5 items-center justify-center rounded-full transition-all duration-300 group-hover:bg-white/20">
+                        <Check className="text-brand-blue h-3 w-3 transition-all duration-300 group-hover:text-white" />
                       </div>
                       <span className="text-sm text-gray-700 transition-all duration-300 group-hover:text-white">
                         {feature}
@@ -139,19 +86,16 @@ export function PricingClient({ plans }: PricingClientProps) {
 
               <div className="mt-auto px-6 pb-6">
                 <Button
-                  className="hover:bg-opacity-90 w-full cursor-pointer text-lg font-semibold text-white"
-                  style={{ backgroundColor: primaryColor }}
-                  onClick={() => handleCheckout(plan)}
-                  disabled={loadingPlanId === plan._id}
+                  asChild
+                  className="bg-brand-blue hover:bg-brand-blue/90 w-full cursor-pointer text-lg font-semibold text-white"
                 >
-                  {loadingPlanId === plan._id ? (
-                    <>
-                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                      Processando...
-                    </>
-                  ) : (
-                    plan.buttonText
-                  )}
+                  <a
+                    href={purchaseUrl}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                  >
+                    {plan.buttonText}
+                  </a>
                 </Button>
               </div>
             </div>

@@ -1,3 +1,6 @@
+import { auth } from '@clerk/nextjs/server';
+import { redirect } from 'next/navigation';
+
 import { getServerTenantId } from '@/lib/tenant-server';
 
 import Footer from './components/footer';
@@ -5,6 +8,12 @@ import Header from './components/header';
 import Pricing from './components/pricing';
 
 export default async function Home() {
+  const { userId } = await auth();
+
+  if (userId) {
+    redirect('/criar-teste');
+  }
+
   const tenantId = await getServerTenantId();
 
   return (

@@ -1,4 +1,5 @@
 'use client';
+
 import { ptBR } from '@clerk/localizations';
 import { ClerkProvider, useAuth } from '@clerk/nextjs';
 import { ConvexReactClient } from 'convex/react';
@@ -17,7 +18,7 @@ export default function ConvexClientProvider({
     <ClerkProvider
       publishableKey={process.env.NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY!}
       localization={ptBR}
-      afterSignOutUrl={process.env.NEXT_PUBLIC_CLERK_REDIRECT_URL!}
+      afterSignOutUrl="https://www.ortoclub.com"
     >
       <ConvexProviderWithClerk client={convex} useAuth={useAuth}>
         <ConvexQueryCacheProvider>{children}</ConvexQueryCacheProvider>

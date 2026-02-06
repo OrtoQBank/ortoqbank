@@ -159,20 +159,10 @@ export function TenantProvider({ children, initialSlug }: TenantProviderProps) {
     };
   }, [slug, config, appData]);
 
-  // Apply CSS variables for tenant branding
+  // Apply CSS variables for tenant branding (sidebar only for now)
   useEffect(() => {
     const root = document.documentElement;
-    root.style.setProperty('--tenant-primary', config.branding.primaryColor);
 
-    if (config.branding.secondaryColor) {
-      root.style.setProperty(
-        '--tenant-secondary',
-        config.branding.secondaryColor,
-      );
-    }
-    if (config.branding.accentColor) {
-      root.style.setProperty('--tenant-accent', config.branding.accentColor);
-    }
     if (config.branding.sidebarBackground) {
       root.style.setProperty(
         '--sidebar-background',
@@ -188,9 +178,6 @@ export function TenantProvider({ children, initialSlug }: TenantProviderProps) {
 
     // Cleanup on unmount
     return () => {
-      root.style.removeProperty('--tenant-primary');
-      root.style.removeProperty('--tenant-secondary');
-      root.style.removeProperty('--tenant-accent');
       root.style.removeProperty('--sidebar-background');
       root.style.removeProperty('--sidebar-foreground');
     };
