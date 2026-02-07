@@ -1,6 +1,7 @@
 'use client';
 
 import { Check } from 'lucide-react';
+import Link from 'next/link';
 
 import { useTenant } from '@/components/providers/TenantProvider';
 import { Button } from '@/components/ui/button';
@@ -12,8 +13,7 @@ interface PricingClientProps {
 }
 
 export function PricingClient({ plans }: PricingClientProps) {
-  const { config } = useTenant();
-  const purchaseUrl = config.content.purchaseUrl;
+  const { data } = useTenant();
 
   return (
     <div
@@ -22,7 +22,7 @@ export function PricingClient({ plans }: PricingClientProps) {
     >
       <div className="container mx-auto mb-16 px-4 text-center">
         <h1 className="text-brand-blue mb-3 text-4xl font-bold">
-          {config.branding.name}
+          {data?.name}
         </h1>
         <p className="mx-auto max-w-2xl text-lg text-gray-600">
           Escolha o plano ideal para sua preparação
@@ -89,13 +89,9 @@ export function PricingClient({ plans }: PricingClientProps) {
                   asChild
                   className="bg-brand-blue hover:bg-brand-blue/90 w-full cursor-pointer text-lg font-semibold text-white"
                 >
-                  <a
-                    href={purchaseUrl}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                  >
+                  <Link href={`/checkout?plan=${plan.productId}`}>
                     {plan.buttonText}
-                  </a>
+                  </Link>
                 </Button>
               </div>
             </div>
