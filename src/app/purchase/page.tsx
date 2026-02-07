@@ -2,6 +2,7 @@
 
 import { SignOutButton, useUser } from '@clerk/nextjs';
 import { CheckCircle, CreditCard, Lock, LogOut } from 'lucide-react';
+import Link from 'next/link';
 
 import { useTenant } from '@/components/providers/TenantProvider';
 import { Button } from '@/components/ui/button';
@@ -12,9 +13,8 @@ import Header from '../components/header';
 
 export default function PurchasePage() {
   const { isSignedIn, user } = useUser();
-  const { config } = useTenant();
-  const purchaseUrl = config.content.purchaseUrl;
-  const appName = config.branding.name;
+  const { data } = useTenant();
+  const appName = data?.name;
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-slate-50 via-blue-50 to-indigo-100">
@@ -60,14 +60,10 @@ export default function PurchasePage() {
 
             <div className="space-y-3 pt-4">
               <Button asChild className="w-full" size="lg">
-                <a
-                  href={purchaseUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
+                <Link href="/">
                   <CreditCard className="mr-2 h-5 w-5" />
                   Adquirir Acesso
-                </a>
+                </Link>
               </Button>
 
               <Button asChild variant="outline" className="w-full" size="lg">
@@ -75,7 +71,7 @@ export default function PurchasePage() {
               </Button>
 
               {isSignedIn && (
-                <SignOutButton redirectUrl={purchaseUrl}>
+                <SignOutButton redirectUrl="/">
                   <Button variant="ghost" className="w-full" size="lg">
                     <LogOut className="mr-2 h-5 w-5" />
                     Sair da conta
