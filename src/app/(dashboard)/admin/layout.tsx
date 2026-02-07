@@ -16,7 +16,7 @@ export default function AdminLayout({
 
   // Redirect non-admins immediately when data is loaded
   if (!isLoading && !isAdmin) {
-    router.push('/');
+    router.push('/criar-teste');
     return null; // Don't render anything while redirecting
   }
 
