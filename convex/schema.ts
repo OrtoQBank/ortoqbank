@@ -36,6 +36,27 @@ export default defineSchema({
     .index('by_app', ['appId'])
     .index('by_app_role', ['appId', 'role']),
 
+  // Provisioned access - tracks access grants from ortoclub central hub
+  provisionedAccess: defineTable({
+    email: v.string(),
+    userId: v.optional(v.id('users')),
+    productName: v.string(),
+    sourceOrderId: v.string(),
+    purchasePrice: v.number(),
+    accessExpiresAt: v.optional(v.number()),
+    status: v.union(
+      v.literal('pending_user'),
+      v.literal('active'),
+      v.literal('expired'),
+    ),
+    provisionedAt: v.number(),
+    activatedAt: v.optional(v.number()),
+  })
+    .index('by_email', ['email'])
+    .index('by_userId', ['userId'])
+    .index('by_status', ['status'])
+    .index('by_sourceOrderId', ['sourceOrderId']),
+
   // =============================================================================
   // GLOBAL TABLES (No tenantId - shared across all apps)
   // =============================================================================

@@ -2,10 +2,14 @@ import type { WebhookEvent } from '@clerk/backend';
 import { httpRouter } from 'convex/server';
 import { Webhook } from 'svix';
 
-import { api, internal } from './_generated/api';
+import { internal } from './_generated/api';
 import { httpAction } from './_generated/server';
 
 const http = httpRouter();
+
+// =============================================================================
+// CLERK USERS WEBHOOK
+// =============================================================================
 
 http.route({
   path: '/clerk-users-webhook',
@@ -19,13 +23,11 @@ http.route({
       case 'user.created': // intentional fallthrough
       case 'user.updated': {
         try {
-          // Prepare the data for Convex by ensuring proper types
           const userData = {
             ...event.data,
-            termsAccepted: false, // Always set default value for termsAccepted on webhook events
+            termsAccepted: false,
             public_metadata: {
               ...event.data.public_metadata,
-              // Convert payment ID to string if it exists
               paymentId: event.data.public_metadata?.paymentId?.toString(),
             },
           };
@@ -34,14 +36,14 @@ http.route({
             data: userData,
           });
 
-          // Handle claim token from invitation metadata or find by email
+          // On user creation, activate any pending provisioned access
           if (
             event.type === 'user.created' &&
             event.data.email_addresses?.[0]?.email_address
           ) {
             try {
               const email = event.data.email_addresses[0].email_address;
-              console.log(`🔗 New user created: ${email}`);
+              console.log(`New user created: ${email}`);
 
               // Grant tenant access if tenant metadata is present
               const tenantSlug =
@@ -58,55 +60,29 @@ http.route({
                     },
                   );
                   console.log(
-                    `✅ Granted tenant access for ${email} to tenant: ${tenantSlug}`,
+                    `Granted tenant access for ${email} to tenant: ${tenantSlug}`,
                   );
                 } catch (tenantError) {
                   console.error('Error granting tenant access:', tenantError);
-                  // Don't fail the webhook if this fails
                 }
               }
 
-              // Try to find and claim any paid orders for this email
-              const result = await ctx.runMutation(
-                api.payments.claimOrderByEmail,
-                {
-                  email: email,
-                  clerkUserId: event.data.id,
-                },
-              );
-
-              console.log(`✅ Claim result:`, result);
-
-              // Try to update email invitation status to accepted
-              try {
-                const invitation = await ctx.runQuery(
-                  api.payments.findSentInvitationByEmail,
+              // Activate any pending provisioned access from ortoclub
+              if (userId) {
+                await ctx.runMutation(
+                  internal.provisioning.activatePendingAccess,
                   {
-                    email: email,
+                    email,
+                    userId,
                   },
                 );
-
-                if (invitation) {
-                  await ctx.runMutation(
-                    internal.payments.updateEmailInvitationAccepted,
-                    {
-                      invitationId: invitation._id,
-                    },
-                  );
-                  console.log(
-                    `✅ Updated invitation status to accepted for ${email}`,
-                  );
-                }
-              } catch (invitationError) {
-                console.error(
-                  'Error updating invitation status:',
-                  invitationError,
-                );
-                // Don't fail the webhook if this fails
               }
-            } catch (linkError) {
-              console.error('Error claiming order with token:', linkError);
-              // Don't fail the whole webhook if linking fails
+            } catch (provisionError) {
+              console.error(
+                'Error activating provisioned access:',
+                provisionError,
+              );
+              // Don't fail the webhook if this fails
             }
           }
         } catch (error) {
@@ -131,100 +107,46 @@ http.route({
   }),
 });
 
-// AsaaS webhook handler
+// =============================================================================
+// PROVISION ACCESS (from ortoclub central hub)
+// =============================================================================
+
 http.route({
-  path: '/webhooks/asaas',
+  path: '/api/provision-access',
   method: 'POST',
   handler: httpAction(async (ctx, request) => {
+    const authHeader = request.headers.get('Authorization');
+    const expected = process.env.PROVISION_SECRET;
+
+    if (!expected || authHeader !== `Bearer ${expected}`) {
+      return new Response('Unauthorized', { status: 401 });
+    }
+
     try {
-      // Get webhook body
-      const rawBody = await request.text();
+      const body = await request.json();
 
-      // Validate webhook authentication (required for both sandbox and production)
-      const asaasSignature =
-        request.headers.get('asaas-access-token') ||
-        request.headers.get('authorization') ||
-        request.headers.get('x-asaas-signature');
-
-      const webhookSecret = process.env.ASAAS_WEBHOOK_SECRET;
-
-      // Log headers for debugging
-      console.log('AsaaS Webhook Headers:', {
-        'asaas-access-token': request.headers.get('asaas-access-token'),
-        authorization: request.headers.get('authorization'),
-        'x-asaas-signature': request.headers.get('x-asaas-signature'),
-        'content-type': request.headers.get('content-type'),
+      await ctx.runMutation(internal.provisioning.provisionAccessFromHub, {
+        email: body.email,
+        clerkUserId: body.clerkUserId,
+        productName: body.productName,
+        orderId: body.orderId,
+        purchasePrice: body.purchasePrice,
+        accessExpiresAt: body.accessExpiresAt,
+        couponUsed: body.couponUsed,
+        discountAmount: body.discountAmount,
       });
-
-      // ALWAYS require webhook secret to be configured
-      if (!webhookSecret) {
-        console.error(
-          'ASAAS_WEBHOOK_SECRET environment variable not configured',
-        );
-        return new Response('Server configuration error', { status: 500 });
-      }
-
-      // ALWAYS require authentication header
-      if (!asaasSignature) {
-        console.error('Missing AsaaS authentication header');
-        return new Response('Unauthorized - Missing authentication', {
-          status: 401,
-        });
-      }
-
-      // ALWAYS validate signature
-      if (asaasSignature !== webhookSecret) {
-        console.error('Invalid AsaaS webhook signature');
-        return new Response('Unauthorized - Invalid signature', {
-          status: 401,
-        });
-      }
-
-      console.log('✅ Webhook authentication successful');
-
-      const body = JSON.parse(rawBody);
-      const { event, payment, checkout } = body;
-
-      console.log(`AsaaS webhook received: ${event}`, {
-        paymentId: payment?.id,
-        checkoutId: checkout?.id,
-      });
-
-      // Log the full webhook payload for debugging
-      console.log('Full AsaaS webhook payload:', JSON.stringify(body, null, 2));
-
-      // Process Asaas webhook events with switch case structure
-      switch (event) {
-        case 'PAYMENT_CONFIRMED': // intentional fallthrough
-        case 'PAYMENT_RECEIVED': {
-          try {
-            console.log(
-              `Processing ${event} event - payment with customer data`,
-            );
-            await ctx.runAction(internal.payments.processAsaasWebhook, {
-              event,
-              payment,
-              rawWebhookData: body,
-            });
-          } catch (error) {
-            console.error(`Error processing ${event}:`, error);
-          }
-          break;
-        }
-
-        default: {
-          console.log(`Ignoring AsaaS webhook event: ${event}`);
-          return new Response('Event ignored', { status: 200 });
-        }
-      }
 
       return new Response('OK', { status: 200 });
     } catch (error) {
-      console.error('Error processing AsaaS webhook:', error);
-      return new Response('Webhook processing failed', { status: 500 });
+      console.error('Provision access error:', error);
+      return new Response('Provisioning failed', { status: 500 });
     }
   }),
 });
+
+// =============================================================================
+// Helpers
+// =============================================================================
 
 async function validateRequest(
   req: Request,
