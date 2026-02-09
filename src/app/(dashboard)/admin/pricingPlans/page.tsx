@@ -5,7 +5,7 @@ import { Check, Edit2, Loader2, Plus, Save, Trash2, X } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
 import { Button } from '@/components/ui/button';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Input } from '@/components/ui/input';
@@ -47,7 +47,7 @@ type FormData = {
 
 export default function PricingPlansAdminPage() {
   const router = useRouter();
-  const { isAdmin, isLoading: sessionLoading } = useSession();
+  const { isAdmin, isLoading: sessionLoading } = useAppRole();
 
   // Redirect non-super-admins
   useEffect(() => {

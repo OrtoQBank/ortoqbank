@@ -8,6 +8,7 @@ import {
   query,
   type QueryCtx as QueryContext,
 } from './_generated/server';
+import { requireSuperAdmin } from './auth';
 
 export const current = query({
   args: {},
@@ -181,40 +182,19 @@ async function userByClerkUserId(context: QueryContext, clerkUserId: string) {
     .unique();
 }
 
-/**
- * Require super admin access (global admin).
- * Use this for operations that should only be performed by super admins,
- * like creating new apps or managing global settings.
- *
- * @deprecated Use requireSuperAdmin from './auth' instead for new code
- * @throws Error if user is not a super admin
- */
-export async function requireAdmin(
-  context: QueryContext | MutationCtx,
-): Promise<void> {
-  const user = await getCurrentUser(context);
-  if (!user) {
-    throw new Error('Unauthorized: Authentication required');
-  }
-
-  if (user.role !== 'admin') {
-    throw new Error('Unauthorized: Super admin access required');
-  }
-}
-
 // Função para obter o papel do usuário atual
 export const getCurrentUserRole = query({
   args: {},
-  returns: v.union(v.string(), v.null()),
+  returns: v.union(v.literal('admin'), v.null()),
   handler: async ctx => {
     const user = await getCurrentUser(ctx);
-    return user?.role || null;
+    return user?.role === 'admin' ? 'admin' : null;
   },
 });
 
 // Função para verificar se o usuário atual tem um papel específico
 export const hasRole = query({
-  args: { role: v.string() },
+  args: { role: v.literal('admin') },
   returns: v.boolean(),
   handler: async (ctx, args) => {
     const user = await getCurrentUser(ctx);
@@ -222,16 +202,16 @@ export const hasRole = query({
   },
 });
 
-// Função para definir o papel de um usuário (apenas admins podem usar)
+// Função para definir o papel global de um usuário (apenas admin ou sem papel)
 export const setUserRole = mutation({
   args: {
     userId: v.id('users'),
-    role: v.optional(v.string()),
+    role: v.optional(v.literal('admin')),
   },
   returns: v.null(),
   handler: async (ctx, args) => {
     // Verifica se o usuário atual é admin
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     // Atualiza o papel do usuário
     await ctx.db.patch(args.userId, { role: args.role });
@@ -357,7 +337,7 @@ export const getAllUsersForAdmin = query({
   ),
   handler: async (ctx, args) => {
     // Verify admin access
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     const limit = args.limit || 50; // Default limit
 
@@ -401,7 +381,7 @@ export const searchUsersForAdmin = query({
   ),
   handler: async (ctx, args) => {
     // Verify admin access
-    await requireAdmin(ctx);
+    await requireSuperAdmin(ctx);
 
     const limit = args.limit || 50; // Default limit
     const query = args.searchQuery.toLowerCase();

@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
 import { query } from './_generated/server';
-import { verifyTenantAccess } from './auth';
+import { requireAppAccess, verifyTenantAccess } from './auth';
 import { mutation } from './triggers';
 import { getCurrentUserOrThrow } from './users';
 
@@ -21,6 +21,11 @@ export const toggleBookmark = mutation({
     const question = await ctx.db.get(args.questionId);
     if (!question) {
       throw new Error('Question not found');
+    }
+
+    // Verify the user has access to this question's tenant
+    if (question.tenantId) {
+      await requireAppAccess(ctx, question.tenantId);
     }
 
     const existingBookmark = await ctx.db

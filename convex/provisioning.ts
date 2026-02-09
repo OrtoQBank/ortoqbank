@@ -18,6 +18,7 @@ export const provisionAccessFromHub = internalMutation({
   args: {
     email: v.string(),
     clerkUserId: v.optional(v.string()),
+    tenantSlug: v.string(),
     productName: v.string(),
     orderId: v.string(),
     purchasePrice: v.number(),
@@ -45,6 +46,7 @@ export const provisionAccessFromHub = internalMutation({
     // Insert provisioned access record
     const provisionId = await ctx.db.insert('provisionedAccess', {
       email: args.email,
+      tenantSlug: args.tenantSlug,
       productName: args.productName,
       sourceOrderId: args.orderId,
       purchasePrice: args.purchasePrice,
@@ -67,7 +69,13 @@ export const provisionAccessFromHub = internalMutation({
       console.log(
         `User ${user._id} already exists for ${args.email}, granting access immediately`,
       );
-      await activateAccess(ctx, provisionId, user._id, args.accessExpiresAt);
+      await activateAccess(
+        ctx,
+        provisionId,
+        user._id,
+        args.tenantSlug,
+        args.accessExpiresAt,
+      );
     } else {
       console.log(
         `User not found for ${args.email}, access will be granted on signup`,
@@ -108,10 +116,16 @@ export const activatePendingAccess = internalMutation({
     );
 
     for (const record of pending) {
+      if (!record.tenantSlug) {
+        throw new Error(
+          `Provision record ${record._id} is missing tenantSlug (order: ${record.sourceOrderId})`,
+        );
+      }
       await activateAccess(
         ctx,
         record._id,
         args.userId,
+        record.tenantSlug,
         record.accessExpiresAt,
       );
     }
@@ -132,17 +146,17 @@ async function activateAccess(
   ctx: MutationCtx,
   provisionId: Id<'provisionedAccess'>,
   userId: Id<'users'>,
+  tenantSlug: string,
   accessExpiresAt?: number,
 ) {
-  // Resolve primary app (first active app)
+  // Resolve target app by tenant slug from payment provisioning payload
   const app = await ctx.db
     .query('apps')
-    .withIndex('by_active', (q: any) => q.eq('isActive', true))
-    .first();
+    .withIndex('by_slug', q => q.eq('slug', tenantSlug))
+    .unique();
 
   if (!app) {
-    console.error('No active app found, cannot grant access');
-    return;
+    throw new Error(`No app found for tenant slug: ${tenantSlug}`);
   }
 
   // Upsert userAppAccess

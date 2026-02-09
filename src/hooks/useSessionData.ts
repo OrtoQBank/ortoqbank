@@ -1,11 +1,14 @@
 import { useSession } from '@/components/providers/SessionProvider';
 
-// Re-export the useSession hook for better discoverability
-export { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from './useAppRole';
 
-// You can also create specific hooks if needed
+// Re-export for discoverability
+export { useSession } from '@/components/providers/SessionProvider';
+export { useAppRole } from './useAppRole';
+
+// Convenience hooks
 export const useIsAdmin = () => {
-  const { isAdmin } = useSession();
+  const { isAdmin } = useAppRole();
   return isAdmin;
 };
 

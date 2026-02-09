@@ -1,7 +1,7 @@
 import { v } from 'convex/values';
 
 import { mutation, query } from './_generated/server';
-import { verifyTenantAccess } from './auth';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 
 export const create = mutation({
   args: {
@@ -31,6 +31,11 @@ export const create = mutation({
         .withIndex('by_slug', q => q.eq('slug', 'ortoqbank'))
         .first();
       tenantId = defaultApp?._id;
+    }
+
+    // Verify moderator access for this tenant
+    if (tenantId) {
+      await requireAppModerator(ctx, tenantId);
     }
 
     return await ctx.db.insert('presetQuizzes', {
@@ -177,6 +182,11 @@ export const addQuestion = mutation({
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
+    // Verify moderator access for this quiz's tenant
+    if (quiz.tenantId) {
+      await requireAppModerator(ctx, quiz.tenantId);
+    }
+
     const updatedQuestions = [...quiz.questions, args.questionId];
     await ctx.db.patch(args.quizId, { questions: updatedQuestions });
   },
@@ -191,6 +201,11 @@ export const removeQuestion = mutation({
     const quiz = await ctx.db.get(args.quizId);
     if (!quiz) throw new Error('Quiz not found');
 
+    // Verify moderator access for this quiz's tenant
+    if (quiz.tenantId) {
+      await requireAppModerator(ctx, quiz.tenantId);
+    }
+
     const updatedQuestions = quiz.questions.filter(
       id => id !== args.questionId,
     );
@@ -204,6 +219,14 @@ export const updateQuestions = mutation({
     questions: v.array(v.id('questions')),
   },
   handler: async (ctx, args) => {
+    const quiz = await ctx.db.get(args.quizId);
+    if (!quiz) throw new Error('Quiz not found');
+
+    // Verify moderator access for this quiz's tenant
+    if (quiz.tenantId) {
+      await requireAppModerator(ctx, quiz.tenantId);
+    }
+
     await ctx.db.patch(args.quizId, {
       questions: args.questions,
     });
@@ -221,6 +244,14 @@ export const updateQuiz = mutation({
     displayOrder: v.optional(v.number()),
   },
   handler: async (ctx, args) => {
+    const quiz = await ctx.db.get(args.quizId);
+    if (!quiz) throw new Error('Quiz not found');
+
+    // Verify moderator access for this quiz's tenant
+    if (quiz.tenantId) {
+      await requireAppModerator(ctx, quiz.tenantId);
+    }
+
     await ctx.db.patch(args.quizId, {
       name: args.name,
       description: args.description,
@@ -237,6 +268,14 @@ export const deleteQuiz = mutation({
     quizId: v.id('presetQuizzes'),
   },
   handler: async (ctx, args) => {
+    const quiz = await ctx.db.get(args.quizId);
+    if (!quiz) throw new Error('Quiz not found');
+
+    // Verify moderator access for this quiz's tenant
+    if (quiz.tenantId) {
+      await requireAppModerator(ctx, quiz.tenantId);
+    }
+
     await ctx.db.delete(args.quizId);
   },
 });
@@ -244,6 +283,9 @@ export const deleteQuiz = mutation({
 export const get = query({
   args: { id: v.id('presetQuizzes'), tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     return await ctx.db.get(args.id);
   },
 });
@@ -251,6 +293,9 @@ export const get = query({
 export const getWithQuestions = query({
   args: { id: v.id('presetQuizzes'), tenantId: v.optional(v.id('apps')) },
   handler: async (ctx, args) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, args.tenantId);
+
     const quiz = await ctx.db.get(args.id);
     if (!quiz) return;
 

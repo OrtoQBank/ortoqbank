@@ -3,7 +3,8 @@
 import { HeadsetIcon, type LucideIcon, UserCircleIcon } from 'lucide-react';
 import Link from 'next/link';
 
-import { useSession } from '../providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
+
 import {
   SidebarGroup,
   SidebarGroupLabel,
@@ -29,9 +30,9 @@ const items: MenuItem[] = [
     title: 'Admin',
     url: '/admin',
     icon: UserCircleIcon,
-    requiredRoles: ['admin'],
+    requiredRoles: ['admin', 'moderator'],
   },
-  // Example of a future item that could be available to both admins and moderators
+  // Example of a future item that could be available to both admins and editors
   // {
   //   title: 'Moderação',
   //   url: '/moderacao',
@@ -42,7 +43,7 @@ const items: MenuItem[] = [
 
 export default function NavThird() {
   const { setOpenMobile } = useSidebar();
-  const { userRole, isLoading } = useSession();
+  const { userRole, isLoading } = useAppRole();
 
   // Don't render menu items while loading
   if (isLoading) {

@@ -22,6 +22,7 @@ import type { Id } from '../_generated/dataModel';
 import type { MutationCtx, QueryCtx } from '../_generated/server';
 import {
   checkAppAccess,
+  isUserSuperAdmin,
   requireAppAccess,
   requireAppModerator,
   type UserAppAccessRecord,
@@ -63,7 +64,7 @@ export async function requireTenantAccess(
   const accessRecord = await requireAppAccess(ctx, tenantId);
   const user = await getCurrentUserOrThrow(ctx);
 
-  const isSuperAdmin = user.role === 'admin';
+  const isSuperAdmin = isUserSuperAdmin(user);
 
   return {
     user: {
@@ -125,30 +126,20 @@ export async function checkTenantAccess(
 
 /**
  * Require tenant access with optional tenantId.
- * Use during migration when tenantId is still optional in some functions.
  *
  * - If tenantId is provided, verifies access and returns user info
- * - If tenantId is undefined, just returns user info (backward compatibility)
+ * - If tenantId is undefined, throws an error (tenantId is now required)
  *
- * @throws Error if user is not authenticated or (when tenantId provided) doesn't have access
+ * @throws Error if tenantId is missing, user is not authenticated, or doesn't have access
  */
 export async function requireTenantAccessOptional(
   ctx: QueryCtx | MutationCtx,
   tenantId: Id<'apps'> | undefined,
-): Promise<TenantAccessResult | { user: TenantAccessResult['user'] }> {
-  const user = await getCurrentUserOrThrow(ctx);
-
+): Promise<TenantAccessResult> {
   if (!tenantId) {
-    // Backward compatibility: just return user without access check
-    return {
-      user: {
-        _id: user._id,
-        email: user.email,
-        firstName: user.firstName,
-        lastName: user.lastName,
-        role: user.role,
-      },
-    };
+    throw new Error(
+      'Unauthorized: tenantId is required for tenant-scoped operations',
+    );
   }
 
   return requireTenantAccess(ctx, tenantId);

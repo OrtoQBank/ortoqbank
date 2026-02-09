@@ -1,12 +1,15 @@
 import { v } from 'convex/values';
 
 import { internalMutation, mutation, query } from './_generated/server';
-import { requireAppModerator } from './auth';
+import { requireAppModerator, verifyTenantAccess } from './auth';
 
 export const getPricingPlans = query({
   args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(v.any()),
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant
+    await verifyTenantAccess(ctx, tenantId);
+
     if (tenantId) {
       return await ctx.db
         .query('pricingPlans')
@@ -98,12 +101,18 @@ export const removePricingPlan = mutation({
 });
 
 /**
- * Get active pricing plans (products available for purchase)
+ * Get active pricing plans (products available for purchase).
+ * NOTE: This query is intentionally accessible without strict tenant access checks
+ * because it powers public-facing purchase/pricing pages for unauthenticated users.
+ * The verifyTenantAccess call will pass through when tenantId is undefined.
  */
 export const getActiveProducts = query({
   args: { tenantId: v.optional(v.id('apps')) },
   returns: v.array(v.any()),
   handler: async (ctx, { tenantId }) => {
+    // Verify user has access to this tenant (allows unauthenticated when tenantId is undefined)
+    await verifyTenantAccess(ctx, tenantId);
+
     const plans = await ctx.db
       .query('pricingPlans')
       .withIndex('by_active', q => q.eq('isActive', true))

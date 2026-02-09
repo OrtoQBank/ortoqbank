@@ -4,7 +4,7 @@
  * This module provides authorization functions for tenant-aware access control.
  *
  * Role Hierarchy:
- * - admin (super admin): Global admin with access to ALL apps (users.role === 'admin')
+ * - admin (super admin): Global admin with access to ALL apps (users.role global role)
  * - moderator (per-app): Admin for specific app only (userAppAccess.role === 'moderator')
  * - user (per-app): Regular user with app access (userAppAccess.hasAccess === true)
  */
@@ -147,6 +147,17 @@ export async function requireAppModerator(
 }
 
 /**
+ * Require that the current user is an editor for the specified app.
+ * Backend role literal remains `moderator` for compatibility.
+ */
+export async function requireAppEditor(
+  ctx: QueryCtx | MutationCtx,
+  appId: Id<'apps'>,
+): Promise<void> {
+  return requireAppModerator(ctx, appId);
+}
+
+/**
  * Require that the current user is either a super admin OR a moderator for the specified app.
  * This is an alias for requireAppModerator since the logic is the same.
  *
@@ -238,23 +249,20 @@ export async function checkAppAccess(
 
 /**
  * Verify tenant access for queries that accept optional tenantId.
- * Use this during migration when tenantId is still optional.
  *
  * - If tenantId is provided, verifies the user has access
- * - If tenantId is undefined, allows the query (backward compatibility)
+ * - If tenantId is undefined, throws an error (tenantId is now required)
  *
- * After migration is complete, switch to requireAppAccess with required tenantId.
- *
- * @throws Error if tenantId is provided but user doesn't have access
+ * @throws Error if tenantId is missing or user doesn't have access
  */
 export async function verifyTenantAccess(
   ctx: QueryCtx | MutationCtx,
   tenantId: Id<'apps'> | undefined,
 ): Promise<void> {
   if (!tenantId) {
-    // During migration, allow queries without tenantId
-    // TODO: Remove this fallback after migration is complete
-    return;
+    throw new Error(
+      'Unauthorized: tenantId is required for tenant-scoped operations',
+    );
   }
 
   await requireAppAccess(ctx, tenantId);
@@ -302,6 +310,48 @@ export const getCurrentUserAppRole = query({
   ),
   handler: async (ctx, args) => {
     const result = await checkAppAccess(ctx, args.appId);
+
+    if (!result.hasAccess) {
+      return null;
+    }
+
+    if (result.isSuperAdmin) {
+      return 'admin';
+    }
+
+    if (result.isModerator) {
+      return 'moderator';
+    }
+
+    return 'user';
+  },
+});
+
+/**
+ * Query to get current user's role for an app by tenant slug.
+ * Useful for frontend providers that resolve tenant from URL/cookie slug.
+ */
+export const getCurrentUserAppRoleBySlug = query({
+  args: {
+    slug: v.string(),
+  },
+  returns: v.union(
+    v.literal('admin'),
+    v.literal('moderator'),
+    v.literal('user'),
+    v.null(),
+  ),
+  handler: async (ctx, args) => {
+    const app = await ctx.db
+      .query('apps')
+      .withIndex('by_slug', q => q.eq('slug', args.slug))
+      .unique();
+
+    if (!app) {
+      return null;
+    }
+
+    const result = await checkAppAccess(ctx, app._id);
 
     if (!result.hasAccess) {
       return null;

@@ -13,6 +13,7 @@ import { v } from 'convex/values';
 import { api } from './_generated/api';
 import { Id } from './_generated/dataModel';
 import { mutation, type MutationCtx, type QueryCtx } from './_generated/server';
+import { requireAppAccess } from './auth';
 import { QuestionMode } from './customQuizzes';
 import { createSeededRandom, shuffleAndLimit } from './lib/shuffle';
 import { getCurrentUserOrThrow } from './users';
@@ -75,6 +76,9 @@ export const create = mutation({
     }),
   ),
   handler: async (ctx, args) => {
+    // Verify the user has access to this tenant
+    await requireAppAccess(ctx, args.tenantId);
+
     const user = await getCurrentUserOrThrow(ctx);
     const random = createSeededRandom(args.seed);
 

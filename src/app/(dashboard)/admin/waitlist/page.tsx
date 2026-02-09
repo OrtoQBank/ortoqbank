@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 import * as XLSX from 'xlsx';
 
-import { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import {
@@ -22,7 +22,7 @@ import { api } from '../../../../../convex/_generated/api';
 
 export default function WaitlistPage() {
   const router = useRouter();
-  const { isAdmin, isLoading: sessionLoading } = useSession();
+  const { isAdmin, isLoading: sessionLoading } = useAppRole();
 
   // Redirect non-super-admins
   useEffect(() => {

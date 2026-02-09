@@ -6,7 +6,7 @@ import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import { useEffect, useState } from 'react';
 
-import { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import {
@@ -56,7 +56,7 @@ type UserToEdit = {
 
 export default function SuperAdminPage() {
   const router = useRouter();
-  const { isAdmin, isLoading: sessionLoading } = useSession();
+  const { isAdmin, isLoading: sessionLoading } = useAppRole();
 
   // Redirect non-super-admins
   useEffect(() => {

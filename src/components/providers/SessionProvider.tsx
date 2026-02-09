@@ -5,10 +5,19 @@ import { createContext, ReactNode, useContext } from 'react';
 
 import { api } from '../../../convex/_generated/api';
 
+/**
+ * SessionProvider - Handles session-level state only.
+ *
+ * Responsibilities:
+ * - Terms acceptance status
+ * - Loading state for session data
+ *
+ * NOT responsible for:
+ * - Role/permission checks (use useAppRole hook instead)
+ * - Tenant identification (use TenantProvider instead)
+ */
 interface SessionContextType {
-  isAdmin: boolean;
   termsAccepted: boolean;
-  userRole: string | null;
   isLoading: boolean;
 }
 
@@ -17,25 +26,17 @@ interface SessionProviderProps {
 }
 
 const SessionContext = createContext<SessionContextType>({
-  isAdmin: false,
   termsAccepted: true, // Default to true to prevent modal flash
-  userRole: null,
   isLoading: true,
 });
 
 export function SessionProvider({ children }: SessionProviderProps) {
-  // Get real-time data from Convex backend
-  const userRole = useQuery(api.users.getCurrentUserRole);
   const termsAccepted = useQuery(api.users.getTermsAccepted);
 
-  // Calculate derived values
-  const isAdmin = userRole === 'admin';
-  const isLoading = userRole === undefined || termsAccepted === undefined;
+  const isLoading = termsAccepted === undefined;
 
   const sessionValue: SessionContextType = {
-    isAdmin,
-    termsAccepted: termsAccepted ?? true, // Default to true to prevent modal flash
-    userRole: userRole ?? null,
+    termsAccepted: termsAccepted ?? true,
     isLoading,
   };
 

@@ -9,7 +9,7 @@ import { paginationOptsValidator } from 'convex/server';
 import { v } from 'convex/values';
 
 import { internalMutation, mutation, query } from './_generated/server';
-import { requireAppModerator, requireSuperAdmin } from './auth';
+import { checkAppAccess, requireAppModerator, requireSuperAdmin } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 /**
@@ -284,8 +284,7 @@ export const getAppUsers = query({
     }),
   ),
   handler: async (ctx, args) => {
-    // For now, allow anyone authenticated to query (frontend will filter)
-    // TODO: Add requireAppModerator check when we have proper error handling
+    await requireAppModerator(ctx, args.appId);
 
     const accessRecords = await ctx.db
       .query('userAppAccess')
@@ -334,73 +333,12 @@ export const checkMyAccess = query({
     isSuperAdmin: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const identity = await ctx.auth.getUserIdentity();
-    if (!identity) {
-      return {
-        hasAccess: false,
-        role: undefined,
-        expiresAt: undefined,
-        isSuperAdmin: false,
-      };
-    }
-
-    // Get user from database
-    const user = await ctx.db
-      .query('users')
-      .withIndex('by_clerkUserId', q => q.eq('clerkUserId', identity.subject))
-      .unique();
-
-    if (!user) {
-      return {
-        hasAccess: false,
-        role: undefined,
-        expiresAt: undefined,
-        isSuperAdmin: false,
-      };
-    }
-
-    // Check if super admin
-    if (user.role === 'admin') {
-      return {
-        hasAccess: true,
-        role: 'moderator' as const, // Super admins have moderator access everywhere
-        expiresAt: undefined,
-        isSuperAdmin: true,
-      };
-    }
-
-    // Check userAppAccess
-    const access = await ctx.db
-      .query('userAppAccess')
-      .withIndex('by_user_app', q =>
-        q.eq('userId', user._id).eq('appId', args.appId),
-      )
-      .unique();
-
-    if (!access || !access.hasAccess) {
-      return {
-        hasAccess: false,
-        role: undefined,
-        expiresAt: undefined,
-        isSuperAdmin: false,
-      };
-    }
-
-    // Check if expired
-    if (access.expiresAt && Date.now() > access.expiresAt) {
-      return {
-        hasAccess: false,
-        role: undefined,
-        expiresAt: access.expiresAt,
-        isSuperAdmin: false,
-      };
-    }
-
+    const result = await checkAppAccess(ctx, args.appId);
     return {
-      hasAccess: true,
-      role: access.role,
-      expiresAt: access.expiresAt,
-      isSuperAdmin: false,
+      hasAccess: result.hasAccess,
+      role: result.isSuperAdmin ? ('moderator' as const) : result.access?.role,
+      expiresAt: result.access?.expiresAt,
+      isSuperAdmin: result.isSuperAdmin,
     };
   },
 });

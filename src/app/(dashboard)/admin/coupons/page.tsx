@@ -5,7 +5,7 @@ import { Loader2 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useEffect, useMemo, useState } from 'react';
 
-import { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Input } from '@/components/ui/input';
@@ -31,7 +31,7 @@ type CouponType = 'percentage' | 'fixed' | 'fixed_price';
 
 export default function CouponsAdminPage() {
   const router = useRouter();
-  const { isAdmin, isLoading: sessionLoading } = useSession();
+  const { isAdmin, isLoading: sessionLoading } = useAppRole();
 
   // Redirect non-super-admins
   useEffect(() => {

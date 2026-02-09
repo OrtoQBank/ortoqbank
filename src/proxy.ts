@@ -107,31 +107,32 @@ export default clerkMiddleware(async (auth, request) => {
 
   // NOTE: User-App access control is enforced at:
   // 1. Convex backend (authoritative) - via requireAppAccess/requireAppModerator in mutations
-  // 2. Frontend (defense in depth) - via SessionProvider checking userAppAccess.checkMyAccess
+  // 2. Frontend (defense in depth) - via SessionProvider + auth.checkCurrentUserAppAccess
   // Middleware cannot directly query Convex (edge runtime limitation), so we rely on
   // the above two layers. If a user accesses an app without permission, they will see
   // an access denied UI and mutations will be blocked.
 
   // ==========================================================================
-  // ADMIN ROUTES - Additional role verification
+  // ADMIN ROUTES - Require authentication + defense-in-depth role check
   // ==========================================================================
   if (routeIsAdmin) {
     console.log(`[DEBUG:Proxy] Admin route - requiring auth`);
     await auth.protect();
 
     const { sessionClaims } = await auth();
-    // Check both old Clerk metadata (for existing admins) and allow through
-    // The backend will do the authoritative role check using database data
     const hasClerkAdminRole = sessionClaims?.metadata?.role === 'admin';
 
     console.log(`[DEBUG:Proxy] Admin route - { hasClerkAdminRole: ${hasClerkAdminRole} }`);
 
-    // For now, allow all authenticated users through
-    // Backend requireAdmin() will be the final authority
-    // This can be tightened later once all admins are migrated to backend roles
+    // NOTE: Middleware cannot query Convex to check per-tenant moderator roles
+    // (edge runtime limitation). Authorization is enforced in two layers:
+    //   1. Frontend: Admin layout checks useAppRole().isEditor and redirects non-editors
+    //   2. Backend (authoritative): All admin mutations use requireAppModerator/requireSuperAdmin
+    // Clerk metadata only tracks super admins, not per-tenant moderators, so we
+    // cannot fully enforce editor access here. Authentication is sufficient at this layer.
     if (!hasClerkAdminRole) {
       console.log(
-        'Admin route accessed without Clerk admin role - backend will verify',
+        '[DEBUG:Proxy] Admin route accessed without Clerk admin role - frontend layout and backend will verify editor access',
       );
     }
   }

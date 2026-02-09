@@ -124,10 +124,14 @@ http.route({
 
     try {
       const body = await request.json();
+      if (!body?.tenantSlug || typeof body.tenantSlug !== 'string') {
+        return new Response('Missing tenantSlug', { status: 400 });
+      }
 
       await ctx.runMutation(internal.provisioning.provisionAccessFromHub, {
         email: body.email,
         clerkUserId: body.clerkUserId,
+        tenantSlug: body.tenantSlug,
         productName: body.productName,
         orderId: body.orderId,
         purchasePrice: body.purchasePrice,

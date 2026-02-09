@@ -40,6 +40,7 @@ export default defineSchema({
   provisionedAccess: defineTable({
     email: v.string(),
     userId: v.optional(v.id('users')),
+    tenantSlug: v.optional(v.string()),
     productName: v.string(),
     sourceOrderId: v.string(),
     purchasePrice: v.number(),

@@ -4,18 +4,18 @@ import { useRouter } from 'next/navigation';
 import { useEffect } from 'react';
 
 import { AdminNav } from '@/components/admin/admin-nav';
-import { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
 
 export default function AdminLayout({
   children,
 }: {
   children: React.ReactNode;
 }) {
-  const { isAdmin, isLoading } = useSession();
+  const { isEditor, isLoading } = useAppRole();
   const router = useRouter();
 
-  // Redirect non-admins immediately when data is loaded
-  if (!isLoading && !isAdmin) {
+  // Redirect users without tenant editor/global admin access
+  if (!isLoading && !isEditor) {
     router.push('/criar-teste');
     return null; // Don't render anything while redirecting
   }

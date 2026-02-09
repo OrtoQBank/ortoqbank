@@ -2,7 +2,7 @@ import { v } from 'convex/values';
 
 import { Id } from './_generated/dataModel';
 import { mutation, query } from './_generated/server';
-import { verifyTenantAccess } from './auth';
+import { requireAppModerator, requireSuperAdmin } from './auth';
 import { getCurrentUserOrThrow } from './users';
 
 /**
@@ -95,8 +95,10 @@ export const getReportsForAdmin = query({
     }),
   ),
   handler: async (ctx, args) => {
-    // Verify user has access to this tenant
-    await verifyTenantAccess(ctx, args.tenantId);
+    if (!args.tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    await requireAppModerator(ctx, args.tenantId);
 
     const limit = args.limit ?? 50;
 
@@ -169,17 +171,18 @@ export const updateReportStatus = mutation({
     success: v.boolean(),
   }),
   handler: async (ctx, args) => {
-    const user = await getCurrentUserOrThrow(ctx);
-
-    // Check if user is admin
-    if (user.role !== 'admin') {
-      throw new Error('Unauthorized: Only admins can update report status');
-    }
-
     const report = await ctx.db.get(args.reportId);
     if (!report) {
       throw new Error('Report not found');
     }
+
+    if (report.tenantId) {
+      await requireAppModerator(ctx, report.tenantId);
+    } else {
+      await requireSuperAdmin(ctx);
+    }
+
+    const user = await getCurrentUserOrThrow(ctx);
 
     await ctx.db.patch(args.reportId, {
       status: args.status,
@@ -207,8 +210,10 @@ export const getReportCounts = query({
     total: v.number(),
   }),
   handler: async (ctx, args) => {
-    // Verify user has access to this tenant
-    await verifyTenantAccess(ctx, args.tenantId);
+    if (!args.tenantId) {
+      throw new Error('Tenant ID is required');
+    }
+    await requireAppModerator(ctx, args.tenantId);
 
     const allReports = await ctx.db
       .query('questionErrorReports')

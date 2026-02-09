@@ -14,8 +14,8 @@ import {
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 
-import { useSession } from '@/components/providers/SessionProvider';
 import { HoverPrefetchLink } from '@/components/ui/hover-prefetch-link';
+import { useAppRole } from '@/hooks/useAppRole';
 import { cn } from '@/lib/utils';
 
 type NavItem = {
@@ -28,7 +28,7 @@ type NavItem = {
   superAdminOnly?: boolean;
 };
 
-// Items accessible by all admins (moderators + super admins)
+// Items accessible by tenant editors (moderators) and super admins
 const commonNavItems: NavItem[] = [
   {
     href: '/admin',
@@ -117,7 +117,7 @@ interface AdminNavProps {
 
 export function AdminNav({ className }: AdminNavProps) {
   const pathname = usePathname();
-  const { isAdmin } = useSession();
+  const { isAdmin } = useAppRole();
 
   // Combine nav items based on user role
   const navItems = isAdmin

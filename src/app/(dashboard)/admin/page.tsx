@@ -12,7 +12,7 @@ import {
 } from 'lucide-react';
 import Link from 'next/link';
 
-import { useSession } from '@/components/providers/SessionProvider';
+import { useAppRole } from '@/hooks/useAppRole';
 
 const commonCards = [
   {
@@ -75,7 +75,7 @@ const superAdminCards = [
 ];
 
 export default function AdminPage() {
-  const { isAdmin } = useSession();
+  const { isAdmin } = useAppRole();
 
   const cards = isAdmin ? [...commonCards, ...superAdminCards] : commonCards;
 
